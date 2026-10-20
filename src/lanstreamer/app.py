@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import logging
 import socket
 import subprocess
@@ -22,14 +23,17 @@ import webbrowser
 from dataclasses import dataclass, field
 from typing import Any
 
+import uvicorn
+
 from lanstreamer import BUILD, paths, tray
+from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import OutputConfig, demo_output
 from lanstreamer.core.runtime import OutputRuntime
 from lanstreamer.core.store import Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
 from lanstreamer.plugins.registry import discover
-from lanstreamer.web import server
+from lanstreamer.web.api import Backend, Changes, create_app
 
 RTSP_PORT = 8554  # only used to see that MediaMTX is up
 SRT_PORT = 8890
@@ -77,9 +81,11 @@ def wait_for_port(port: int, timeout_s: float) -> bool:
 
 
 class App:
-    def __init__(self, args: argparse.Namespace, output: OutputConfig):
+    def __init__(self, args: argparse.Namespace, output: OutputConfig, store: Store | None = None):
         self.args = args
         self.output = output
+        self.store = store  # None: test run (--source), the configuration is not stored
+        self.changes = Changes()
         self.status = Status(
             target_fps=output.fps, resolution=f"{output.width}x{output.height}",
             whep_path=output.id, sources=[i.name for i in output.inputs],
@@ -89,7 +95,6 @@ class App:
         self.worker_log: Any = subprocess.DEVNULL
         self.worker: OutputWorker | None = None
         self.runtime: OutputRuntime | None = None
-        self.loop: asyncio.AbstractEventLoop | None = None
         self.quit = threading.Event()  # set by the tray menu
         self.failed = threading.Event()
 
@@ -97,7 +102,6 @@ class App:
 
     async def start(self) -> None:
         out = self.output
-        self.loop = asyncio.get_running_loop()
         log.info("lan-streamer %s – %dx%d @ %d fps", BUILD, out.width, out.height, out.fps)
 
         log.info("Selecting encoder (preference: %s) ...", out.encoder)
@@ -130,7 +134,7 @@ class App:
 
         plugins = {pid: m.path for pid, m in discover(paths.data_dir() / "plugins").items()}
         self.runtime = OutputRuntime(
-            out, plugins, paths.data_dir(), self.worker, on_change=self._refresh_status
+            out, plugins, paths.data_dir(), self.worker, on_change=self._on_change
         )
         log.info("Starting %d inputs", len(out.inputs))
         await self.runtime.start()
@@ -172,6 +176,10 @@ class App:
         elif self.runtime is not None:
             self.runtime.on_worker_event(event)
 
+    def _on_change(self) -> None:
+        self._refresh_status()
+        self.changes.notify()
+
     def _refresh_status(self) -> None:
         if self.runtime is None:
             return
@@ -183,19 +191,42 @@ class App:
 
     # --- control ----------------------------------------------------------------
 
-    def next_source(self) -> None:
-        """The "Next input" button on the page (called from the web server thread)."""
-        if self.loop and self.runtime:
-            self.loop.call_soon_threadsafe(self.runtime.skip)
+    def status_dict(self) -> dict[str, Any]:
+        data = dataclasses.asdict(self.status)
+        data["uptime_s"] = round(time.time() - self.status.started)
+        return data
 
-    async def run(self) -> int:
+    def skip(self) -> None:
+        """The "Next input" button on the page."""
+        if self.runtime:
+            self.runtime.skip()
+
+    async def apply_config(self, output_id: str) -> None:
+        """An admin change: the running output takes over its stored configuration."""
+        if self.store is None or self.runtime is None or output_id != self.output.id:
+            return
+        stored = self.store.output(output_id)
+        self.output.inputs = stored.inputs  # format/encoder changes need a restart
+        plugins = {pid: m.path for pid, m in discover(paths.data_dir() / "plugins").items()}
+        await self.runtime.apply(self.output, plugins)
+        self.status.sources = [i.name for i in self.output.inputs]
+
+    def backend(self) -> Backend:
+        store = self.store or Store(paths.data_dir() / "lanstreamer.db")
+        return Backend(
+            status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
+            plugins=lambda: discover(paths.data_dir() / "plugins"), apply=self.apply_config,
+            logs=paths.data_dir() / "logs", changes=self.changes,
+        )  # fmt: skip
+
+    async def run(self, web: asyncio.Task | None = None) -> int:
         assert self.runtime is not None
         scheduler = asyncio.create_task(self.runtime.run())
         deadline = time.monotonic() + self.args.smoke_test if self.args.smoke_test else None
         try:
             while not self.failed.is_set():
-                if self.quit.is_set():
-                    return 0
+                if self.quit.is_set() or (web is not None and web.done()):
+                    return 0  # tray "Quit" or Ctrl+C (the web server stops on it)
                 if deadline and time.monotonic() > deadline:
                     return self._smoke_result()
                 self._refresh_status()
@@ -267,17 +298,16 @@ def run(args: argparse.Namespace) -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", handlers=handlers
     )
 
+    store = Store(paths.data_dir() / "lanstreamer.db")
     if args.source:  # test run, nothing is stored
         output = demo_output(60, args.switch_interval, args.source)
     else:
-        store = Store(paths.data_dir() / "lanstreamer.db")
         output = store.outputs()[0]  # several outputs: milestone M4
-        store.close()
     for name, value in (("fps", args.fps), ("width", args.width), ("height", args.height),
                         ("bitrate_kbps", args.bitrate), ("encoder", args.encoder)):  # fmt: skip
         if value is not None:
             setattr(output, name, value)
-    app = App(args, output)
+    app = App(args, output, None if args.source else store)
     url = f"http://localhost:{args.port}"
     icon = None
     if args.tray:
@@ -301,20 +331,54 @@ def run(args: argparse.Namespace) -> int:
         finally:
             if icon:
                 icon.stop()
+            store.close()
 
 
 async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray | None) -> int:
+    server = uvicorn.Server(uvicorn.Config(
+        create_app(app.backend()), log_config=None, access_log=False,  # our logging (pythonw: no stderr)
+    ))  # fmt: skip
+    web: asyncio.Task | None = None
+    sock: socket.socket | None = None
     try:
+        # Bind the port ourselves: uvicorn calls sys.exit() when it cannot, which
+        # would end the whole app without a message (e.g. lan-streamer already running).
+        sock = open_port(args.port)
         await app.start()
-        server.start(args.port, app)
+        web = asyncio.create_task(server.serve(sockets=[sock]))
+        while not server.started:
+            if web.done():
+                raise RuntimeError("the web server did not start")
+            await asyncio.sleep(0.05)
         log.info("Open %s  (%s to stop)", url, "tray menu" if icon else "Ctrl+C")
         if not args.no_browser and not args.smoke_test:
             webbrowser.open(url)
         if icon:
             threading.Thread(target=_refresh_tray, args=(icon, app), daemon=True).start()
-        return await app.run()
+        return await app.run(web)
     finally:
+        server.should_exit = True
+        if web is not None:
+            await asyncio.gather(web, return_exceptions=True)
+        elif sock is not None:
+            sock.close()
         await app.stop()
+
+
+def open_port(port: int) -> socket.socket:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if sys.platform != "win32":  # on Windows SO_REUSEADDR would allow two servers on one port
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("0.0.0.0", port))
+    except OSError as exc:
+        sock.close()
+        raise RuntimeError(
+            f"port {port} is in use – is lan-streamer already running? ({exc.strerror})"
+        ) from exc
+    sock.listen(128)
+    sock.setblocking(False)
+    return sock
 
 
 def _refresh_tray(icon: tray.Tray, app: App) -> None:

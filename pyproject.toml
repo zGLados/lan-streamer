@@ -13,13 +13,17 @@ requires-python = ">=3.12"
 # it comes from the distribution packages.
 dependencies = [
     "pydantic>=2.7",
+    # web API: FastAPI on uvicorn, websockets for live status
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "websockets>=13",
     # tray icon on Windows
     "pystray>=0.19; sys_platform == 'win32'",
     "pillow>=10; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "httpx>=0.27"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lanstreamer", "src/lanstreamer_sdk"]

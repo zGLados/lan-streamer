@@ -66,3 +66,17 @@ def test_new_id_is_unique_and_readable():
     assert new_id("Twitch – Just Chatting!", set()) == "twitch-just-chatting"
     assert new_id("A", {"a"}).startswith("a-")
     assert new_id("???", set()) == "item"
+
+
+def test_upgrade_from_schema_1_keeps_the_data(tmp_path):
+    db = sqlite3.connect(tmp_path / "old.db")
+    db.executescript(f"BEGIN; {MIGRATIONS[0]}; PRAGMA user_version = 1; COMMIT;")
+    db.execute("INSERT INTO outputs VALUES ('out1', 'Output 1', 1920, 1080, 60, 0, 'auto', 0)")
+    db.execute("INSERT INTO inputs VALUES ('mine', 'out1', 'Mine', 'test-pattern', '{}', 7, 0, 0, NULL, 'none', 0)")
+    db.commit()
+    db.close()
+    store = Store(tmp_path / "old.db")
+    assert [i.id for i in store.output("out1").inputs] == ["mine"]  # no reseeding
+    store.set_setting("admin_password", "x")
+    assert store.get_setting("admin_password") == "x"
+    store.close()

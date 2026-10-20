@@ -37,3 +37,17 @@ def test_status_lists_the_inputs():
     app = App(Args(), demo_output(30, 5, [str(Path("a.mp4"))]))
     assert app.status.sources == ["Test input A", "Test input B", "a.mp4"]
     assert app.status.target_fps == 30
+
+
+def test_open_port_reports_a_port_in_use():
+    import pytest
+
+    from lanstreamer.app import open_port
+
+    first = open_port(0)
+    port = first.getsockname()[1]
+    try:
+        with pytest.raises(RuntimeError, match=f"port {port} is in use"):
+            open_port(port)
+    finally:
+        first.close()

@@ -137,3 +137,13 @@ def test_a_crashing_plugin_only_fails_its_own_calls(tmp_path):
 
     running, releasable = asyncio.run(run_plugin(folder, tmp_path, None, steps))
     assert running and releasable
+
+
+def test_check_settings_returns_schema_and_validation():
+    from lanstreamer.plugins.process import check_settings
+
+    ok = asyncio.run(check_settings(BUILTIN / "test_pattern", {"pattern": "ball"}))
+    assert ok["errors"] == [] and ok["settings"] == {"pattern": "ball", "tone_hz": 440}
+    assert set(ok["schema"]["properties"]) == {"pattern", "tone_hz"}
+    bad = asyncio.run(check_settings(BUILTIN / "test_pattern", {"tone_hz": 5}))
+    assert bad["errors"][0]["field"] == "tone_hz"

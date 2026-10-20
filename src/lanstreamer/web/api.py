@@ -1,0 +1,329 @@
+"""Web server: player page, status, live updates and the admin API (FastAPI).
+
+Public (LAN):
+    GET  /                    player page
+    GET  /api/status          status of the output
+    WS   /api/ws              the same status, pushed on every change
+    POST /api/next            "Next input"
+
+Admin login (one password, session cookie):
+    GET  /api/admin/session   {"password_set", "logged_in"}
+    POST /api/admin/setup     first start: set the password (only while none is set)
+    POST /api/admin/login | /logout | /password
+
+Admin (logged in):
+    GET    /api/admin/plugins                    installed plugins + settings schema
+    GET    /api/admin/outputs                    outputs and their inputs
+    PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
+    POST   /api/admin/outputs/{id}/inputs        add an input
+    PUT    /api/admin/outputs/{id}/order         order of the inputs (ties in priority)
+    PATCH  /api/admin/inputs/{id}                change an input (priority, override, settings, ...)
+    DELETE /api/admin/inputs/{id}
+    GET    /api/admin/logs/{name}?lines=300      lan-streamer.log, output.log, mediamtx.log
+
+Every configuration change is saved in SQLite and taken over by the running
+output at once (OutputRuntime.apply).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass
+from importlib import resources
+from pathlib import Path
+from typing import Any, Literal
+
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from pydantic import BaseModel, Field
+
+from lanstreamer.core.auth import Auth
+from lanstreamer.core.config import InputConfig
+from lanstreamer.core.store import NotFound, Store
+from lanstreamer.plugins.process import PluginError, check_settings
+from lanstreamer_sdk import Manifest
+
+COOKIE = "lanstreamer_session"
+LOG_FILES = ("lan-streamer.log", "output.log", "mediamtx.log")
+RESTART_FIELDS = {"width", "height", "fps", "bitrate_kbps", "encoder"}
+
+PAGES = resources.files("lanstreamer.web")
+ICON = resources.files("lanstreamer.assets").joinpath("icon.png")
+
+
+class Changes:
+    """Lets WebSocket clients wait for the next status change."""
+
+    def __init__(self) -> None:
+        self.version = 0
+        self._event = asyncio.Event()
+
+    def notify(self) -> None:
+        self.version += 1
+        self._event.set()
+        self._event = asyncio.Event()
+
+    async def wait(self, timeout_s: float) -> None:
+        try:
+            await asyncio.wait_for(self._event.wait(), timeout_s)
+        except TimeoutError:
+            pass
+
+
+@dataclass
+class Backend:
+    """What the web layer needs from the app."""
+
+    status: Callable[[], dict[str, Any]]
+    skip: Callable[[], None]
+    store: Store
+    auth: Auth
+    plugins: Callable[[], dict[str, Manifest]]
+    apply: Callable[[str], Awaitable[None]]  # output id → running output takes over its config
+    logs: Path
+    changes: Changes
+
+
+# --- request bodies ---------------------------------------------------------------------
+
+
+class Password(BaseModel):
+    password: str
+
+
+class PasswordChange(BaseModel):
+    current: str
+    new: str
+
+
+class OutputPatch(BaseModel):
+    name: str | None = None
+    width: int | None = Field(None, ge=320, le=3840)
+    height: int | None = Field(None, ge=240, le=2160)
+    fps: Literal[30, 60] | None = None
+    bitrate_kbps: int | None = Field(None, ge=0, le=50000)
+    encoder: Literal["auto", "nvidia", "amd", "intel", "cpu"] | None = None
+
+
+class InputNew(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    plugin: str
+    settings: dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(10, ge=0, le=1000)
+    fallback: bool = False
+    min_duration_s: float = Field(0, ge=0)
+    max_duration_s: float | None = Field(None, gt=0)
+
+
+class InputPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    settings: dict[str, Any] | None = None
+    priority: int | None = Field(None, ge=0, le=1000)
+    fallback: bool | None = None
+    min_duration_s: float | None = Field(None, ge=0)
+    max_duration_s: float | None = Field(None, gt=0)
+    override: Literal["none", "force", "block"] | None = None
+
+
+class Order(BaseModel):
+    ids: list[str]
+
+
+# --- app --------------------------------------------------------------------------------
+
+
+def create_app(backend: Backend) -> FastAPI:
+    app = FastAPI(title="lan-streamer", docs_url="/api/docs", redoc_url=None)
+    schema_cache: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def logged_in(request: Request) -> None:
+        if not backend.auth.valid(request.cookies.get(COOKIE)):
+            raise HTTPException(401, "login required")
+
+    def set_cookie(response: Response, token: str) -> None:
+        response.set_cookie(COOKIE, token, httponly=True, samesite="strict", max_age=7 * 24 * 3600)
+
+    async def validated(plugin_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+        manifest = backend.plugins().get(plugin_id)
+        if manifest is None or manifest.path is None:
+            raise HTTPException(422, f"plugin {plugin_id!r} is not installed")
+        try:
+            result = await check_settings(manifest.path, settings)
+        except PluginError as exc:
+            raise HTTPException(422, f"plugin {plugin_id!r} cannot be loaded: {exc}") from exc
+        if result["errors"]:
+            raise HTTPException(422, {"message": "invalid settings", "errors": result["errors"]})
+        return result["settings"]
+
+    async def changed(output_id: str) -> None:
+        await backend.apply(output_id)
+        backend.changes.notify()
+
+    # --- public -------------------------------------------------------------------------
+
+    @app.get("/", response_class=HTMLResponse)
+    def player() -> str:
+        return PAGES.joinpath("index.html").read_text(encoding="utf-8")
+
+    @app.get("/favicon.png")
+    def favicon() -> Response:
+        return Response(ICON.read_bytes(), media_type="image/png")
+
+    @app.get("/api/status")
+    def status() -> dict[str, Any]:
+        return backend.status()
+
+    @app.post("/api/next", status_code=204)
+    def next_input() -> None:
+        backend.skip()
+
+    @app.websocket("/api/ws")
+    async def live(ws: WebSocket) -> None:
+        await ws.accept()
+        try:
+            while True:
+                await ws.send_text(json.dumps(backend.status()))
+                await backend.changes.wait(1.0)  # at least once per second (fps, uptime)
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+
+    # --- login --------------------------------------------------------------------------
+
+    @app.get("/api/admin/session")
+    def session(request: Request) -> dict[str, bool]:
+        return {
+            "password_set": backend.auth.has_password,
+            "logged_in": backend.auth.valid(request.cookies.get(COOKIE)),
+        }
+
+    @app.post("/api/admin/setup", status_code=204)
+    def setup(body: Password, response: Response) -> None:
+        if backend.auth.has_password:
+            raise HTTPException(409, "the password is already set")
+        try:
+            backend.auth.set_password(body.password)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        set_cookie(response, backend.auth.login(body.password) or "")
+
+    @app.post("/api/admin/login", status_code=204)
+    async def login(body: Password, response: Response) -> None:
+        token = backend.auth.login(body.password)
+        if token is None:
+            await asyncio.sleep(1)  # slows down guessing
+            raise HTTPException(401, "wrong password")
+        set_cookie(response, token)
+
+    @app.post("/api/admin/logout", status_code=204)
+    def logout(request: Request, response: Response) -> None:
+        backend.auth.logout(request.cookies.get(COOKIE))
+        response.delete_cookie(COOKIE)
+
+    @app.post("/api/admin/password", status_code=204, dependencies=[Depends(logged_in)])
+    def change_password(body: PasswordChange, response: Response) -> None:
+        if backend.auth.login(body.current) is None:
+            raise HTTPException(401, "wrong password")
+        try:
+            backend.auth.set_password(body.new)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        set_cookie(response, backend.auth.login(body.new) or "")
+
+    # --- configuration --------------------------------------------------------------------
+
+    @app.get("/api/admin/plugins", dependencies=[Depends(logged_in)])
+    async def plugins() -> list[dict[str, Any]]:
+        result = []
+        for manifest in backend.plugins().values():
+            key = (manifest.id, manifest.version)
+            if key not in schema_cache and manifest.path is not None:
+                try:
+                    schema_cache[key] = (await check_settings(manifest.path))["schema"]
+                except PluginError as exc:
+                    schema_cache[key] = {"error": str(exc)}
+            result.append({
+                "id": manifest.id, "name": manifest.name, "version": manifest.version,
+                "description": manifest.description, "schema": schema_cache.get(key, {}),
+            })  # fmt: skip
+        return result
+
+    @app.get("/api/admin/outputs", dependencies=[Depends(logged_in)])
+    def outputs() -> list[dict[str, Any]]:
+        return [asdict(o) for o in backend.store.outputs()]
+
+    @app.patch("/api/admin/outputs/{output_id}", dependencies=[Depends(logged_in)])
+    async def patch_output(output_id: str, body: OutputPatch) -> dict[str, Any]:
+        changes = body.model_dump(exclude_unset=True)
+        try:
+            out = backend.store.update_output(output_id, **changes)
+        except NotFound as exc:
+            raise HTTPException(404, f"no output {output_id!r}") from exc
+        await changed(output_id)
+        return {"output": asdict(out), "restart_required": bool(RESTART_FIELDS & set(changes))}
+
+    @app.post("/api/admin/outputs/{output_id}/inputs", status_code=201,
+              dependencies=[Depends(logged_in)])  # fmt: skip
+    async def add_input(output_id: str, body: InputNew) -> dict[str, Any]:
+        settings = await validated(body.plugin, body.settings)
+        cfg = InputConfig(id="", **{**body.model_dump(), "settings": settings})
+        try:
+            cfg = backend.store.add_input(output_id, cfg)
+        except NotFound as exc:
+            raise HTTPException(404, f"no output {output_id!r}") from exc
+        await changed(output_id)
+        return asdict(cfg)
+
+    @app.put("/api/admin/outputs/{output_id}/order", status_code=204,
+             dependencies=[Depends(logged_in)])  # fmt: skip
+    async def order(output_id: str, body: Order) -> None:
+        current = {i.id for i in backend.store.output(output_id).inputs}
+        if set(body.ids) != current:
+            raise HTTPException(422, "the list must contain every input of the output once")
+        backend.store.reorder_inputs(output_id, body.ids)
+        await changed(output_id)
+
+    @app.patch("/api/admin/inputs/{input_id}", dependencies=[Depends(logged_in)])
+    async def patch_input(input_id: str, body: InputPatch) -> dict[str, Any]:
+        changes = body.model_dump(exclude_unset=True)
+        try:
+            output_id = backend.store.output_of_input(input_id)
+        except NotFound as exc:
+            raise HTTPException(404, f"no input {input_id!r}") from exc
+        if "settings" in changes:
+            plugin = next(i.plugin for i in backend.store.output(output_id).inputs if i.id == input_id)
+            changes["settings"] = await validated(plugin, changes["settings"] or {})
+        cfg = backend.store.update_input(input_id, **changes)
+        await changed(output_id)
+        return asdict(cfg)
+
+    @app.delete("/api/admin/inputs/{input_id}", status_code=204, dependencies=[Depends(logged_in)])
+    async def delete_input(input_id: str) -> None:
+        try:
+            output_id = backend.store.output_of_input(input_id)
+        except NotFound as exc:
+            raise HTTPException(404, f"no input {input_id!r}") from exc
+        backend.store.delete_input(input_id)
+        await changed(output_id)
+
+    @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
+             dependencies=[Depends(logged_in)])  # fmt: skip
+    def logs(name: str, lines: int = 300) -> str:
+        if name not in LOG_FILES:
+            raise HTTPException(404, f"unknown log {name!r}")
+        path = backend.logs / name
+        if not path.exists():
+            return ""
+        text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return "\n".join(text[-max(1, min(lines, 5000)):])
+
+    return app

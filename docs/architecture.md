@@ -165,10 +165,12 @@ Built-in plugins (`src/lanstreamer/plugins/builtin/`): **test-pattern** (always 
 
 ## Web UI
 
-- Plain HTML and JavaScript without a build step, served by FastAPI (owner's decision: fast builds, no Node.js toolchain).
-- **Viewer page** (no login, LAN only): one player per output, WebRTC via WHEP, falling back to hls.js. It shows what is playing and embeds the plugin UIs.
-- **Admin area** (login, one admin account, Argon2 password hash, session cookie): outputs, input instances, rankings, overrides, plugin upload, live status over WebSocket, and logs per input and output.
-- Settings forms are generated from each plugin's Pydantic JSON Schema.
+- **Web server:** FastAPI on uvicorn, inside the app's asyncio loop (`web/api.py`). The app binds port 8080 itself, so a port in use gives a clear message instead of ending the app. Interactive API docs: `/api/docs`.
+- **Pages:** plain HTML and JavaScript without a build step (owner's decision: fast builds, no Node.js toolchain).
+- **Viewer page** `/` (no login, LAN only): player (WebRTC via WHEP), what is on air, the inputs with state and priority, "Next input". Live status comes over the WebSocket `/api/ws` (pushed on every change, at least once a second), polling `/api/status` is the fallback. Planned: hls.js fallback, embedded plugin UIs.
+- **Admin login:** one password, set on first start (`POST /api/admin/setup`, only while none is set), stored as a scrypt hash in the `settings` table; session cookie (HttpOnly, SameSite=Strict, 7 days, in memory – a restart logs out); a wrong password costs one second.
+- **Admin API** `/api/admin/…`: plugins with their settings schema, outputs, add/change/delete/reorder inputs (priority, override force/block, durations, settings), logs. Settings are validated by the plugin itself in a short-lived plugin host process (`host.py --check`), so the core never imports plugin code. Every change is stored and taken over at once by `OutputRuntime.apply()`; output format and encoder need a restart (the API says so).
+- **Admin area** (M2 step 4): the pages on top of this API – settings forms generated from each plugin's Pydantic JSON Schema, ranking by drag and drop, force/block, live status, logs, plugin upload.
 
 ## Installation and packaging
 

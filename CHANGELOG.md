@@ -17,6 +17,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Plugin SDK v1 (`lanstreamer_sdk`), one process per plugin instance, built-in plugins "test-pattern" and "playlist".
 - Core runtime: plugins + scheduler + output worker; the output reports when a source ended or broke.
 - Configuration in SQLite with live changes while running.
+- Web server on FastAPI: live status over a WebSocket, admin login (password set on first start), admin API for plugins (with settings schema), outputs, inputs (add, change, reorder, delete, force/block) and logs; API docs at `/api/docs`.
 
 ### Fixed
 

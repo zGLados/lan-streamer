@@ -149,9 +149,9 @@ async function connect() {
   }
 }
 
-async function pollStatus() {
-  try {
-    status = await (await fetch("/api/status")).json();
+function render(next) {
+  status = next;
+  {
     const ok = status.state === "running";
     $("dot").className = "dot " + (ok ? "ok" : status.state === "failed" ? "bad" : "");
     $("version").textContent = status.version;
@@ -180,7 +180,20 @@ async function pollStatus() {
       li.className = { "on air": "on", error: "error", "cooling down": "cooling" }[input.state] || "";
       $("sources").appendChild(li);
     }
-  } catch { $("dot").className = "dot bad"; }
+  }
+}
+
+// Live status: pushed over a WebSocket on every change; polling as a fallback.
+let socketOk = false;
+function openSocket() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`);
+  ws.onmessage = (e) => { socketOk = true; render(JSON.parse(e.data)); };
+  ws.onclose = () => { socketOk = false; setTimeout(openSocket, 2000); };
+}
+async function pollStatus() {
+  if (socketOk) return;
+  try { render(await (await fetch("/api/status")).json()); }
+  catch { $("dot").className = "dot bad"; }
 }
 
 let last = null;
@@ -220,7 +233,8 @@ $("sound").onclick = () => {
 };
 
 pollStatus().then(connect);
-setInterval(pollStatus, 1000);
+openSocket();
+setInterval(pollStatus, 2000);
 setInterval(pollStats, 1000);
 </script>
 </body>

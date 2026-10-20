@@ -133,3 +133,27 @@ class PluginProcess:
         assert self.proc and self.proc.stderr
         async for raw in self.proc.stderr:
             log.info("%s", raw.decode(errors="replace").rstrip())
+
+
+async def check_settings(plugin_dir: Path, settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Runs the plugin host in check mode: settings schema, validated settings, errors.
+
+    The plugin's code runs in a short-lived process, never in the core.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "lanstreamer.plugins.host", "--plugin", str(plugin_dir),
+        "--check", "--settings", json.dumps(settings or {}),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )  # fmt: skip
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), 30)
+    except TimeoutError:
+        proc.kill()
+        raise PluginError("plugin check timed out") from None
+    for line in reversed(out.decode(errors="replace").splitlines()):
+        if line.startswith("{"):
+            result = json.loads(line)
+            if "fatal" in result:
+                raise PluginError(result["fatal"])
+            return result
+    raise PluginError(f"plugin check failed: {err.decode(errors='replace')[-300:]}")

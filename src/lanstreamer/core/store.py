@@ -44,6 +44,13 @@ MIGRATIONS = [
         position INTEGER NOT NULL
     );
     """,
+    # 2: key/value settings (admin password hash, ...)
+    """
+    CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    """,
 ]
 
 INPUT_FIELDS = ("name", "plugin", "settings", "priority", "fallback", "min_duration_s",
@@ -184,6 +191,13 @@ class Store:
             row = self._db.execute("SELECT * FROM inputs WHERE id = ?", (input_id,)).fetchone()
             return self._input(row)
 
+    def output_of_input(self, input_id: str) -> str:
+        with self._lock:
+            row = self._db.execute("SELECT output_id FROM inputs WHERE id = ?", (input_id,)).fetchone()
+            if row is None:
+                raise NotFound(input_id)
+            return row[0]
+
     def delete_input(self, input_id: str) -> None:
         with self._lock:
             if self._db.execute("DELETE FROM inputs WHERE id = ?", (input_id,)).rowcount == 0:
@@ -197,6 +211,18 @@ class Store:
                     "UPDATE inputs SET position = ? WHERE id = ? AND output_id = ?",
                     (position, input_id, output_id),
                 )
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            return row[0] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO settings VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
 
     def _update(self, table: str, row_id: str, allowed: tuple[str, ...], changes: dict) -> None:
         unknown = set(changes) - set(allowed)

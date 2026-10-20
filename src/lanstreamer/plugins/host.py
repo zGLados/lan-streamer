@@ -2,6 +2,10 @@
 
     python -m lanstreamer.plugins.host --plugin <folder> --instance <id> --data-dir <dir>
                                        [--settings '<json>']
+    python -m lanstreamer.plugins.host --plugin <folder> --check [--settings '<json>']
+        prints {"schema": <JSON schema of the settings>, "settings": <validated>,
+        "errors": [...]} and exits – used by the admin API, so the core never
+        imports plugin code itself.
 
 Protocol, one JSON object per line:
     stdout: {"event": "ready", "api_version": 1}
@@ -111,13 +115,38 @@ async def serve(plugin: InputPlugin) -> None:
         await plugin.stop()
 
 
+def check(folder: Path, settings_json: str) -> int:
+    """Settings schema and validation for the admin API."""
+    try:
+        cls = load_plugin(folder)
+    except (ManifestError, ImportError, AttributeError, ValueError) as exc:
+        send({"fatal": f"{exc.__class__.__name__}: {exc}"})
+        return 2
+    result: dict[str, Any] = {"schema": cls.Settings.model_json_schema(), "errors": []}
+    try:
+        result["settings"] = cls.Settings.model_validate(json.loads(settings_json)).model_dump(mode="json")
+    except ValidationError as exc:
+        result["errors"] = [
+            {"field": ".".join(str(p) for p in e["loc"]), "message": e["msg"]} for e in exc.errors()
+        ]
+    except ValueError as exc:
+        result["errors"] = [{"field": "", "message": f"invalid JSON: {exc}"}]
+    send(result)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="lan-streamer plugin host")
     parser.add_argument("--plugin", type=Path, required=True, help="folder with plugin.toml")
-    parser.add_argument("--instance", required=True)
-    parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--instance", default="check")
+    parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--settings", default="{}", help="settings as JSON")
+    parser.add_argument("--check", action="store_true", help="print schema + validation, exit")
     args = parser.parse_args(argv)
+    if args.check:
+        return check(args.plugin, args.settings)
+    if args.data_dir is None:
+        parser.error("--data-dir is required")
 
     logging.basicConfig(
         level=logging.INFO, stream=sys.stderr, format=f"[{args.instance}] %(levelname)s %(message)s"
