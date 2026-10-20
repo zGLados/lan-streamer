@@ -155,7 +155,7 @@ class InputPlugin(Generic[S]):
 
 ## Web UI
 
-- SvelteKit, built as a static single-page app and served by FastAPI.
+- Plain HTML and JavaScript without a build step, served by FastAPI (owner's decision: fast builds, no Node.js toolchain).
 - **Viewer page** (no login, LAN only): one player per output, WebRTC via WHEP, falling back to hls.js. It shows what is playing and embeds the plugin UIs.
 - **Admin area** (login, one admin account, Argon2 password hash, session cookie): outputs, input instances, rankings, overrides, plugin upload, live status over WebSocket, and logs per input and output.
 - Settings forms are generated from each plugin's Pydantic JSON Schema.
@@ -192,7 +192,7 @@ CI caches the GStreamer build install and the PyGObject wheel (keyed by their ve
 src/lanstreamer/     core: api/, scheduler/, plugins/ (host, loader, rpc), pipeline/, store/
 sdk/                 lanstreamer-sdk – the only package plugin authors depend on
 plugins/             built-in reference plugins: fallback, twitch_top, tiktok_queue, youtube, ingest
-web/                 SvelteKit SPA
+src/lanstreamer/web/ player and admin pages (plain HTML/JS)
 packaging/           windows/ (Inno Setup), linux/ (.deb, install.sh, systemd unit), docker/ (optional)
 docs/                architecture, plugin developer guide, operations
 tests/               scheduler, plugin API contract, pipeline smoke tests
@@ -206,7 +206,7 @@ tests/               scheduler, plugin API contract, pipeline smoke tests
 | Web API | FastAPI + Pydantic | Async, and settings models produce the forms |
 | Media | GStreamer 1.24+ via PyGObject, gst-plugins-rs | Dynamic pipelines, compositor, robust live sources |
 | Media server | MediaMTX | WebRTC, LL-HLS, RTMP/SRT ingest in one binary |
-| Frontend | SvelteKit (static) | Small, fast, simple to embed plugin pages |
+| Frontend | Plain HTML/JS | No build step; enough for forms, lists and live status |
 | Storage | SQLite | One machine, no extra service |
 | Operations | Native installers for Windows and Linux, built in GitHub Actions; Docker optional | Works the same on both systems |
 | Quality | pytest, ruff, mypy, GitHub Actions | NF-08 |
