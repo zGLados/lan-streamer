@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: concept. Nothing here is implemented yet; see [roadmap.md](roadmap.md).
+Status: M1 (prototype) done; M2 (core) in progress – the output pipeline, scheduler, plugin system, core runtime and SQLite configuration work, the web API and admin area are next. Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -136,22 +136,28 @@ requirements = ["yt-dlp>=2026.1"]
 
 On upload the core checks `api_version` and rejects incompatible plugins with a clear message (F-PLG-04). It then installs the requirements into a virtualenv for that plugin, so plugins cannot break each other's dependencies.
 
-Plugin authors depend only on the small `lanstreamer-sdk` package. It holds the base class, the source types, the context object and a test harness. The plugin API, refined from the requirements sketch:
+Plugin authors depend only on the small SDK package `lanstreamer_sdk` (today in `src/lanstreamer_sdk/`, shipped with the app; to be published separately in M6). It holds the base class, the source types, the context object and the manifest check. The plugin API, version 1:
 
 ```python
-class InputPlugin(Generic[S]):
+class InputPlugin[S: BaseModel]:
     Settings: type[S]                       # Pydantic model → admin form (F-IN-03)
+    poll_interval_s: float = 5.0            # for the default watch_active()
 
     def __init__(self, ctx: PluginContext, settings: S): ...
 
-    async def watch_active(self) -> AsyncIterator[bool]: ...   # F-AKT-01/02
-    async def get_source(self) -> MediaSource: ...             # F-IN-01
-    async def can_release(self) -> bool: ...                   # equal-priority handover
+    async def start(self) -> None: ...                          # once, before anything else
+    async def stop(self) -> None: ...
+    async def is_active(self) -> bool: ...                      # F-AKT-01
+    async def watch_active(self) -> AsyncIterator[bool]: ...    # default polls is_active (F-AKT-02)
+    async def get_source(self) -> MediaSource: ...              # F-IN-01: TestSource, UriSource, FileSource
+    async def can_release(self) -> bool: ...                    # equal-priority handover
     async def on_playback(self, event: PlaybackEvent) -> None: ...  # started / ended / failed
-    def routes(self) -> APIRouter | None: ...                  # own UI (F-IN-04)
+    def routes(self) -> APIRouter | None: ...                   # own UI (F-IN-04) – planned
 ```
 
-- `PluginContext` gives each instance a key-value store, an HTTP client, a logger and a way to publish metadata such as title, channel and thumbnail (F-IN-06, F-PLG-06).
+Built-in plugins (`src/lanstreamer/plugins/builtin/`): **test-pattern** (always active) and **playlist** (files or URLs one after another, hands over when an item has ended; the usual fallback).
+
+- `PluginContext` gives each instance a persistent key-value store, a logger, its own data folder and a way to publish metadata such as title, channel and thumbnail (F-IN-06, F-PLG-06). An HTTP client follows with the first network plugins.
 - `on_playback` closes the loop for queue-style inputs: the TikTok plugin learns that a clip has ended, pops its queue and can release.
 - `routes()` keeps the sketch's FastAPI router, but it runs inside the plugin host on a random loopback port. The core reverse-proxies `/p/<instance>/…` to it, and the viewer page embeds it in an iframe (F-WEB-03).
 
@@ -170,11 +176,11 @@ lan-streamer runs natively on Windows and Linux, so it can be developed and run 
 
 | System | Format | Runs as |
 | --- | --- | --- |
-| Windows 10/11 x64 | Setup `.exe` (Inno Setup) with the official GStreamer MSVC runtime | Windows service; the installer adds firewall rules for the LAN |
+| Windows 10/11 x64 | Setup `.exe` (Inno Setup) with the official GStreamer MSVC runtime | Today: start menu entry → runs windowless with a tray icon. Planned: optional Windows service and firewall rules for the LAN |
 | Linux x64 | `.deb` (Debian/Ubuntu) and a `.tar.gz` with `install.sh` for other distributions | systemd service |
 | Linux server (optional) | Docker Compose with GPU passthrough | Container |
 
-After installing, the admin UI opens at `http://<host>:8080`. On first start it asks for the admin password.
+After starting, the player page opens at `http://<host>:8080`. The admin area (M2 step 4) will ask for an admin password on first start.
 
 **PyGObject on Windows:** the Python bindings inside the official GStreamer Windows build only work with Python 3.9, which is end of life. CI therefore builds PyGObject for Python 3.13 against the official GStreamer MSVC build, and the installer ships that build.
 
@@ -184,23 +190,31 @@ After installing, the admin UI opens at `http://<host>:8080`. On first start it 
 
 - installs to `C:\Program Files\lan-streamer` for all users (Windows asks for admin rights), or with "only for me" to `%LOCALAPPDATA%\Programs\lan-streamer` without admin rights. It needs no internet and is listed under Settings → Apps; its uninstaller also removes `%LOCALAPPDATA%\lan-streamer`;
 - ships an embeddable CPython 3.13 with lan-streamer and the PyGObject build, a private copy of the GStreamer runtime (`gstreamer\`, with its own plugin registry so other GStreamer installs do not interfere) and MediaMTX;
-- adds a start menu entry "lan-streamer self-test" (`self-test.cmd` → `python -m lanstreamer.doctor`).
+- adds start menu entries "lan-streamer (1080p60)", "lan-streamer (1080p30)" and "lan-streamer self-test". The first two run `pythonw.exe -m lanstreamer --tray`: no console window, a tray icon next to the clock (open player, what is on air, open log / log folder, quit). The self-test runs `python -m lanstreamer.doctor` in a console;
+- uses one icon everywhere (start menu, Apps list, setup, tray, browser tab), drawn by `packaging/windows/make_icon.py`.
 
 The installer ships only the GStreamer plugins listed in `packaging/windows/gstreamer-plugins.txt` and the DLLs they import (found with dumpbin). **Every new input plugin or feature adds the plugins it needs there and its elements to the self-test** (`REQUIRED_ELEMENTS` in `doctor.py`); CI plays a real MP4 file and the same file over HTTP to cover the decoder path.
 
 CI caches the GStreamer build install and the PyGObject wheel (keyed by their versions), compresses test installers with `lzma2/fast` (release tags: `max`) and skips the build for documentation-only changes.
 
-## Repository layout (planned)
+## Repository layout
 
 ```
-src/lanstreamer/     core: api/, scheduler/, plugins/ (host, loader, rpc), pipeline/, store/
-sdk/                 lanstreamer-sdk – the only package plugin authors depend on
-plugins/             built-in reference plugins: fallback, twitch_top, tiktok_queue, youtube, ingest
-src/lanstreamer/web/ player and admin pages (plain HTML/JS)
-packaging/           windows/ (Inno Setup), linux/ (.deb, install.sh, systemd unit), docker/ (optional)
-docs/                architecture, plugin developer guide, operations
-tests/               scheduler, plugin API contract, pipeline smoke tests
+src/lanstreamer/
+  app.py             starts everything: encoder choice, MediaMTX, output worker, runtime, web, tray
+  scheduler.py       decide() + Debounce – pure, unit-tested
+  core/              config.py, store.py (SQLite), runtime.py (plugins + scheduler + worker), worker.py
+  media/             gst.py (GStreamer setup), encoders.py, output.py (output worker), mpegts.py
+  plugins/           host.py (plugin process), process.py (core side), registry.py, builtin/
+  web/               server.py (player page; FastAPI in M2 step 3), index.html
+  doctor.py, tray.py, paths.py, assets/
+src/lanstreamer_sdk/ plugin SDK: InputPlugin, sources, context, manifest
+packaging/windows/   build.ps1, lan-streamer.iss, gstreamer-plugins.txt, make_icon.py, *.cmd
+tests/               unit tests; e2e/check_player.py (browser check in CI)
+docs/                architecture, roadmap
 ```
+
+Planned: `packaging/linux/` (.deb, install.sh, systemd), a plugin developer guide (M6).
 
 ## Tech stack
 
