@@ -37,6 +37,8 @@
   .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.4; }
   ol { margin: 0; padding-left: 20px; font-size: 14px; }
   li.on { color: var(--ok); font-weight: 600; }
+  li .meta { color: var(--muted); font-size: 12px; font-weight: 400; }
+  li.error .meta, li.cooling .meta { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -167,10 +169,15 @@ async function pollStatus() {
     const u = status.uptime_s;
     $("uptime").textContent = `${Math.floor(u / 3600)}:${pad(Math.floor(u / 60) % 60)}:${pad(u % 60)}`;
     $("sources").innerHTML = "";
-    for (const name of status.sources) {
+    for (const input of status.inputs || []) {
       const li = document.createElement("li");
-      li.textContent = name;
-      if (name === status.current) li.className = "on";
+      li.textContent = input.name + " ";
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = `· ${input.state} · priority ${input.priority}${input.fallback ? " · fallback" : ""}`;
+      meta.title = input.error || input.title || "";
+      li.appendChild(meta);
+      li.className = { "on air": "on", error: "error", "cooling down": "cooling" }[input.state] || "";
       $("sources").appendChild(li);
     }
   } catch { $("dot").className = "dot bad"; }

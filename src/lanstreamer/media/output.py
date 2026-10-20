@@ -11,12 +11,16 @@ opacity and volume. Once its first frame has arrived it fades in, and only then
 is the old slot removed. An input that never delivers a frame is dropped and
 the current one keeps playing.
 
-Protocol, one JSON object per line:
-    stdin:  {"cmd": "play", "label": "...", "source": {"kind": "test", "pattern": "smpte"}}
-            {"cmd": "play", "label": "...", "source": {"kind": "uri", "uri": "https://..."}}
+Protocol, one JSON object per line ("id" identifies one play command):
+    stdin:  {"cmd": "play", "id": "7", "label": "...", "source": {"kind": "test", "pattern": "smpte"}}
+            {"cmd": "play", "id": "8", "label": "...", "source": {"kind": "uri", "uri": "https://..."}}
+            {"cmd": "clear"}   fade out to the background
             {"cmd": "stop"}
-    stdout: {"event": "ready"} {"event": "playing", "label": "..."}
-            {"event": "switch_failed", "label": "...", "reason": "..."}
+    stdout: {"event": "ready"} {"event": "playing", "id": "7", "label": "..."}
+            {"event": "switch_failed", "id": "8", "label": "...", "reason": "..."}
+            {"event": "ended", "id": "7"}   the source on air reached its end
+            {"event": "failed", "id": "7", "reason": "..."}   the source on air broke
+            {"event": "cleared"}
             {"event": "stats", "fps": 59.9} {"event": "error", "message": "..."}
             {"event": "stream", "caps": "video/x-h264, profile=..., level=..."}
             {"event": "ts_table", "pmt": "PMT v0: PID 65 H.264 ...", "sent": true}
@@ -51,12 +55,14 @@ def log(message: str) -> None:
 
 @dataclass
 class Slot:
+    id: str
     label: str
     bin: object
     pads: list = field(default_factory=list)  # (ghost pad, mixer, mixer pad)
     video_pad: object = None
     audio_pad: object = None
     ready: bool = False
+    failed: bool = False
     started: float = field(default_factory=time.monotonic)
 
 
@@ -253,18 +259,19 @@ class Output:
 
     # --- switching ------------------------------------------------------------
 
-    def play(self, label: str, source: dict) -> None:
+    def play(self, id_: str, label: str, source: dict) -> None:
         if self.pending is not None:
-            self._drop(self.pending)
-            emit("switch_failed", label=self.pending.label, reason="replaced by a newer switch")
+            old = self.pending
             self.pending = None
+            self._drop(old)
+            emit("switch_failed", id=old.id, label=old.label, reason="replaced by a newer switch")
         try:
             bin_ = self._source_bin(label, source)
         except Exception as exc:  # noqa: BLE001 – a broken source must not stop the output
-            emit("switch_failed", label=label, reason=str(exc))
+            emit("switch_failed", id=id_, label=label, reason=str(exc))
             return
 
-        slot = Slot(label, bin_)
+        slot = Slot(id_, label, bin_)
         self.pipeline.add(bin_)
         vmix, amix = self.pipeline.get_by_name("vmix"), self.pipeline.get_by_name("amix")
         slot.video_pad = vmix.request_pad_simple("sink_%u")
@@ -284,7 +291,13 @@ class Output:
             self.GLib.idle_add(self._on_ready, slot)
             return self.Gst.PadProbeReturn.REMOVE
 
+        def end_of_stream(_pad, info):
+            if info.get_event().type == self.Gst.EventType.EOS:
+                self.GLib.idle_add(self._on_eos, slot)
+            return self.Gst.PadProbeReturn.OK
+
         slot.video_pad.add_probe(self.Gst.PadProbeType.BUFFER, first_frame)
+        slot.video_pad.add_probe(self.Gst.PadProbeType.EVENT_DOWNSTREAM, end_of_stream)
         self.pending = slot
         bin_.sync_state_with_parent()
         self.GLib.timeout_add(int(START_TIMEOUT_S * 1000), self._on_start_timeout, slot)
@@ -306,7 +319,7 @@ class Output:
                 return True
             if old is not None:
                 self._drop(old)
-            emit("playing", label=slot.label)
+            emit("playing", id=slot.id, label=slot.label)
             return False
 
         self.GLib.timeout_add(20, fade)
@@ -316,8 +329,41 @@ class Output:
         if slot is self.pending and not slot.ready:
             self.pending = None
             self._drop(slot)
-            emit("switch_failed", label=slot.label, reason="no picture within 15 s")
+            emit("switch_failed", id=slot.id, label=slot.label, reason="no picture within 15 s")
         return False
+
+    def _on_eos(self, slot: Slot) -> bool:
+        if slot is self.current:
+            emit("ended", id=slot.id)
+        elif slot is self.pending:
+            self.pending = None
+            self._drop(slot)
+            emit("switch_failed", id=slot.id, label=slot.label, reason="ended before the first picture")
+        return False
+
+    def clear(self) -> None:
+        """Fades the current input out; the background stays."""
+        if self.pending is not None:
+            old = self.pending
+            self.pending = None
+            self._drop(old)
+        slot, self.current = self.current, None
+        if slot is None:
+            emit("cleared")
+            return
+        started = time.monotonic()
+
+        def fade() -> bool:
+            t = min(1.0, (time.monotonic() - started) / FADE_S)
+            slot.video_pad.set_property("alpha", 1.0 - t)
+            slot.audio_pad.set_property("volume", 1.0 - t)
+            if t < 1.0:
+                return True
+            self._drop(slot)
+            emit("cleared")
+            return False
+
+        self.GLib.timeout_add(20, fade)
 
     def _drop(self, slot: Slot) -> None:
         slot.bin.set_state(self.Gst.State.NULL)
@@ -346,7 +392,10 @@ class Output:
                 if slot is self.pending:
                     self.pending = None
                     self._drop(slot)
-                    emit("switch_failed", label=slot.label, reason=error.message)
+                    emit("switch_failed", id=slot.id, label=slot.label, reason=error.message)
+                elif not slot.failed:
+                    slot.failed = True  # report once; the core switches away
+                    emit("failed", id=slot.id, reason=error.message)
                 return
             emit("error", message=f"{error.message} ({debug})")
             self.loop.quit()
@@ -382,7 +431,9 @@ class Output:
 
     def _handle(self, command: dict) -> bool:
         if command.get("cmd") == "play":
-            self.play(command.get("label", "Input"), command["source"])
+            self.play(str(command.get("id", "")), command.get("label", "Input"), command["source"])
+        elif command.get("cmd") == "clear":
+            self.clear()
         elif command.get("cmd") == "stop":
             self.loop.quit()
         return False

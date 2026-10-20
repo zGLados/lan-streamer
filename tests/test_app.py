@@ -1,28 +1,39 @@
 from pathlib import Path
 
-from lanstreamer.app import App, demo_sources
+from lanstreamer.app import App
+from lanstreamer.core.config import demo_output
 
 
-def test_demo_sources_are_two_test_inputs_plus_extras(tmp_path):
+def test_demo_output_is_two_test_patterns_plus_a_playlist_per_source(tmp_path):
     clip = tmp_path / "clip.mp4"
-    sources = demo_sources([str(clip), "https://example.com/live.m3u8"])
-    assert [label for label, _ in sources][:2] == ["Test input A", "Test input B"]
-    assert sources[2] == ("clip.mp4", {"kind": "uri", "uri": Path(clip).as_uri()})
-    assert sources[3][1] == {"kind": "uri", "uri": "https://example.com/live.m3u8"}
+    out = demo_output(60, 20, [str(clip), "https://example.com/live/clip-http.mp4"])
+    assert [(i.name, i.plugin) for i in out.inputs] == [
+        ("Test input A", "test-pattern"),
+        ("Test input B", "test-pattern"),
+        ("clip.mp4", "playlist"),
+        ("clip-http.mp4", "playlist"),
+    ]
+    assert out.inputs[2].settings == {"items": [str(clip)]}
+    assert {i.priority for i in out.inputs} == {10}
+    assert out.inputs[0].min_duration_s == 20
 
 
 class Args:
-    fps, width, height, source = 60, 1920, 1080, []
+    smoke_test = 0
 
 
 def test_worker_events_update_status():
-    app = App(Args())
-    app._on_event({"event": "ready"})
-    app._on_event({"event": "playing", "label": "Test input A"})
-    app._on_event({"event": "switch_failed", "label": "x", "reason": "no picture"})
-    app._on_event({"event": "stats", "fps": 59.8})
-    assert app.ready.is_set() and not app.failed.is_set()
-    assert (app.status.current, app.status.switches, app.status.failed_switches) == ("Test input A", 1, 1)
-    assert app.status.fps == 59.8
-    app._on_event({"event": "error", "message": "boom"})
-    assert app.failed.is_set() and app.status.last_error == "boom"
+    app = App(Args(), demo_output(60, 20, []))
+    app._on_worker_event({"event": "stats", "fps": 59.8})
+    app._on_worker_event({"event": "stream", "caps": "video/x-h264, profile=(string)constrained-baseline"})
+    app._on_worker_event({"event": "ts_table", "pmt": "PMT v0: PID 65 H.264", "sent": True})
+    assert (app.status.fps, app.status.ts_table) == (59.8, "PMT v0: PID 65 H.264")
+    assert not app.failed.is_set()
+    app._on_worker_event({"event": "exited", "message": "boom"})
+    assert app.failed.is_set() and app.status.state == "failed"
+
+
+def test_status_lists_the_inputs():
+    app = App(Args(), demo_output(30, 5, [str(Path("a.mp4"))]))
+    assert app.status.sources == ["Test input A", "Test input B", "a.mp4"]
+    assert app.status.target_fps == 30

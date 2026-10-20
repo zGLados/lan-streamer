@@ -168,14 +168,15 @@ jobs:
         shell: pwsh
         run: |
           $py = "$env:ProgramFiles\lan-streamer\python\python.exe"
-          # Inputs: two test patterns, a local MP4 and the same MP4 over HTTP
+          # Inputs of equal priority: two test patterns (6 s each), a playlist with a
+          # local 10 s MP4 and one with the same MP4 over HTTP (hand over when it ends)
           Copy-Item media/clip.mp4 media/clip-http.mp4
           $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8000', '--directory', 'media'
           $clip = (Resolve-Path media/clip.mp4).Path
           $app = Start-Process -PassThru -NoNewWindow -FilePath $py `
-            -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '38', '--switch-interval', '8', `
+            -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '45', '--switch-interval', '6', `
               '--source', $clip, '--source', 'http://127.0.0.1:8000/clip-http.mp4'
-          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 30
+          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 40
           $player = $LASTEXITCODE
           $app.WaitForExit()
           Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
