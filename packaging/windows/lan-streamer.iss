@@ -18,10 +18,19 @@ AppVersion={#AppVersion}
 VersionInfoVersion={#NumVersion}
 AppPublisher=zGLados
 AppPublisherURL=https://github.com/zGLados/lan-streamer
-DefaultDirName={localappdata}\Programs\lan-streamer
+AppSupportURL=https://github.com/zGLados/lan-streamer/issues
+AppUpdatesURL=https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml
+AppVerName=lan-streamer {#AppVersion}
+; Default: all users, C:\Program Files\lan-streamer (asks for admin rights).
+; The first page offers "only for me" (%LOCALAPPDATA%\Programs, no admin rights).
+; Either way it is listed under Settings > Apps and Programs and Features.
+DefaultDirName={autopf}\lan-streamer
 DefaultGroupName=lan-streamer
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog commandline
+UsePreviousPrivileges=yes
+UninstallDisplayIcon={app}\python\python.exe
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -46,7 +55,7 @@ Name: "{group}\lan-streamer self-test"; Filename: "{app}\self-test.cmd"; Working
 Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
 
 [Run]
-Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent
+Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent runasoriginaluser
 
 [UninstallDelete]
 ; Everything the app wrote at runtime: Python caches and MediaMTX certificates in

@@ -108,9 +108,13 @@ class App:
         if exe is None:
             raise RuntimeError("MediaMTX not found")
         log.info("Starting MediaMTX (%s)", exe)
+        # Runs in the user's data folder: MediaMTX writes files (e.g. certificates)
+        # next to itself, and C:\Program Files is read-only for users.
+        workdir = paths.data_dir() / "mediamtx"
+        workdir.mkdir(exist_ok=True)
         self.mediamtx = subprocess.Popen(
             [str(exe), str(exe.with_name("mediamtx.yml"))],
-            cwd=exe.parent,
+            cwd=workdir,
             stdout=self.mediamtx_log,
             stderr=subprocess.STDOUT,
         )

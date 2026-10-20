@@ -87,13 +87,17 @@ jobs:
           $exe = (Get-ChildItem setup\*.exe).FullName
           $p = Start-Process -Wait -PassThru -FilePath $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          # Listed under Settings > Apps / Programs and Features (all-users install)
+          $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F0B7C55-3D1E-4C1B-9E3A-6C2B9A1F4E21}_is1'
+          $entry = Get-ItemProperty $key
+          Write-Host "Registered: $($entry.DisplayName) $($entry.DisplayVersion) in $($entry.InstallLocation)"
 
       - name: Self-test of the installed app
         shell: pwsh
         run: |
           # No GPU on the runner: test the CPU encoder; the GPU candidates are probed and reported too.
-          & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor
-          & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
+          & "$env:ProgramFiles\lan-streamer\python\python.exe" -m lanstreamer.doctor
+          & "$env:ProgramFiles\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Install Playwright (test tool only)
@@ -103,7 +107,7 @@ jobs:
       - name: Smoke test – stream with switching + playback in Edge (1080p60, CPU encoder)
         shell: pwsh
         run: |
-          $py = "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe"
+          $py = "$env:ProgramFiles\lan-streamer\python\python.exe"
           $app = Start-Process -PassThru -NoNewWindow -FilePath $py `
             -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '60', '--switch-interval', '8'
           python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 50
@@ -134,8 +138,10 @@ jobs:
       - name: Uninstall
         shell: pwsh
         run: |
-          $p = Start-Process -Wait -PassThru -FilePath "$env:LOCALAPPDATA\Programs\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F0B7C55-3D1E-4C1B-9E3A-6C2B9A1F4E21}_is1'
+          $p = Start-Process -Wait -PassThru -FilePath "$env:ProgramFiles\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           Start-Sleep 3
-          foreach ($dir in "$env:LOCALAPPDATA\Programs\lan-streamer", "$env:LOCALAPPDATA\lan-streamer") {
+          if (Test-Path $key) { throw 'uninstall entry still registered' }
+          foreach ($dir in "$env:ProgramFiles\lan-streamer", "$env:LOCALAPPDATA\lan-streamer") {
             if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "uninstall left $dir behind" }
           }
