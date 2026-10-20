@@ -49,7 +49,7 @@ Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
 Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent
 
 [UninstallDelete]
-; GStreamer plugin registry cache and logs written by the app
-Type: files; Name: "{localappdata}\lan-streamer\gst-registry.bin"
-Type: filesandordirs; Name: "{localappdata}\lan-streamer\logs"
-Type: dirifempty; Name: "{localappdata}\lan-streamer"
+; Everything the app wrote at runtime: Python caches and MediaMTX certificates in
+; the program folder, plugin registry, logs and plugin data in the user data folder.
+Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{localappdata}\lan-streamer"

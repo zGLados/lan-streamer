@@ -9,15 +9,15 @@ description = "Self-hosted modular LAN streaming platform"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-# PyGObject is not listed: it ships with GStreamer on Windows and comes from
-# the distribution packages on Linux (see scripts/).
-dependencies = []
+# PyGObject is not listed: the Windows installer ships its own build, on Linux
+# it comes from the distribution packages.
+dependencies = ["pydantic>=2.7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lanstreamer"]
+packages = ["src/lanstreamer", "src/lanstreamer_sdk"]
 
 [tool.ruff]
 line-length = 100

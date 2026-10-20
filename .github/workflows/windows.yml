@@ -136,4 +136,6 @@ jobs:
         run: |
           $p = Start-Process -Wait -PassThru -FilePath "$env:LOCALAPPDATA\Programs\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           Start-Sleep 3
-          if (Test-Path "$env:LOCALAPPDATA\Programs\lan-streamer\python") { throw 'uninstall left files behind' }
+          foreach ($dir in "$env:LOCALAPPDATA\Programs\lan-streamer", "$env:LOCALAPPDATA\lan-streamer") {
+            if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "uninstall left $dir behind" }
+          }

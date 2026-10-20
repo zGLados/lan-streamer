@@ -1,0 +1,6 @@
+id = "test-pattern"
+name = "Test pattern"
+version = "1.0.0"
+api_version = 1
+entry = "test_pattern:Plugin"
+description = "A generated test picture with a tone. Always active."
