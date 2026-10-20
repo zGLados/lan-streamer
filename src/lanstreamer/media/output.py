@@ -60,8 +60,9 @@ class Output:
         self.Gst = Gst
         self.GLib = GLib
         self.args = args
+        # I420 end to end: what x264 takes, so no extra conversion per frame.
         self.raw_caps = (
-            f"video/x-raw,width={args.width},height={args.height},"
+            f"video/x-raw,format=I420,width={args.width},height={args.height},"
             f"framerate={args.fps}/1,pixel-aspect-ratio=1/1"
         )
         self.loop = GLib.MainLoop()
@@ -69,6 +70,7 @@ class Output:
         self.pending: Slot | None = None
         self.next_zorder = 1
         self.frames = 0
+        self.muxed: set[str] = set()  # mux inputs that have delivered data
         self.pipeline = self._build()
 
     # --- pipeline ---------------------------------------------------------------
@@ -105,10 +107,29 @@ class Output:
             raise RuntimeError(f"cannot link encoder {a.encoder}")
 
         parse.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self._count_frame)
+
+        # MediaMTX only reads the first stream table (PMT) of the MPEG-TS. Hold the
+        # output back until video and audio both reached the muxer, so the first
+        # PMT it sees lists both tracks.
+        mux = pipeline.get_by_name("mux")
+        for pad in mux.sinkpads:
+            pad.add_probe(Gst.PadProbeType.BUFFER, self._on_mux_input)
+        mux.get_static_pad("src").add_probe(
+            Gst.PadProbeType.BUFFER | Gst.PadProbeType.BUFFER_LIST, self._hold_mux_output
+        )
         bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self._on_message)
         return pipeline
+
+    def _on_mux_input(self, pad, _info):
+        self.muxed.add(pad.get_name())
+        return self.Gst.PadProbeReturn.REMOVE
+
+    def _hold_mux_output(self, _pad, _info):
+        if len(self.muxed) < 2:
+            return self.Gst.PadProbeReturn.DROP
+        return self.Gst.PadProbeReturn.REMOVE
 
     def _count_frame(self, _pad, _info):
         self.frames += 1

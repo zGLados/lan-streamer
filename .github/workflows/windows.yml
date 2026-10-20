@@ -100,7 +100,11 @@ jobs:
           $py = "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe"
           & $py -m lanstreamer --encoder cpu --smoke-test 45 --switch-interval 8
           $code = $LASTEXITCODE
-          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log" -Tail 30
+          $mtx = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log"
+          $mtx | Select-Object -Last 15
+          # Both tracks must reach MediaMTX, without decode errors.
+          if (-not ($mtx | Select-String 'online, 2 tracks')) { Write-Host 'MediaMTX did not get 2 tracks'; exit 1 }
+          if ($mtx | Select-String 'decode errors') { Write-Host 'MediaMTX reported decode errors'; exit 1 }
           exit $code
 
       - name: Upload logs
