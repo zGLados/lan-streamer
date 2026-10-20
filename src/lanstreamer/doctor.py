@@ -6,7 +6,7 @@ import argparse
 import platform
 import sys
 
-from lanstreamer import __version__
+from lanstreamer import BUILD
 from lanstreamer.media import encoders, gst
 
 # Elements lan-streamer uses. The Windows installer ships only the plugins in
@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def check(args: argparse.Namespace) -> int:
 
-    print(f"lan-streamer {__version__}")
+    print(f"lan-streamer {BUILD}")
     print(f"Python     {platform.python_version()} ({sys.platform})")
     try:
         Gst = gst.init()

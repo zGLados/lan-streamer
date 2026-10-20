@@ -21,7 +21,7 @@ import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lanstreamer import __version__, paths, tray
+from lanstreamer import BUILD, paths, tray
 from lanstreamer.media import encoders
 from lanstreamer.web import server
 
@@ -41,10 +41,11 @@ NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 class Status:
     """What the web page shows; written by the app, read by the web server."""
 
-    version: str = __version__
+    version: str = BUILD
     state: str = "starting"
     encoder: str = ""
     stream: str = ""  # negotiated H.264 caps (profile, level)
+    ts_table: str = ""  # tracks in the MPEG-TS sent to MediaMTX
     resolution: str = ""
     target_fps: int = 0
     fps: float = 0.0
@@ -101,7 +102,7 @@ class App:
 
     def start(self) -> None:
         a = self.args
-        log.info("lan-streamer %s – %dx%d @ %d fps", __version__, a.width, a.height, a.fps)
+        log.info("lan-streamer %s – %dx%d @ %d fps", BUILD, a.width, a.height, a.fps)
 
         log.info("Selecting encoder (preference: %s) ...", a.encoder)
         spec, tries = encoders.select(a.encoder, a.fps)
@@ -177,6 +178,10 @@ class App:
         elif kind == "stream":
             self.status.stream = event["caps"]
             log.info("Encoded stream: %s", event["caps"])
+        elif kind == "ts_table":
+            if event["sent"]:
+                self.status.ts_table = event["pmt"]
+            log.info("MPEG-TS %s: %s", "sent" if event["sent"] else "held back", event["pmt"])
         elif kind == "stats":
             self.status.fps = event["fps"]
         elif kind == "error":

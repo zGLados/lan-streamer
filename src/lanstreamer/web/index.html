@@ -70,6 +70,7 @@
         <dt>On air</dt><dd id="current">–</dd>
         <dt>Encoder</dt><dd id="encoder">–</dd>
         <dt>H.264</dt><dd id="stream">–</dd>
+        <dt>To MediaMTX</dt><dd id="tstable">–</dd>
         <dt>Format</dt><dd id="format">–</dd>
         <dt>Encoded fps</dt><dd id="fps">–</dd>
         <dt>Switches</dt><dd id="switches">–</dd>
@@ -157,6 +158,9 @@ async function pollStatus() {
     const field = (name) => ((status.stream || "").match(new RegExp(`${name}=\\(string\\)([\\w.-]+)`)) || [])[1];
     $("stream").textContent = status.stream ? `${field("profile") || "?"} ${field("level") || ""}` : "–";
     $("stream").title = status.stream || "";
+    const tracks = (status.ts_table || "").match(/PID \d+ [^,·(]+/g) || [];
+    $("tstable").textContent = tracks.length ? tracks.map((t) => t.trim()).join(", ") : "–";
+    $("tstable").title = status.ts_table || "";
     $("format").textContent = `${status.resolution} @ ${status.target_fps}`;
     $("fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
     $("switches").textContent = `${status.switches}` + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");

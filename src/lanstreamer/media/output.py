@@ -19,6 +19,7 @@ Protocol, one JSON object per line:
             {"event": "switch_failed", "label": "...", "reason": "..."}
             {"event": "stats", "fps": 59.9} {"event": "error", "message": "..."}
             {"event": "stream", "caps": "video/x-h264, profile=..., level=..."}
+            {"event": "ts_table", "pmt": "PMT v0: PID 65 H.264 ...", "sent": true}
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ import time
 from dataclasses import dataclass, field
 
 from lanstreamer.media import encoders, gst
+from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
 START_TIMEOUT_S = 15.0
@@ -74,6 +76,8 @@ class Output:
         self.frames = 0
         self.muxed: set[str] = set()  # mux inputs that have delivered data
         self.muxed_all_at: float | None = None  # when the last one did
+        self.tables = TableReader()  # diagnostics: which tracks MediaMTX gets
+        self.tables_until: float | None = None
         self.pipeline = self._build()
 
     # --- pipeline ---------------------------------------------------------------
@@ -120,9 +124,10 @@ class Output:
         mux = pipeline.get_by_name("mux")
         for pad in mux.sinkpads:
             pad.add_probe(Gst.PadProbeType.BUFFER, self._on_mux_input)
-        mux.get_static_pad("src").add_probe(
-            Gst.PadProbeType.BUFFER | Gst.PadProbeType.BUFFER_LIST, self._hold_mux_output
-        )
+        mux_src = mux.get_static_pad("src")
+        data = Gst.PadProbeType.BUFFER | Gst.PadProbeType.BUFFER_LIST
+        mux_src.add_probe(data, self._inspect_mux_output)  # runs before the hold
+        mux_src.add_probe(data, self._hold_mux_output)
         bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self._on_message)
@@ -134,9 +139,32 @@ class Output:
             self.muxed_all_at = time.monotonic()
         return self.Gst.PadProbeReturn.REMOVE
 
+    def _mux_ready(self) -> bool:
+        return self.muxed_all_at is not None and time.monotonic() - self.muxed_all_at >= MUX_HOLD_S
+
     def _hold_mux_output(self, _pad, _info):
-        ready = self.muxed_all_at is not None and time.monotonic() - self.muxed_all_at >= MUX_HOLD_S
-        return self.Gst.PadProbeReturn.REMOVE if ready else self.Gst.PadProbeReturn.DROP
+        return self.Gst.PadProbeReturn.REMOVE if self._mux_ready() else self.Gst.PadProbeReturn.DROP
+
+    def _inspect_mux_output(self, _pad, info):
+        """Reports every new stream table (PMT) the muxer writes, held back or sent.
+
+        Stops 10 s after the output started. Must never raise (streaming thread).
+        """
+        try:
+            sent = self._mux_ready()
+            if sent and self.tables_until is None:
+                self.tables_until = time.monotonic() + 10
+            buffers = info.get_buffer_list() if info.type & self.Gst.PadProbeType.BUFFER_LIST else None
+            items = [buffers.get(i) for i in range(buffers.length())] if buffers else [info.get_buffer()]
+            for buffer in items:
+                for pmt in self.tables.feed(buffer.extract_dup(0, buffer.get_size())):
+                    emit("ts_table", pmt=pmt.describe(), sent=sent)
+            if self.tables_until is not None and time.monotonic() > self.tables_until:
+                return self.Gst.PadProbeReturn.REMOVE
+        except Exception as exc:  # noqa: BLE001
+            log(f"cannot inspect MPEG-TS output: {exc}")
+            return self.Gst.PadProbeReturn.REMOVE
+        return self.Gst.PadProbeReturn.OK
 
     def _report_caps(self, pad, _info):
         # Runs in the streaming thread: it must never raise, or PyGObject drops

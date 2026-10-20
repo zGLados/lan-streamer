@@ -180,6 +180,9 @@ jobs:
           $app.WaitForExit()
           Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
           $log = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log"
+          $sent = $log | Select-String 'MPEG-TS sent:' | Select-Object -First 1
+          Write-Host "First stream table sent to MediaMTX: $sent"
+          if (-not ($sent -match 'H\.264') -or -not ($sent -match 'Opus')) { Write-Host 'stream table lacks H.264 or Opus'; exit 1 }
           foreach ($name in 'clip.mp4', 'clip-http.mp4') {
             if (-not ($log | Select-String "On air: $name")) { $log | Select-Object -Last 20; Write-Host "input $name never went on air"; exit 1 }
           }
