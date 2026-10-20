@@ -7,7 +7,6 @@ import platform
 import sys
 
 from lanstreamer import __version__
-
 from lanstreamer.media import encoders, gst
 
 # Elements the output pipeline needs (see docs/architecture.md).
