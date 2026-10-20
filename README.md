@@ -15,7 +15,9 @@ Details: [docs/architecture.md](docs/architecture.md).
 
 ## Planned stack
 
-Python 3.12 (asyncio, FastAPI) · GStreamer · MediaMTX · SvelteKit · SQLite · Docker Compose
+Python 3.12 (asyncio, FastAPI) · GStreamer · MediaMTX · SvelteKit · SQLite
+
+Runs natively on **Windows and Linux**; each release will ship an installer for both. Hardware encoding is picked automatically (NVIDIA, AMD, Intel, or CPU as a fallback) and can be overridden in the settings.
 
 ## Scope
 
