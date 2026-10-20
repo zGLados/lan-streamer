@@ -21,9 +21,10 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 - [x] Plugin SDK v1 (`lanstreamer_sdk`: `InputPlugin`, sources, context, manifest)
 - [x] Plugin host process + JSON lines over stdio
-- [ ] Supervisor with restart and backoff
+- [x] Core runtime (`core/runtime.py`): plugin processes + scheduler + output worker, playback events back to the plugins
+- [x] Supervisor with restart and backoff (plugin processes)
 - [x] Scheduler as a pure function, fully unit-tested
-- [ ] Activity events + polling, debounce, min/max duration, admin overrides
+- [x] Activity events + polling, debounce, min/max duration, overrides (in the runtime; admin UI follows)
 - [ ] SQLite store, FastAPI admin API with login
 - [ ] Admin SPA: outputs, input instances, rankings, generated settings forms, live status
 - [ ] Plugin upload (.zip, manifest, version check, per-plugin virtualenv)
