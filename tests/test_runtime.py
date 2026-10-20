@@ -116,3 +116,37 @@ def test_blocking_the_only_input_clears_the_output(tmp_path):
     runtime, worker = asyncio.run(run(cfg, tmp_path, 0.4, during=block))
     assert worker.plays == ["only"] and worker.clears == 1
     assert runtime.status()["current"] == ""
+
+
+def test_apply_adds_removes_and_changes_inputs_while_running(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a"), pattern("b", priority=5)])
+
+    async def reconfigure(runtime, worker):
+        await asyncio.sleep(0.4)
+        assert worker.plays == ["a"]
+        # a new, more important input takes over
+        await runtime.apply(OutputConfig(inputs=[pattern("a"), pattern("b", priority=5), pattern("c", priority=20)]))
+        await asyncio.sleep(0.5)
+        assert worker.plays[-1] == "c"
+        # removing it and raising b above a: b goes on air
+        await runtime.apply(OutputConfig(inputs=[pattern("a"), pattern("b", priority=30)]))
+        await asyncio.sleep(0.4)
+        assert worker.plays[-1] == "b"
+        assert set(runtime.inputs) == {"a", "b"}
+
+    asyncio.run(run(cfg, tmp_path, 0.1, during=reconfigure))
+
+
+def test_changed_settings_restart_the_plugin(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a")])
+
+    async def change(runtime, worker):
+        await asyncio.sleep(0.3)
+        old_proc = runtime.inputs["a"].proc
+        new = pattern("a")
+        new.settings = {"pattern": "ball"}
+        await runtime.apply(OutputConfig(inputs=[new]))
+        await asyncio.sleep(0.6)
+        assert runtime.inputs["a"].proc is not old_proc and runtime.inputs["a"].proc.running
+
+    asyncio.run(run(cfg, tmp_path, 0.1, during=change))

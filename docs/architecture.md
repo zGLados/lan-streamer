@@ -116,6 +116,10 @@ Rules, in order:
 
 Plugins push activity changes as events. The core also polls every few seconds (F-AKT-02) and debounces flapping activity before acting on it.
 
+## Configuration
+
+Outputs and their input instances live in SQLite (`lanstreamer.db` in the data folder, `core/store.py`). The schema is versioned (`PRAGMA user_version`, one migration per version). The first start creates one output with two test inputs. Changes made while running are taken over by `OutputRuntime.apply()`: new inputs start, removed ones stop, inputs with changed plugin or settings restart, everything else changes in place. Output format and encoder take effect after a restart.
+
 ## Plugin system
 
 A plugin is a `.zip` with a manifest, uploaded in the admin UI (F-PLG-02):

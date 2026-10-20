@@ -76,6 +76,7 @@ class OutputRuntime:
         clock: Callable[[], float] = time.monotonic,
     ):
         self.cfg = cfg
+        self.plugins = plugins
         self.data_dir = data_dir
         self.worker = worker
         self.on_change = on_change
@@ -106,6 +107,43 @@ class OutputRuntime:
         await asyncio.gather(
             *(i.proc.stop() for i in self.inputs.values() if i.proc), return_exceptions=True
         )
+
+    async def apply(self, cfg: OutputConfig, plugins: dict[str, Path] | None = None) -> None:
+        """Takes over a changed configuration while running (admin changes).
+
+        New inputs start, removed ones stop, inputs whose plugin or settings
+        changed restart; everything else (name, priority, override, durations)
+        changes in place. Output settings (format, encoder) need a restart.
+        """
+        if plugins is not None:
+            self.plugins = plugins
+        wanted = {i.id: i for i in cfg.inputs}
+        for input_id in [i for i in self.inputs if i not in wanted]:
+            inp = self.inputs.pop(input_id)
+            log.info("Input removed: %s", inp.cfg.name)
+            if self.pending and self.pending[1] == input_id:
+                self.pending = None
+            if inp.proc:
+                await inp.proc.stop()
+        updated: dict[str, InputRuntime] = {}
+        for icfg in cfg.inputs:
+            inp = self.inputs.get(icfg.id)
+            if inp is None:
+                inp = InputRuntime(icfg, self.plugins.get(icfg.plugin))
+                log.info("Input added: %s", icfg.name)
+                self._spawn(self._start_plugin(inp))
+            elif (inp.cfg.plugin, inp.cfg.settings) != (icfg.plugin, icfg.settings):
+                log.info("Input changed, restarting: %s", icfg.name)
+                if inp.proc:
+                    await inp.proc.stop()
+                inp = InputRuntime(icfg, self.plugins.get(icfg.plugin))
+                self._spawn(self._start_plugin(inp))
+            else:
+                inp.cfg = icfg
+            updated[icfg.id] = inp  # keeps the configured order (rotation, ties)
+        self.inputs = updated
+        self.cfg = cfg
+        self.on_change()
 
     async def _start_plugin(self, inp: InputRuntime) -> None:
         if inp.plugin_dir is None:
@@ -266,7 +304,7 @@ class OutputRuntime:
     def status(self) -> dict[str, Any]:
         now = self.clock()
         on_air_id = self.on_air.id if self.on_air else None
-        on_air = self.inputs[on_air_id].cfg.name if on_air_id else ""
+        on_air = self.inputs[on_air_id].cfg.name if on_air_id in self.inputs else ""
         return {
             "current": on_air,
             "switches": self.switches,

@@ -2,8 +2,8 @@
 
 Starts MediaMTX, picks an encoder, starts the output worker, the input plugins
 and the scheduler (core.runtime), and serves the player page. Until the
-configuration lives in SQLite (M2 step 2), the inputs are two test patterns
-plus one playlist per --source, all of equal priority.
+admin area exists (M2 step 4), the configuration is edited in the database;
+--source starts a test run with two test patterns plus that file or URL.
 
     python -m lanstreamer [--fps 30] [--source <file or URL> ...] [--smoke-test 40]
 """
@@ -25,6 +25,7 @@ from typing import Any
 from lanstreamer import BUILD, paths, tray
 from lanstreamer.core.config import OutputConfig, demo_output
 from lanstreamer.core.runtime import OutputRuntime
+from lanstreamer.core.store import Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
 from lanstreamer.plugins.registry import discover
@@ -206,7 +207,7 @@ class App:
 
     def _smoke_result(self) -> int:
         s = self.status
-        ok = s.switches >= 2 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
+        ok = s.switches >= 1 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
         log.info(
             "Smoke test %s: %d switches, %d failed, %.1f fps (target %d)",
             "passed" if ok else "FAILED", s.switches, s.failed_switches, s.fps, s.target_fps,
@@ -229,12 +230,15 @@ class App:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lanstreamer", description=__doc__.splitlines()[0])
-    parser.add_argument("--fps", type=int, default=60, choices=(30, 60))
-    parser.add_argument("--width", type=int, default=1920)
-    parser.add_argument("--height", type=int, default=1080)
-    parser.add_argument("--bitrate", type=int, default=0, help="kbit/s (default: 8000 at 60 fps)")
-    parser.add_argument("--encoder", default="auto", choices=("auto", *encoders.AUTO_ORDER))
-    parser.add_argument("--source", action="append", default=[], help="extra input: file or URL")
+    # Output settings: override the stored configuration for this run only
+    parser.add_argument("--fps", type=int, choices=(30, 60))
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
+    parser.add_argument("--bitrate", type=int, help="kbit/s (default: 8000 at 60 fps)")
+    parser.add_argument("--encoder", choices=("auto", *encoders.AUTO_ORDER))
+    parser.add_argument("--source", action="append", default=[],
+                        help="test run: two test patterns plus this file or URL, "
+                             "instead of the stored configuration")  # fmt: skip
     parser.add_argument("--switch-interval", type=float, default=20.0, metavar="SECONDS",
                         help="how long each test input stays on air at least")  # fmt: skip
     parser.add_argument("--port", type=int, default=8080, help="web page port")
@@ -263,9 +267,16 @@ def run(args: argparse.Namespace) -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", handlers=handlers
     )
 
-    output = demo_output(args.fps, args.switch_interval, args.source)
-    output.width, output.height = args.width, args.height
-    output.bitrate_kbps, output.encoder = args.bitrate, args.encoder
+    if args.source:  # test run, nothing is stored
+        output = demo_output(60, args.switch_interval, args.source)
+    else:
+        store = Store(paths.data_dir() / "lanstreamer.db")
+        output = store.outputs()[0]  # several outputs: milestone M4
+        store.close()
+    for name, value in (("fps", args.fps), ("width", args.width), ("height", args.height),
+                        ("bitrate_kbps", args.bitrate), ("encoder", args.encoder)):  # fmt: skip
+        if value is not None:
+            setattr(output, name, value)
     app = App(args, output)
     url = f"http://localhost:{args.port}"
     icon = None

@@ -145,7 +145,7 @@ jobs:
           & "$env:ProgramFiles\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: Windowless start (pythonw.exe --tray, as from the start menu)
+      - name: Windowless start (pythonw.exe --tray, as from the start menu, stored configuration)
         shell: pwsh
         run: |
           $dir = "$env:ProgramFiles\lan-streamer\python"
@@ -184,7 +184,7 @@ jobs:
           $sent = $log | Select-String 'MPEG-TS sent:' | Select-Object -First 1
           Write-Host "First stream table sent to MediaMTX: $sent"
           if (-not ($sent -match 'H\.264') -or -not ($sent -match 'Opus')) { Write-Host 'stream table lacks H.264 or Opus'; exit 1 }
-          foreach ($name in 'clip.mp4', 'clip-http.mp4') {
+          foreach ($name in 'Test input A', 'Test input B', 'clip.mp4', 'clip-http.mp4') {
             if (-not ($log | Select-String "On air: $name")) { $log | Select-Object -Last 20; Write-Host "input $name never went on air"; exit 1 }
           }
           $mtx = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log"
