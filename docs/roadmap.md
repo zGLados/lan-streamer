@@ -14,14 +14,15 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Minimal web page with a WHEP player, local clock for latency comparison, WebRTC stats
 - [ ] Measure the latency in the browser (owner test)
 - [x] Encoders for all vendors (NVIDIA, AMD, Intel, CPU) with auto-detection and a manual override, each probe in its own process
-- [ ] Test NVENC on the NVIDIA test PC
+- [x] Test NVENC on the NVIDIA test PC (`nvd3d11h264enc` auto-selected, 2026-10-20)
 - [ ] Measure the CPU/GPU load of one and of two outputs on the target machine
 
 ## M2 – Core
 
-- [ ] Plugin SDK v1 (`InputPlugin`, sources, context, test harness)
-- [ ] Plugin host process + JSON-RPC, supervisor with restart and backoff
-- [ ] Scheduler as a pure function, fully unit-tested
+- [x] Plugin SDK v1 (`lanstreamer_sdk`: `InputPlugin`, sources, context, manifest)
+- [x] Plugin host process + JSON lines over stdio
+- [ ] Supervisor with restart and backoff
+- [x] Scheduler as a pure function, fully unit-tested
 - [ ] Activity events + polling, debounce, min/max duration, admin overrides
 - [ ] SQLite store, FastAPI admin API with login
 - [ ] Admin SPA: outputs, input instances, rankings, generated settings forms, live status
