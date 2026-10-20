@@ -23,6 +23,7 @@ WINDOWS_PLUGINS = ("d3d11", "d3d12", "nvcodec", "amfcodec", "qsv", "mediafoundat
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--encoder", default="auto", choices=("auto", *encoders.AUTO_ORDER))
+    parser.add_argument("--fps", type=int, default=60, choices=(30, 60))
     args = parser.parse_args(argv)
 
     print(f"lan-streamer {__version__}")
@@ -45,8 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         broken = [p for p in WINDOWS_PLUGINS if Gst.Registry.get().find_plugin(p) is None]
         print("Plugins    " + ("all loaded" if not broken else "NOT LOADED: " + ", ".join(broken)))
 
-    print(f"Encoders   (preference: {args.encoder})")
-    spec, log = encoders.select(Gst, args.encoder)
+    print(f"Encoders   (preference: {args.encoder}, 1080p{args.fps}, each tested in its own process)")
+    spec, log = encoders.select(args.encoder, args.fps)
     for line in log:
         print(f"           {line}")
     print("Selected   " + (f"{spec.element} ({spec.vendor})" if spec else "NONE"))

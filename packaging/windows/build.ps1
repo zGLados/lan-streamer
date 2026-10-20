@@ -137,6 +137,7 @@ Write-Host "    $($binaries.Count) files, all dependencies resolved"
 
 # --- Start scripts ---------------------------------------------------------------
 Copy-Item (Join-Path $PSScriptRoot 'self-test.cmd') $Stage
+Copy-Item (Join-Path $PSScriptRoot 'start.cmd') $Stage
 Copy-Item (Join-Path $Repo 'LICENSE') $Stage
 
 # --- Installer -----------------------------------------------------------------

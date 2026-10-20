@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lan-streamer</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #e6e8ee; --muted: #8b93a7;
+    --accent: #4f8cff; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .version { color: var(--muted); font-size: 13px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .player { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
+  video { width: 100%; height: 100%; display: block; }
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .overlay[hidden] { display: none; }
+  .controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  aside { display: flex; flex-direction: column; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .clock { font-size: 28px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.4; }
+  ol { margin: 0; padding-left: 20px; font-size: 14px; }
+  li.on { color: var(--ok); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>lan-streamer</h1>
+  <span class="version" id="version"></span>
+</header>
+<main>
+  <div>
+    <div class="player">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="overlay" id="overlay">Connecting …</div>
+    </div>
+    <div class="controls">
+      <button class="primary" id="next">Next input</button>
+      <button id="sound">Sound on</button>
+      <button id="reconnect">Reconnect</button>
+    </div>
+  </div>
+  <aside>
+    <section>
+      <h2>Local clock</h2>
+      <div class="clock" id="clock">--:--:--.---</div>
+      <p class="hint">Compare with the clock in the top right of the video (take a screenshot): the difference is the delay from encoder to screen.</p>
+    </section>
+    <section>
+      <h2>Output</h2>
+      <dl>
+        <dt>On air</dt><dd id="current">–</dd>
+        <dt>Encoder</dt><dd id="encoder">–</dd>
+        <dt>Format</dt><dd id="format">–</dd>
+        <dt>Encoded fps</dt><dd id="fps">–</dd>
+        <dt>Switches</dt><dd id="switches">–</dd>
+        <dt>Uptime</dt><dd id="uptime">–</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Player (WebRTC)</h2>
+      <dl>
+        <dt>Received</dt><dd id="rx-size">–</dd>
+        <dt>Displayed fps</dt><dd id="rx-fps">–</dd>
+        <dt>Jitter buffer</dt><dd id="rx-buffer">–</dd>
+        <dt>Network RTT</dt><dd id="rx-rtt">–</dd>
+        <dt>Packets lost</dt><dd id="rx-lost">–</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Inputs</h2>
+      <ol id="sources"></ol>
+    </section>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const video = $("video");
+let pc = null;
+let status = null;
+
+function pad(n, w = 2) { return String(n).padStart(w, "0"); }
+function tick() {
+  const d = new Date();
+  $("clock").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+async function connect() {
+  if (pc) pc.close();
+  $("overlay").hidden = false;
+  $("overlay").textContent = "Connecting …";
+  pc = new RTCPeerConnection();
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
+  pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "connected") $("overlay").hidden = true;
+    if (["failed", "disconnected"].includes(pc.connectionState)) {
+      $("overlay").hidden = false;
+      $("overlay").textContent = "Connection lost – retrying …";
+      setTimeout(connect, 2000);
+    }
+  };
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise((resolve) => {  // wait for ICE candidates (max. 2 s)
+      if (pc.iceGatheringState === "complete") return resolve();
+      pc.onicegatheringstatechange = () => pc.iceGatheringState === "complete" && resolve();
+      setTimeout(resolve, 2000);
+    });
+    const port = status ? status.whep_port : 8889;
+    const path = status ? status.whep_path : "out1";
+    const res = await fetch(`${location.protocol}//${location.hostname}:${port}/${path}/whep`, {
+      method: "POST", headers: { "Content-Type": "application/sdp" }, body: pc.localDescription.sdp,
+    });
+    if (!res.ok) throw new Error(`WHEP ${res.status}`);
+    await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+  } catch (err) {
+    $("overlay").textContent = `Stream not available yet (${err.message}) – retrying …`;
+    setTimeout(connect, 2000);
+  }
+}
+
+async function pollStatus() {
+  try {
+    status = await (await fetch("/api/status")).json();
+    const ok = status.state === "running";
+    $("dot").className = "dot " + (ok ? "ok" : status.state === "failed" ? "bad" : "");
+    $("version").textContent = status.version;
+    $("current").textContent = status.current || "–";
+    $("encoder").textContent = status.encoder || "–";
+    $("format").textContent = `${status.resolution} @ ${status.target_fps}`;
+    $("fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
+    $("switches").textContent = `${status.switches}` + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");
+    const u = status.uptime_s;
+    $("uptime").textContent = `${Math.floor(u / 3600)}:${pad(Math.floor(u / 60) % 60)}:${pad(u % 60)}`;
+    $("sources").innerHTML = "";
+    for (const name of status.sources) {
+      const li = document.createElement("li");
+      li.textContent = name;
+      if (name === status.current) li.className = "on";
+      $("sources").appendChild(li);
+    }
+  } catch { $("dot").className = "dot bad"; }
+}
+
+let last = null;
+async function pollStats() {
+  if (!pc) return;
+  const stats = await pc.getStats();
+  let rtt = null;
+  stats.forEach((s) => {
+    if (s.type === "inbound-rtp" && s.kind === "video") {
+      $("rx-size").textContent = s.frameWidth ? `${s.frameWidth}x${s.frameHeight}` : "–";
+      $("rx-fps").textContent = s.framesPerSecond ?? "–";
+      $("rx-lost").textContent = s.packetsLost ?? "–";
+      if (last && s.jitterBufferEmittedCount > last.count) {
+        const ms = 1000 * (s.jitterBufferDelay - last.delay) / (s.jitterBufferEmittedCount - last.count);
+        $("rx-buffer").textContent = `${ms.toFixed(0)} ms`;
+      }
+      last = { delay: s.jitterBufferDelay, count: s.jitterBufferEmittedCount };
+    }
+    if (s.type === "candidate-pair" && s.nominated && s.currentRoundTripTime != null) rtt = s.currentRoundTripTime;
+  });
+  $("rx-rtt").textContent = rtt != null ? `${(rtt * 1000).toFixed(0)} ms` : "–";
+}
+
+$("next").onclick = () => fetch("/api/next", { method: "POST" });
+$("reconnect").onclick = connect;
+$("sound").onclick = () => {
+  video.muted = !video.muted;
+  $("sound").textContent = video.muted ? "Sound on" : "Sound off";
+};
+
+pollStatus().then(connect);
+setInterval(pollStatus, 1000);
+setInterval(pollStats, 1000);
+</script>
+</body>
+</html>

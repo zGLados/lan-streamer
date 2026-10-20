@@ -40,6 +40,8 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
+Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\start.cmd"; WorkingDir: "{app}"
+Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\start.cmd"; Parameters: "--fps 30"; WorkingDir: "{app}"
 Name: "{group}\lan-streamer self-test"; Filename: "{app}\self-test.cmd"; WorkingDir: "{app}"
 Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
 
@@ -47,6 +49,7 @@ Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
 Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent
 
 [UninstallDelete]
-; GStreamer plugin registry cache written by the app
+; GStreamer plugin registry cache and logs written by the app
 Type: files; Name: "{localappdata}\lan-streamer\gst-registry.bin"
+Type: filesandordirs; Name: "{localappdata}\lan-streamer\logs"
 Type: dirifempty; Name: "{localappdata}\lan-streamer"

@@ -94,6 +94,22 @@ jobs:
           & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      - name: Smoke test – stream with switching (1080p60, CPU encoder)
+        shell: pwsh
+        run: |
+          $py = "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe"
+          & $py -m lanstreamer --encoder cpu --smoke-test 45 --switch-interval 8
+          $code = $LASTEXITCODE
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log" -Tail 30
+          exit $code
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ env.VERSION }}
+          path: ~/AppData/Local/lan-streamer/logs
+
       - name: Uninstall
         shell: pwsh
         run: |
