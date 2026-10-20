@@ -46,6 +46,8 @@ def init() -> ModuleType:
     gi.require_version("Gst", "1.0")
     from gi.repository import Gst
 
-    Gst.init(None)
+    # Without gst-python's overrides (not available for our PyGObject build)
+    # Gst.init needs a list, not None.
+    Gst.init([])
     _gst = Gst
     return Gst
