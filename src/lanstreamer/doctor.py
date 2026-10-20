@@ -16,6 +16,9 @@ REQUIRED_ELEMENTS = (
     "h264parse", "fallbacksrc", "uridecodebin3", "rtspclientsink",
 )
 
+# Windows plugins for GPU encoding and audio; they must load even without the hardware.
+WINDOWS_PLUGINS = ("d3d11", "d3d12", "nvcodec", "amfcodec", "qsv", "mediafoundation", "wasapi2")
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -35,13 +38,20 @@ def main(argv: list[str] | None = None) -> int:
     missing = [name for name in REQUIRED_ELEMENTS if Gst.ElementFactory.find(name) is None]
     print("Elements   " + ("all present" if not missing else "MISSING: " + ", ".join(missing)))
 
+    # A plugin that cannot be loaded (missing DLL) is absent from the registry. A
+    # plugin without matching hardware still loads, it just registers no elements.
+    broken: list[str] = []
+    if sys.platform == "win32":
+        broken = [p for p in WINDOWS_PLUGINS if Gst.Registry.get().find_plugin(p) is None]
+        print("Plugins    " + ("all loaded" if not broken else "NOT LOADED: " + ", ".join(broken)))
+
     print(f"Encoders   (preference: {args.encoder})")
     spec, log = encoders.select(Gst, args.encoder)
     for line in log:
         print(f"           {line}")
     print("Selected   " + (f"{spec.element} ({spec.vendor})" if spec else "NONE"))
 
-    return 0 if spec and not missing else 1
+    return 0 if spec and not missing and not broken else 1
 
 
 if __name__ == "__main__":

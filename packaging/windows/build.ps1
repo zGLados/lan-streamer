@@ -73,6 +73,16 @@ foreach ($p in $parts) {
         }
     }
 }
+# gstpython needs GStreamer's Python 3.9 bindings; lan-streamer does not use it.
+Remove-Item (Join-Path $GstDir 'lib\gstreamer-1.0\gstpython.dll') -ErrorAction SilentlyContinue
+
+# Visual C++ runtime, deployed app-locally: many plugins are C++ (d3d11, nvcodec,
+# amfcodec, qsv, ...) and a fresh Windows does not have msvcp140.dll.
+$crt = Get-ChildItem -Directory (Join-Path $env:VCToolsRedistDir 'x64') -Filter 'Microsoft.VC*.CRT' | Select-Object -First 1
+if (-not $crt) { throw "Visual C++ runtime not found under $env:VCToolsRedistDir" }
+Copy-Item (Join-Path $crt.FullName '*.dll') (Join-Path $GstDir 'bin')
+Write-Host "    + Visual C++ runtime from $($crt.Name)"
+
 $mb = [math]::Round((Get-ChildItem $GstDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
 Write-Host "    $mb MB"
 
@@ -84,6 +94,42 @@ $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
 if ($hash -ne $MediaMtxSha256) { throw "MediaMTX checksum mismatch: $hash" }
 Expand-Archive $zip -DestinationPath (Join-Path $Stage 'mediamtx')
 Remove-Item $zip
+
+# --- Dependency check -----------------------------------------------------------
+# Every DLL import must be shipped in the stage or be part of Windows itself.
+# The build machine has extra runtimes installed, so those never count as Windows.
+Step 'Dependency check'
+$shipped = @{}
+Get-ChildItem $Stage -Recurse -File -Include *.dll, *.pyd, *.exe | ForEach-Object { $shipped[$_.Name.ToLower()] = $true }
+$notWindows = '^(msvcp|vcruntime|concrt|vcomp|vccorlib|python)'
+$problems = @()
+$binaries = @(
+    Get-ChildItem (Join-Path $GstDir 'bin') -Filter *.dll
+    Get-ChildItem (Join-Path $GstDir 'lib\gstreamer-1.0') -Filter *.dll
+    Get-ChildItem (Join-Path $GstDir 'lib\gio\modules') -Filter *.dll -ErrorAction SilentlyContinue
+    Get-ChildItem (Join-Path $GstDir 'libexec') -Recurse -Filter *.exe
+    Get-ChildItem $Site -Recurse -Filter *.pyd
+)
+foreach ($bin in $binaries) {
+    $inDeps = $false
+    foreach ($line in (dumpbin /nologo /dependents $bin.FullName)) {
+        if ($line -match 'has the following dependencies') { $inDeps = $true; continue }
+        if ($inDeps -and $line -match '^\s*$' -and $seen) { break }
+        if ($inDeps -and $line -match '^\s+(\S+\.dll)\s*$') {
+            $seen = $true
+            $dep = $Matches[1].ToLower()
+            if ($shipped[$dep] -or $dep -like 'api-ms-win-*' -or $dep -like 'ext-ms-*') { continue }
+            if ($dep -notmatch $notWindows -and (Test-Path (Join-Path $env:SystemRoot "System32\$dep"))) { continue }
+            $problems += "$($bin.Name) -> $dep"
+        }
+    }
+    $seen = $false
+}
+if ($problems) {
+    $problems | Sort-Object -Unique | ForEach-Object { Write-Host "    MISSING $_" -ForegroundColor Red }
+    throw "$($problems.Count) unresolved DLL dependencies"
+}
+Write-Host "    $($binaries.Count) files, all dependencies resolved"
 
 # --- Start scripts ---------------------------------------------------------------
 Copy-Item (Join-Path $PSScriptRoot 'self-test.cmd') $Stage
