@@ -39,7 +39,7 @@ OutputBaseFilename=lan-streamer-setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayName=lan-streamer {#AppVersion}
+UninstallDisplayName=lan-streamer
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
