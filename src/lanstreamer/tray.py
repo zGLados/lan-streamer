@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
+import subprocess
 import sys
 import webbrowser
 from collections.abc import Callable
@@ -53,7 +53,8 @@ class Tray:
             pystray.MenuItem("Open player", lambda: webbrowser.open(self.url), default=True),
             pystray.MenuItem(lambda _item: self.status(), None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Open log folder", lambda: os.startfile(self.logs)),
+            pystray.MenuItem("Open log", self._open_log),
+            pystray.MenuItem("Open log folder", self._open_log_folder),
             pystray.MenuItem("Quit lan-streamer", self._quit),
         )
         try:
@@ -75,3 +76,17 @@ class Tray:
 
     def _quit(self) -> None:
         self.on_quit()
+
+    # Explicit programs instead of os.startfile(): opening the folder through the
+    # shell's file associations did nothing from the tray thread on the test PC.
+    def _open_log(self) -> None:
+        self._run(["notepad.exe", str(self.logs / "lan-streamer.log")])
+
+    def _open_log_folder(self) -> None:
+        self._run(["explorer.exe", str(self.logs)])
+
+    def _run(self, cmd: list[str]) -> None:
+        try:
+            subprocess.Popen(cmd)
+        except OSError as exc:
+            message_box("lan-streamer", f"Could not open {cmd[-1]}:\n{exc}")

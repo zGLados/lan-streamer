@@ -62,9 +62,6 @@ Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\pythonw.exe"; Pa
 Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer with 30 fps"
 Name: "{group}\lan-streamer self-test"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Check GStreamer and the video encoders"
 
-[Run]
-Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; Description: "Run the self-test now"; Flags: postinstall skipifsilent runasoriginaluser
-
 [UninstallDelete]
 ; Everything the app wrote at runtime: Python caches and MediaMTX certificates in
 ; the program folder, plugin registry, logs and plugin data in the user data folder.
