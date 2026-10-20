@@ -11,7 +11,12 @@ license = "MIT"
 requires-python = ">=3.12"
 # PyGObject is not listed: the Windows installer ships its own build, on Linux
 # it comes from the distribution packages.
-dependencies = ["pydantic>=2.7"]
+dependencies = [
+    "pydantic>=2.7",
+    # tray icon on Windows
+    "pystray>=0.19; sys_platform == 'win32'",
+    "pillow>=10; sys_platform == 'win32'",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]

@@ -16,6 +16,7 @@ from importlib import resources
 from typing import Any
 
 PAGE = resources.files(__package__).joinpath("index.html")
+ICON = resources.files("lanstreamer.assets").joinpath("icon.png")
 
 
 def start(port: int, app: Any) -> ThreadingHTTPServer:
@@ -25,6 +26,8 @@ def start(port: int, app: Any) -> ThreadingHTTPServer:
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
                 self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
+            elif self.path == "/favicon.png":
+                self._send(200, "image/png", ICON.read_bytes())
             elif self.path == "/api/status":
                 data = dataclasses.asdict(app.status)
                 data["uptime_s"] = round(time.time() - app.status.started)

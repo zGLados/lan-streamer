@@ -44,7 +44,8 @@ Set-Content -Path (Join-Path $PyDir "python$PyTag._pth") -Value @("python$PyTag.
 $Site = Join-Path $PyDir 'Lib\site-packages'
 python -m pip install --quiet --no-deps --target $Site $PyGObjectWheel
 if ($LASTEXITCODE -ne 0) { throw 'pip install of PyGObject failed' }
-python -m pip install --quiet --no-deps --target $Site $Repo
+# With its dependencies (pydantic, pystray, Pillow) as wheels for this Python.
+python -m pip install --quiet --target $Site $Repo
 if ($LASTEXITCODE -ne 0) { throw 'pip install of lan-streamer failed' }
 
 # --- GStreamer runtime -----------------------------------------------------------

@@ -52,8 +52,9 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs c
 [Icons]
 ; Shortcuts point to python.exe, not to the .cmd files: the Windows start menu
 ; hides shortcuts whose target is not a program.
-Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer --pause-on-error"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Start lan-streamer and open the player page"
-Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer --fps 30 --pause-on-error"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Start lan-streamer with 30 fps"
+; The start entries run windowless (pythonw.exe) with a tray icon next to the clock.
+Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer and open the player page"
+Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer with 30 fps"
 Name: "{group}\lan-streamer self-test"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Check GStreamer and the video encoders"
 
 [Run]

@@ -21,7 +21,7 @@ import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lanstreamer import __version__, paths
+from lanstreamer import __version__, paths, tray
 from lanstreamer.media import encoders
 from lanstreamer.web import server
 
@@ -31,6 +31,10 @@ SRT_PORT = 8890
 WEBRTC_PORT = 8889
 
 log = logging.getLogger("lanstreamer")
+
+# Console programs (MediaMTX) must not open a console window when the app runs
+# windowless from the tray.
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 @dataclass
@@ -86,8 +90,10 @@ class App:
         self.next_index = 0
         self.worker: subprocess.Popen | None = None
         self.mediamtx: subprocess.Popen | None = None
-        self.mediamtx_log = subprocess.DEVNULL  # replaced by a log file in main()
+        self.mediamtx_log = subprocess.DEVNULL  # replaced by log files in run()
+        self.worker_log = subprocess.DEVNULL
         self.ready = threading.Event()
+        self.quit = threading.Event()  # set by the tray menu
         self.failed = threading.Event()
         self.lock = threading.Lock()
 
@@ -116,6 +122,7 @@ class App:
         self.mediamtx = subprocess.Popen(
             [str(exe), str(exe.with_name("mediamtx.yml"))],
             cwd=workdir,
+            creationflags=NO_WINDOW,
             stdout=self.mediamtx_log,
             stderr=subprocess.STDOUT,
         )
@@ -132,8 +139,9 @@ class App:
         ]  # fmt: skip
         log.info("Starting output worker (%s, %d kbit/s)", spec.element, bitrate)
         self.worker = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1
-        )
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.worker_log,
+            text=True, bufsize=1,
+        )  # fmt: skip
         threading.Thread(target=self._read_worker, daemon=True).start()
         if not self.ready.wait(30) or self.failed.is_set():
             raise RuntimeError(f"output worker did not start: {self.status.last_error}")
@@ -195,6 +203,8 @@ class App:
         deadline = time.monotonic() + a.smoke_test if a.smoke_test else None
         next_switch = time.monotonic() + a.switch_interval
         while not self.failed.is_set():
+            if self.quit.is_set():
+                return 0
             if deadline and time.monotonic() > deadline:
                 return self._smoke_result()
             if time.monotonic() >= next_switch:
@@ -244,9 +254,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="run this long, then exit 0 if switching worked")  # fmt: skip
     parser.add_argument("--pause-on-error", action="store_true",
                         help="keep the console window open after an error")  # fmt: skip
+    parser.add_argument("--tray", action="store_true",
+                        help="run without console, with a tray icon (Windows start menu)")  # fmt: skip
     args = parser.parse_args(argv)
+    tray.set_app_id()
     code = run(args)
-    if code and args.pause_on_error:
+    if code and args.pause_on_error and sys.stdin is not None:
         input("\nPress Enter to close this window ...")
     return code
 
@@ -255,28 +268,48 @@ def run(args: argparse.Namespace) -> int:
 
     logs = paths.data_dir() / "logs"
     logs.mkdir(exist_ok=True)
+    handlers: list[logging.Handler] = [logging.FileHandler(logs / "lan-streamer.log", "w")]
+    if sys.stderr is not None:  # None under pythonw.exe (tray mode)
+        handlers.append(logging.StreamHandler())
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(message)s",
-        handlers=[logging.StreamHandler(), logging.FileHandler(logs / "lan-streamer.log", "w")],
+        level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", handlers=handlers
     )
 
     app = App(args)
-    with open(logs / "mediamtx.log", "w") as mediamtx_log:
-        app.mediamtx_log = mediamtx_log
+    url = f"http://localhost:{args.port}"
+    icon = None
+    if args.tray:
+        icon = tray.Tray(url, logs, lambda: f"On air: {app.status.current or '–'}", app.quit.set)
+        icon.start()
+    with (
+        open(logs / "mediamtx.log", "w") as mediamtx_log,
+        open(logs / "output.log", "w") as worker_log,
+    ):
+        app.mediamtx_log, app.worker_log = mediamtx_log, worker_log
         try:
             app.start()
             server.start(args.port, app)
-            url = f"http://localhost:{args.port}"
-            log.info("Open %s  (Ctrl+C to stop)", url)
+            log.info("Open %s  (%s to stop)", url, "tray menu" if icon else "Ctrl+C")
             if not args.no_browser and not args.smoke_test:
                 webbrowser.open(url)
+            if icon:
+                threading.Thread(target=_refresh_tray, args=(icon, app), daemon=True).start()
             return app.run()
         except KeyboardInterrupt:
             return 0
         except RuntimeError as exc:
             log.error("%s", exc)
             log.error("Logs: %s", logs)
+            if args.tray:
+                tray.message_box("lan-streamer", f"{exc}\n\nLogs: {logs}")
             return 1
         finally:
             app.stop()
+            if icon:
+                icon.stop()
+
+
+def _refresh_tray(icon: tray.Tray, app: App) -> None:
+    while not app.quit.is_set() and app.status.state != "stopping":
+        icon.refresh()
+        time.sleep(2)
