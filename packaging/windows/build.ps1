@@ -73,6 +73,10 @@ foreach ($p in $parts) {
         }
     }
 }
+# libproxy (used by GIO's proxy module) keeps its backend outside bin.
+Get-ChildItem $GstRoot -Recurse -Filter 'pxbackend-1.0.dll' | Select-Object -First 1 |
+    ForEach-Object { Copy-Item $_.FullName (Join-Path $GstDir 'bin'); Write-Host "    + $($_.FullName.Substring($GstRoot.Length))" }
+
 # gstpython needs GStreamer's Python 3.9 bindings; lan-streamer does not use it.
 Remove-Item (Join-Path $GstDir 'lib\gstreamer-1.0\gstpython.dll') -ErrorAction SilentlyContinue
 
