@@ -74,6 +74,8 @@ jobs:
     needs: build
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4  # only for tests/e2e
+
       - uses: actions/download-artifact@v4
         with:
           name: lan-streamer-setup-${{ env.VERSION }}
@@ -94,18 +96,33 @@ jobs:
           & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: Smoke test – stream with switching (1080p60, CPU encoder)
+      - name: Install Playwright (test tool only)
+        shell: pwsh
+        run: python -m pip install --quiet playwright
+
+      - name: Smoke test – stream with switching + playback in Edge (1080p60, CPU encoder)
         shell: pwsh
         run: |
           $py = "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe"
-          & $py -m lanstreamer --encoder cpu --smoke-test 45 --switch-interval 8
-          $code = $LASTEXITCODE
+          $app = Start-Process -PassThru -NoNewWindow -FilePath $py `
+            -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '60', '--switch-interval', '8'
+          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 50
+          $player = $LASTEXITCODE
+          $app.WaitForExit()
           $mtx = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log"
           $mtx | Select-Object -Last 15
           # Both tracks must reach MediaMTX, without decode errors.
           if (-not ($mtx | Select-String 'online, 2 tracks')) { Write-Host 'MediaMTX did not get 2 tracks'; exit 1 }
           if ($mtx | Select-String 'decode errors') { Write-Host 'MediaMTX reported decode errors'; exit 1 }
-          exit $code
+          if ($app.ExitCode -ne 0) { Write-Host "app smoke test failed ($($app.ExitCode))"; exit 1 }
+          exit $player
+
+      - name: Upload player screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-${{ env.VERSION }}
+          path: player.png
 
       - name: Upload logs
         if: always()
