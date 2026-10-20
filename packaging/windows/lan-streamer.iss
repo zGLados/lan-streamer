@@ -30,7 +30,8 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
 UsePreviousPrivileges=yes
-UninstallDisplayIcon={app}\python\python.exe
+UninstallDisplayIcon={app}\lan-streamer.ico
+SetupIconFile={#StageDir}\lan-streamer.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -49,13 +50,14 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\start.cmd"; WorkingDir: "{app}"
-Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\start.cmd"; Parameters: "--fps 30"; WorkingDir: "{app}"
-Name: "{group}\lan-streamer self-test"; Filename: "{app}\self-test.cmd"; WorkingDir: "{app}"
-Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
+; Shortcuts point to python.exe, not to the .cmd files: the Windows start menu
+; hides shortcuts whose target is not a program.
+Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer --pause-on-error"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Start lan-streamer and open the player page"
+Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer --fps 30 --pause-on-error"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Start lan-streamer with 30 fps"
+Name: "{group}\lan-streamer self-test"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Check GStreamer and the video encoders"
 
 [Run]
-Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent runasoriginaluser
+Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; Description: "Run the self-test now"; Flags: postinstall skipifsilent runasoriginaluser
 
 [UninstallDelete]
 ; Everything the app wrote at runtime: Python caches and MediaMTX certificates in

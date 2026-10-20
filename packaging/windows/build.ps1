@@ -136,6 +136,9 @@ if ($problems) {
 Write-Host "    $($binaries.Count) files, all dependencies resolved"
 
 # --- Start scripts ---------------------------------------------------------------
+python -m pip install --quiet pillow
+python (Join-Path $PSScriptRoot 'make_icon.py') (Join-Path $Stage 'lan-streamer.ico')
+if ($LASTEXITCODE -ne 0) { throw 'icon generation failed' }
 Copy-Item (Join-Path $PSScriptRoot 'self-test.cmd') $Stage
 Copy-Item (Join-Path $PSScriptRoot 'start.cmd') $Stage
 Copy-Item (Join-Path $Repo 'LICENSE') $Stage

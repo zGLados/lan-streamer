@@ -238,7 +238,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--smoke-test", type=float, default=0, metavar="SECONDS",
                         help="run this long, then exit 0 if switching worked")  # fmt: skip
+    parser.add_argument("--pause-on-error", action="store_true",
+                        help="keep the console window open after an error")  # fmt: skip
     args = parser.parse_args(argv)
+    code = run(args)
+    if code and args.pause_on_error:
+        input("\nPress Enter to close this window ...")
+    return code
+
+
+def run(args: argparse.Namespace) -> int:
 
     logs = paths.data_dir() / "logs"
     logs.mkdir(exist_ok=True)

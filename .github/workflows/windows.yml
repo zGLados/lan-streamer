@@ -91,6 +91,13 @@ jobs:
           $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F0B7C55-3D1E-4C1B-9E3A-6C2B9A1F4E21}_is1'
           $entry = Get-ItemProperty $key
           Write-Host "Registered: $($entry.DisplayName) $($entry.DisplayVersion) in $($entry.InstallLocation)"
+          # Start menu entries (all users) must point to a program, or Windows hides them
+          $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\lan-streamer"
+          $shell = New-Object -ComObject WScript.Shell
+          $links = Get-ChildItem $menu -Filter *.lnk
+          foreach ($l in $links) { $t = $shell.CreateShortcut($l.FullName); Write-Host "Start menu: $($l.BaseName) -> $($t.TargetPath) $($t.Arguments)" }
+          if ($links.Count -lt 3) { throw "expected 3 start menu entries in $menu" }
+          if ($links | Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -notlike '*.exe' }) { throw 'a shortcut does not point to an .exe' }
 
       - name: Self-test of the installed app
         shell: pwsh

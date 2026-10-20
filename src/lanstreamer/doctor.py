@@ -24,7 +24,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--encoder", default="auto", choices=("auto", *encoders.AUTO_ORDER))
     parser.add_argument("--fps", type=int, default=60, choices=(30, 60))
+    parser.add_argument("--pause", action="store_true", help="wait for Enter at the end")
     args = parser.parse_args(argv)
+    code = check(args)
+    if args.pause:
+        input("\nPress Enter to close this window ...")
+    return code
+
+
+def check(args: argparse.Namespace) -> int:
 
     print(f"lan-streamer {__version__}")
     print(f"Python     {platform.python_version()} ({sys.platform})")
