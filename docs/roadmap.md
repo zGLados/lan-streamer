@@ -12,7 +12,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Output worker: background layer + input slots → compositor → H.264/Opus → SRT → MediaMTX (1080p60, CPU encoder ~60 fps in CI)
 - [x] Switch between inputs by command with a 1 s crossfade (two test inputs + files/URLs via `--source`)
 - [x] Minimal web page with a WHEP player, local clock for latency comparison, WebRTC stats
-- [ ] Measure the latency in the browser (owner test)
+- [x] Measure the latency in the browser: ~220 ms encoder → screen with NVENC at 1080p60 (test PC, 2026-10-20)
 - [x] Encoders for all vendors (NVIDIA, AMD, Intel, CPU) with auto-detection and a manual override, each probe in its own process
 - [x] Test NVENC on the NVIDIA test PC (`nvd3d11h264enc` auto-selected, 2026-10-20)
 - [ ] Measure the CPU/GPU load of one and of two outputs on the target machine
