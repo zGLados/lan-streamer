@@ -34,6 +34,7 @@ from lanstreamer.media import encoders, gst
 
 FADE_S = 1.0
 START_TIMEOUT_S = 15.0
+MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
 
 
@@ -72,6 +73,7 @@ class Output:
         self.next_zorder = 1
         self.frames = 0
         self.muxed: set[str] = set()  # mux inputs that have delivered data
+        self.muxed_all_at: float | None = None  # when the last one did
         self.pipeline = self._build()
 
     # --- pipeline ---------------------------------------------------------------
@@ -90,7 +92,7 @@ class Output:
             f" ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
             # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
             # after some seconds (GLib writev bug), SRT brings its own sockets.
-            f" mpegtsmux name=mux alignment=7 latency=0"
+            f" mpegtsmux name=mux alignment=7 latency=0 pat-interval=9000 pmt-interval=9000"
             f' ! srtsink uri="{a.publish}" wait-for-connection=false sync=false'
             f" videotestsrc is-live=true pattern=black ! {self.raw_caps} ! vmix."
             f" audiotestsrc is-live=true wave=silence ! {AUDIO_CAPS} ! amix."
@@ -111,8 +113,10 @@ class Output:
         parse.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self._report_caps)
 
         # MediaMTX only reads the first stream table (PMT) of the MPEG-TS. Hold the
-        # output back until video and audio both reached the muxer, so the first
-        # PMT it sees lists both tracks.
+        # output back until video and audio both reached the muxer and a moment
+        # longer: the muxer may already have written a PMT with only the track
+        # that came first (seen with NVENC, whose first frame is very fast). It
+        # repeats the PMT regularly, so the first one MediaMTX sees lists both.
         mux = pipeline.get_by_name("mux")
         for pad in mux.sinkpads:
             pad.add_probe(Gst.PadProbeType.BUFFER, self._on_mux_input)
@@ -126,12 +130,13 @@ class Output:
 
     def _on_mux_input(self, pad, _info):
         self.muxed.add(pad.get_name())
+        if len(self.muxed) == 2:
+            self.muxed_all_at = time.monotonic()
         return self.Gst.PadProbeReturn.REMOVE
 
     def _hold_mux_output(self, _pad, _info):
-        if len(self.muxed) < 2:
-            return self.Gst.PadProbeReturn.DROP
-        return self.Gst.PadProbeReturn.REMOVE
+        ready = self.muxed_all_at is not None and time.monotonic() - self.muxed_all_at >= MUX_HOLD_S
+        return self.Gst.PadProbeReturn.REMOVE if ready else self.Gst.PadProbeReturn.DROP
 
     def _report_caps(self, pad, _info):
         # Runs in the streaming thread: it must never raise, or PyGObject drops
