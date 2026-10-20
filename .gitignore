@@ -1,0 +1,30 @@
+# Requirements spec (private, saved web page) – not part of the public repo
+Lastenheft*
+*:Zone.Identifier
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Web
+node_modules/
+web/build/
+web/.svelte-kit/
+
+# Runtime data
+data/
+*.sqlite3
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
