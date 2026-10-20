@@ -15,7 +15,7 @@ REQUIRED_ELEMENTS = (
     # output pipeline
     "videotestsrc", "audiotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
     "audioconvert", "audioresample", "audiomixer", "volume", "textoverlay", "audioloudnorm",
-    "imagefreeze", "x264enc", "h264parse", "opusenc", "mpegtsmux", "srtsink",
+    "imagefreeze", "x264enc", "h264parse", "opusenc", "mpegtsmux", "capssetter", "srtsink",
     # inputs: files, HTTP/HLS, RTSP, decoders
     "fallbacksrc", "uridecodebin3", "decodebin3", "qtdemux", "matroskademux", "tsdemux",
     "souphttpsrc", "hlsdemux2", "rtspsrc", "aacparse", "avdec_h264", "avdec_aac",

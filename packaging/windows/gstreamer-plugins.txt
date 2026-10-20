@@ -32,6 +32,7 @@ gstvideoparsersbad.dll     # h264parse
 gstopus.dll                # opusenc, opusdec
 gstmpegtsmux.dll           # mpegtsmux
 gstsrt.dll                 # srtsink (to MediaMTX), srtsrc
+gstdebug.dll               # capssetter (drops the stale streamheader before srtsink)
 
 # --- Inputs: files, HTTP, HLS, RTSP ----------------------------------------------
 gstplayback.dll            # uridecodebin3, decodebin3

@@ -79,6 +79,7 @@ class Output:
         self.muxed_all_at: float | None = None  # when the last one did
         self.tables = TableReader()  # diagnostics: which tracks MediaMTX gets
         self.tables_until: float | None = None
+        self.reported_sent = False
         self.pipeline = self._build()
 
     # --- pipeline ---------------------------------------------------------------
@@ -98,6 +99,12 @@ class Output:
             # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
             # after some seconds (GLib writev bug), SRT brings its own sockets.
             f" mpegtsmux name=mux alignment=7 latency=0 pat-interval=9000 pmt-interval=9000"
+            # mpegtsmux puts a PAT/PMT copy into its caps ("streamheader") once,
+            # possibly when only one track existed, and never updates it; srtsink
+            # sends it before any data and MediaMTX keeps the first PMT it sees,
+            # so it ignored the other track (black picture on the test PC).
+            # capssetter passes the caps on without the streamheader.
+            f' ! capssetter replace=true caps="video/mpegts,systemstream=true,packetsize=188"'
             f' ! srtsink uri="{a.publish}" wait-for-connection=false sync=false'
             f" videotestsrc is-live=true pattern=black ! {self.raw_caps} ! vmix."
             f" audiotestsrc is-live=true wave=silence ! {AUDIO_CAPS} ! amix."
@@ -126,7 +133,7 @@ class Output:
         for pad in mux.sinkpads:
             pad.add_probe(Gst.PadProbeType.BUFFER, self._on_mux_input)
         mux_src = mux.get_static_pad("src")
-        mux_src.add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self._strip_streamheader)
+        mux_src.add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self._report_streamheader)
         data = Gst.PadProbeType.BUFFER | Gst.PadProbeType.BUFFER_LIST
         mux_src.add_probe(data, self._inspect_mux_output)  # runs before the hold
         mux_src.add_probe(data, self._hold_mux_output)
@@ -141,15 +148,8 @@ class Output:
             self.muxed_all_at = time.monotonic()
         return self.Gst.PadProbeReturn.REMOVE
 
-    def _strip_streamheader(self, pad, info):
-        """Removes the PAT/PMT copy ("streamheader") from the muxer's caps.
-
-        srtsink sends the caps' streamheader before any data, and mpegtsmux sets
-        it once – when maybe only one track existed – and never updates it.
-        MediaMTX keeps the first PMT it sees, so it then ignores the other track
-        (seen with NVENC: only Opus, video "undeclared"). Without the header the
-        first PMT it gets comes from the stream after the hold, with both tracks.
-        """
+    def _report_streamheader(self, _pad, info):
+        """Logs once which PMT mpegtsmux put into its caps (removed by capssetter)."""
         try:
             event = info.get_event()
             if event.type != self.Gst.EventType.CAPS:
@@ -160,15 +160,10 @@ class Output:
             reader = TableReader()
             for chunk in re.findall(r"\b47[0-9a-f]{374,}\b", text):
                 for pmt in reader.feed(bytes.fromhex(chunk)):
-                    emit("ts_table", pmt=f"caps streamheader (removed) {pmt.describe()}", sent=False)
-            stripped = re.sub(r",\s*streamheader=\(buffer\)<[^>]*>", "", text)
-            peer = pad.get_peer()
-            if peer is not None:
-                peer.send_event(self.Gst.Event.new_caps(self.Gst.Caps.from_string(stripped)))
-            return self.Gst.PadProbeReturn.DROP
+                    emit("ts_table", pmt=f"caps streamheader (not sent) {pmt.describe()}", sent=False)
         except Exception as exc:  # noqa: BLE001 – never raise in the streaming thread
-            log(f"cannot strip streamheader: {exc}")
-            return self.Gst.PadProbeReturn.OK
+            log(f"cannot read streamheader: {exc}")
+        return self.Gst.PadProbeReturn.REMOVE
 
     def _mux_ready(self) -> bool:
         return self.muxed_all_at is not None and time.monotonic() - self.muxed_all_at >= MUX_HOLD_S
@@ -185,6 +180,10 @@ class Output:
             sent = self._mux_ready()
             if sent and self.tables_until is None:
                 self.tables_until = time.monotonic() + 10
+            if sent and not self.reported_sent and self.tables.last is not None:
+                # the table MediaMTX gets first: the current one when the hold opens
+                self.reported_sent = True
+                emit("ts_table", pmt=self.tables.last.describe(), sent=True)
             buffers = info.get_buffer_list() if info.type & self.Gst.PadProbeType.BUFFER_LIST else None
             items = [buffers.get(i) for i in range(buffers.length())] if buffers else [info.get_buffer()]
             for buffer in items:
