@@ -49,7 +49,7 @@ gstpng.dll                 # PNG images
 gstsoup.dll                # souphttpsrc (http/https)
 gstadaptivedemux2.dll      # hlsdemux2, dashdemux2 (Twitch, YouTube)
 ?gsthls.dll                # hlsdemux (legacy fallback)
-gsttsdemux.dll             # MPEG-TS demuxer (HLS segments, SRT inputs)
+gstmpegtsdemux.dll         # tsdemux (HLS segments, SRT inputs)
 gstrtsp.dll                # rtspsrc (ingest from MediaMTX)
 gstrtpmanager.dll          # rtpbin
 gstrtp.dll                 # RTP depayloaders

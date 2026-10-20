@@ -77,15 +77,21 @@ function Get-Imports($file) {
 $plugins = Get-Content (Join-Path $PSScriptRoot 'gstreamer-plugins.txt') |
     ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }
 $queue = [System.Collections.Generic.Queue[string]]::new()
+$missing = @()
 foreach ($entry in $plugins) {
     $optional = $entry.StartsWith('?')
     $plugin = $entry.TrimStart('?')
     $rel = "lib\gstreamer-1.0\$plugin"
     if (-not (Test-Path (Join-Path $GstRoot $rel))) {
         if ($optional) { Write-Host "    (optional plugin missing) $plugin"; continue }
-        throw "plugin $plugin is not in this GStreamer build"
+        $missing += $plugin
+        continue
     }
     $queue.Enqueue((Copy-Rel $rel))
+}
+if ($missing) {
+    $missing | ForEach-Object { Write-Host "    MISSING plugin $_" -ForegroundColor Red }
+    throw "$($missing.Count) plugin(s) from gstreamer-plugins.txt are not in this GStreamer build"
 }
 # Programs and modules that are not plugins
 foreach ($rel in 'bin\gst-launch-1.0.exe', 'bin\gst-inspect-1.0.exe') { $queue.Enqueue((Copy-Rel $rel)) }
