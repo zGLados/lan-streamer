@@ -33,7 +33,7 @@ flowchart LR
 
     plugins -- "activity, metadata (JSON-RPC over stdio)" --> SCH
     SCH -- "play source X" --> outputs
-    outputs -- RTSP --> MTX
+    outputs -- "SRT (MPEG-TS)" --> MTX
     MTX -- "WebRTC (WHEP) / LL-HLS" --> WEB
     WEB -- HTTP/WS --> API
     API -- "proxied plugin UIs" --> plugins
@@ -47,7 +47,7 @@ flowchart LR
 | Core | 1 | Web API, scheduler, config in SQLite, supervises the other processes | Single source of truth |
 | Plugin host | 1 per input instance | Runs one plugin: activity detection, source resolution, its own web routes | A broken plugin only takes itself down (F-IN-07, F-PLG-05) |
 | Output worker | 1 per output | Runs one GStreamer pipeline with a permanently running encoder | A crashed pipeline is restarted without touching other outputs |
-| MediaMTX | 1 (container) | Serves outputs via WebRTC and LL-HLS, accepts RTMP/SRT ingest, optional restream | Proven media server, no need to write one |
+| MediaMTX | 1 | Serves outputs via WebRTC and LL-HLS, accepts RTMP/SRT ingest, optional restream | Proven media server, no need to write one |
 
 Core talks to plugin hosts and output workers over JSON-RPC on the child's stdin/stdout. This works the same on Windows and Linux. The core restarts a dead child with backoff and shows it as `error` in the admin UI.
 
@@ -61,21 +61,22 @@ The hard requirement is F-SCH-03: switching inputs must never interrupt the outp
 
 ```
 background layer (still image / black + silence, always running) ──┐
-input slot A: fallbacksrc → decode → scale/rate 1920×1080@30 → loudnorm ─┼─► compositor + audiomixer ─► H.264 encoder ─► RTSP ─► MediaMTX
+input slot A: fallbacksrc → decode → scale/rate 1920×1080@60 (I420) ─────┼─► compositor + audiomixer ─► H.264 encoder ─► MPEG-TS ─► SRT ─► MediaMTX
 input slot B: (next input, prerolling)                                   ─┘                         Opus encoder ─┘
 ```
 
 - **Make before break:** the next input starts in a free slot. Only when its first frame has arrived does the compositor fade it in (this gives F-SCH-05 transitions almost for free) and release the old slot.
 - **Background layer:** if an input stalls, the compositor keeps producing frames from the background, so the stream stays up (NF-01) until the scheduler switches.
 - **Robust sources:** `fallbacksrc` / `fallbackswitch` from gst-plugins-rs handle timeouts and reconnects of live sources.
-- **Uniform output (NF-03):** every slot is scaled to 1080p30 and normalised to EBU R128 loudness (`audioloudnorm`).
-- **Encoder:** H.264, no B-frames, 1 s GOP, tuned for low latency; see [Encoder selection](#encoder-selection).
+- **Uniform output (NF-03):** every slot is scaled to the output format, 1080p60 by default (1080p30 selectable), in I420. EBU R128 loudness normalisation (`audioloudnorm`) follows later.
+- **Encoder:** H.264, no B-frames, one keyframe per second, tuned for low latency, profile constrained-baseline/baseline/main (what every browser decodes over WebRTC); see [Encoder selection](#encoder-selection).
+- **Output → MediaMTX via SRT** (MPEG-TS, 20 ms latency on localhost). `rtspclientsink` over TCP broke after some seconds on Windows. MediaMTX only reads the first stream table (PMT), so the muxer output is held back until video and audio both have data.
 - **Audio is Opus**, because browsers only accept Opus over WebRTC; MediaMTX also serves Opus over fMP4 LL-HLS. A restream to Twitch/YouTube (F-OUT-03) adds an AAC branch only while it is enabled.
 - **Overlays (F-OUT-04):** first version draws source, title and submitter with GStreamer text/Cairo overlays. HTML overlays are a later option.
 
 ### Encoder selection
 
-By default (`encoder = auto`) every output worker probes the available GStreamer encoders at startup and takes the first that works. It probes by encoding a few test frames, because an element can exist without a matching GPU or driver:
+By default (`encoder = auto`) the available GStreamer encoders are probed at startup and the first that works is used. Each probe encodes one second of 1080p test frames **in its own process**, because an element can exist without a matching GPU or driver, and a crashing driver must not take the app down:
 
 | Vendor | Windows | Linux |
 | --- | --- | --- |

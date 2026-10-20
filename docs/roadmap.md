@@ -8,11 +8,13 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 - [ ] Dev setup on Windows first (primary platform), then Linux: GStreamer 1.26 (incl. gst-plugins-rs), MediaMTX, Python
 - [x] PyGObject with the official GStreamer binaries on Windows (own build for Python 3.13, see architecture)
-- [ ] Windows test installer built and install-tested in CI; self-test checks GStreamer and the encoders
-- [ ] Output worker: background layer + two input slots → compositor → H.264/Opus → MediaMTX
-- [ ] Switch between a local file and a second source (file or URL) by command, with a crossfade
-- [ ] Minimal web page with a WHEP player; measure the latency
-- [ ] Encoders for all vendors (NVIDIA, AMD, Intel, CPU) with auto-detection and a manual override; NVIDIA is tested first
+- [x] Windows test installer built and install-tested in CI (self-test + 45 s streaming smoke test)
+- [x] Output worker: background layer + input slots → compositor → H.264/Opus → SRT → MediaMTX (1080p60, CPU encoder ~60 fps in CI)
+- [x] Switch between inputs by command with a 1 s crossfade (two test inputs + files/URLs via `--source`)
+- [x] Minimal web page with a WHEP player, local clock for latency comparison, WebRTC stats
+- [ ] Measure the latency in the browser (owner test)
+- [x] Encoders for all vendors (NVIDIA, AMD, Intel, CPU) with auto-detection and a manual override, each probe in its own process
+- [ ] Test NVENC on the NVIDIA test PC
 - [ ] Measure the CPU/GPU load of one and of two outputs on the target machine
 
 ## M2 – Core

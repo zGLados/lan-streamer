@@ -2,7 +2,15 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** early development. A Windows test installer exists, but so far it only runs a self-test (GStreamer, encoders). See the [roadmap](docs/roadmap.md).
+> **Status:** early development (milestone M1 prototype). See the [roadmap](docs/roadmap.md).
+
+## Try the prototype (Windows)
+
+1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs per user, no admin rights needed.
+2. Start **lan-streamer (1080p60)** from the start menu. The player page opens at `http://localhost:8080`.
+3. It switches between two test inputs every 20 s. Add your own: `start.cmd --source C:\path\video.mp4 --source https://…`.
+
+**lan-streamer self-test** shows which video encoders work on your PC.
 
 ## How it works
 
