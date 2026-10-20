@@ -26,7 +26,8 @@ from lanstreamer.media import encoders
 from lanstreamer.web import server
 
 OUTPUT_PATH = "out1"
-RTSP_PORT = 8554
+RTSP_PORT = 8554  # only used to see that MediaMTX is up
+SRT_PORT = 8890
 WEBRTC_PORT = 8889
 
 log = logging.getLogger("lanstreamer")
@@ -119,7 +120,8 @@ class App:
         bitrate = a.bitrate or (8000 if a.fps > 30 else 6000)
         cmd = [
             sys.executable, "-m", "lanstreamer.media.output",
-            "--encoder", spec.element, "--rtsp", f"rtsp://127.0.0.1:{RTSP_PORT}/{OUTPUT_PATH}",
+            "--encoder", spec.element,
+            "--publish", f"srt://127.0.0.1:{SRT_PORT}?streamid=publish:{OUTPUT_PATH}&latency=20",
             "--width", str(a.width), "--height", str(a.height),
             "--fps", str(a.fps), "--bitrate", str(bitrate),
         ]  # fmt: skip

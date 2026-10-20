@@ -3,7 +3,7 @@
 The pipeline never stops while the worker runs (F-SCH-03):
 
     background (black + silence, always live) ─┐
-    input slot (current)                       ├─► compositor / audiomixer ─► H.264 + Opus ─► RTSP ─► MediaMTX
+    input slot (current)                       ├─► compositor / audiomixer ─► H.264 + Opus ─► SRT ─► MediaMTX
     input slot (next, prerolling)              ─┘
 
 Switching is "make before break": the next input starts in a new slot at zero
@@ -82,10 +82,13 @@ class Output:
             f'   font-desc="Sans 16" shaded-background=true'
             f" ! videoconvert name=vconv n-threads=4"
             f" ! queue name=encq leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0"
-            f" h264parse name=hparse config-interval=-1 ! queue ! rs."
+            f" h264parse name=hparse config-interval=-1 ! queue ! mux."
             f" audiomixer name=amix ignore-inactive-pads=true ! {AUDIO_CAPS}"
-            f" ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! rs."
-            f" rtspclientsink name=rs location={a.rtsp} protocols=tcp latency=0"
+            f" ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
+            # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
+            # after some seconds (GLib writev bug), SRT brings its own sockets.
+            f" mpegtsmux name=mux alignment=7 latency=0"
+            f' ! srtsink uri="{a.publish}" wait-for-connection=false sync=false'
             f" videotestsrc is-live=true pattern=black ! {self.raw_caps} ! vmix."
             f" audiotestsrc is-live=true wave=silence ! {AUDIO_CAPS} ! amix."
         )
@@ -315,7 +318,10 @@ def _link_by_kind(pad, heads: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="lan-streamer output worker")
     parser.add_argument("--encoder", required=True, help="GStreamer element, e.g. x264enc")
-    parser.add_argument("--rtsp", required=True, help="publish URL, e.g. rtsp://127.0.0.1:8554/out1")
+    parser.add_argument(
+        "--publish", required=True,
+        help="SRT URL of MediaMTX, e.g. srt://127.0.0.1:8890?streamid=publish:out1&latency=20",
+    )  # fmt: skip
     parser.add_argument("--width", type=int, default=1920)
     parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--fps", type=int, default=60)

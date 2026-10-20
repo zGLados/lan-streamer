@@ -13,7 +13,7 @@ from lanstreamer.media import encoders, gst
 REQUIRED_ELEMENTS = (
     "videotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
     "audioconvert", "audioresample", "audiomixer", "audioloudnorm", "opusenc",
-    "h264parse", "fallbacksrc", "uridecodebin3", "rtspclientsink",
+    "h264parse", "fallbacksrc", "uridecodebin3", "mpegtsmux", "srtsink", "textoverlay",
 )
 
 # Windows plugins for GPU encoding and audio; they must load even without the hardware.
