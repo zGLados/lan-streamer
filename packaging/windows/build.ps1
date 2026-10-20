@@ -50,37 +50,89 @@ python -m pip install --quiet --target $Site $Repo
 if ($LASTEXITCODE -ne 0) { throw 'pip install of lan-streamer failed' }
 
 # --- GStreamer runtime -----------------------------------------------------------
+# Only the plugins in gstreamer-plugins.txt, plus every DLL they need (transitive
+# dumpbin closure over GStreamer's bin). Keeps the installer small.
 Step "GStreamer runtime from $GstRoot"
 $GstDir = Join-Path $Stage 'gstreamer'
-$parts = @(
-    @{ From = 'bin';                   Filter = @('*.dll', 'gst-launch-1.0.exe', 'gst-inspect-1.0.exe') },
-    @{ From = 'lib\gstreamer-1.0';     Filter = @('*.dll') },
-    @{ From = 'lib\girepository-1.0';  Filter = @('*.typelib') },
-    @{ From = 'lib\gio\modules';       Filter = @('*.dll') },
-    @{ From = 'libexec\gstreamer-1.0'; Filter = @('*.exe') },
-    @{ From = 'etc\ssl';               Filter = @('*') },
-    @{ From = 'share\glib-2.0\schemas'; Filter = @('*') }
-)
-foreach ($p in $parts) {
-    $src = Join-Path $GstRoot $p.From
-    if (-not (Test-Path $src)) { Write-Host "    (skip, missing) $($p.From)"; continue }
-    $dst = Join-Path $GstDir $p.From
-    New-Item -ItemType Directory -Force -Path $dst | Out-Null
-    foreach ($f in $p.Filter) {
-        Get-ChildItem -Path $src -Filter $f -File -Recurse | ForEach-Object {
-            $rel = $_.FullName.Substring($src.Length).TrimStart('\')
-            $target = Join-Path $dst $rel
-            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-            Copy-Item $_.FullName $target
+$GstBin = Join-Path $GstRoot 'bin'
+
+function Copy-Rel($rel) {
+    $target = Join-Path $GstDir $rel
+    New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+    Copy-Item (Join-Path $GstRoot $rel) $target
+    return $target
+}
+
+function Get-Imports($file) {
+    $inDeps = $false
+    foreach ($line in (dumpbin /nologo /dependents $file)) {
+        if ($line -match 'has the following (delay load )?dependencies') { $inDeps = $true; continue }
+        if ($inDeps -and $line -match '^\s+(\S+\.dll)\s*$') { $Matches[1] }
+        elseif ($inDeps -and $line -match 'Summary') { break }
+    }
+}
+
+$plugins = Get-Content (Join-Path $PSScriptRoot 'gstreamer-plugins.txt') |
+    ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }
+$queue = [System.Collections.Generic.Queue[string]]::new()
+foreach ($entry in $plugins) {
+    $optional = $entry.StartsWith('?')
+    $plugin = $entry.TrimStart('?')
+    $rel = "lib\gstreamer-1.0\$plugin"
+    if (-not (Test-Path (Join-Path $GstRoot $rel))) {
+        if ($optional) { Write-Host "    (optional plugin missing) $plugin"; continue }
+        throw "plugin $plugin is not in this GStreamer build"
+    }
+    $queue.Enqueue((Copy-Rel $rel))
+}
+# Programs and modules that are not plugins
+foreach ($rel in 'bin\gst-launch-1.0.exe', 'bin\gst-inspect-1.0.exe') { $queue.Enqueue((Copy-Rel $rel)) }
+Get-ChildItem (Join-Path $GstRoot 'libexec\gstreamer-1.0') -Filter *.exe | ForEach-Object {
+    $queue.Enqueue((Copy-Rel "libexec\gstreamer-1.0\$($_.Name)"))
+}
+Get-ChildItem (Join-Path $GstRoot 'lib\gio\modules') -Filter *.dll -ErrorAction SilentlyContinue | ForEach-Object {
+    $queue.Enqueue((Copy-Rel "lib\gio\modules\$($_.Name)"))  # TLS (https), proxy
+}
+# DLLs that are loaded at runtime (LoadLibrary), so dumpbin cannot see them
+$dynamic = @('soup-*.dll', 'libsoup-*.dll', 'dxcompiler*.dll', 'dxil*.dll')
+foreach ($pattern in $dynamic) {
+    Get-ChildItem $GstBin -Filter $pattern | ForEach-Object { $queue.Enqueue((Copy-Rel "bin\$($_.Name)")) }
+}
+# libproxy keeps its backend outside bin
+Get-ChildItem $GstRoot -Recurse -Filter 'pxbackend-1.0.dll' | Select-Object -First 1 | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $GstDir 'bin'); $queue.Enqueue((Join-Path $GstDir "bin\$($_.Name)"))
+}
+# PyGObject itself needs GLib, GObject and girepository from GStreamer's bin
+Get-ChildItem $Site -Recurse -Filter *.pyd | ForEach-Object { $queue.Enqueue($_.FullName) }
+
+$seen = @{}
+while ($queue.Count) {
+    foreach ($dep in (Get-Imports $queue.Dequeue())) {
+        $key = $dep.ToLower()
+        if ($seen[$key]) { continue }
+        $seen[$key] = $true
+        if (Test-Path (Join-Path $GstBin $dep)) {
+            $target = Join-Path $GstDir "bin\$dep"
+            if (-not (Test-Path $target)) { $queue.Enqueue((Copy-Rel "bin\$dep")) }
         }
     }
 }
-# libproxy (used by GIO's proxy module) keeps its backend outside bin.
-Get-ChildItem $GstRoot -Recurse -Filter 'pxbackend-1.0.dll' | Select-Object -First 1 |
-    ForEach-Object { Copy-Item $_.FullName (Join-Path $GstDir 'bin'); Write-Host "    + $($_.FullName.Substring($GstRoot.Length))" }
 
-# gstpython needs GStreamer's Python 3.9 bindings; lan-streamer does not use it.
-Remove-Item (Join-Path $GstDir 'lib\gstreamer-1.0\gstpython.dll') -ErrorAction SilentlyContinue
+# Data files
+foreach ($p in @(
+    @{ From = 'lib\girepository-1.0'; Filter = '*.typelib' },
+    @{ From = 'etc\ssl'; Filter = '*' },
+    @{ From = 'share\glib-2.0\schemas'; Filter = '*' }
+)) {
+    $src = Join-Path $GstRoot $p.From
+    if (-not (Test-Path $src)) { continue }
+    Get-ChildItem -Path $src -Filter $p.Filter -File -Recurse | ForEach-Object {
+        Copy-Rel $_.FullName.Substring($GstRoot.Length).TrimStart('\') | Out-Null
+    }
+}
+$bins = (Get-ChildItem (Join-Path $GstDir 'bin') -Filter *.dll).Count
+$mb = [math]::Round((Get-ChildItem $GstDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
+Write-Host "    $($plugins.Count) plugins, $bins DLLs in bin, $mb MB"
 
 # Visual C++ runtime, deployed app-locally: many plugins are C++ (d3d11, nvcodec,
 # amfcodec, qsv, ...) and a fresh Windows does not have msvcp140.dll.

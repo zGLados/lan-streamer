@@ -1,0 +1,58 @@
+# GStreamer plugins shipped in the Windows installer (lib\gstreamer-1.0\<name>).
+# build.ps1 copies only these plugins plus the DLLs they need (dumpbin closure).
+#
+# Every new input plugin or feature: add the plugins its elements live in, and
+# the elements to REQUIRED_ELEMENTS in src/lanstreamer/doctor.py.
+# Find a plugin for an element:  gst-inspect-1.0 <element>  ("Plugin Details").
+# A leading '?' marks a plugin that may be missing in a GStreamer build (warning only).
+
+# --- Core pipeline (output worker) ----------------------------------------------
+gstcoreelements.dll        # queue, filesrc, fakesink, capsfilter, identity
+gstvideotestsrc.dll        # background layer, test inputs
+gstaudiotestsrc.dll        # silence, test tone
+gstvideoconvertscale.dll   # videoconvert, videoscale
+gstvideorate.dll           # videorate
+gstcompositor.dll          # compositor (switching, crossfade)
+gstaudioconvert.dll        # audioconvert
+gstaudioresample.dll       # audioresample
+gstaudiomixer.dll          # audiomixer
+gstvolume.dll              # volume
+gstpango.dll               # textoverlay, clockoverlay (overlays)
+gstrsaudiofx.dll           # audioloudnorm (loudness, planned)
+gstimagefreeze.dll         # still images (fallback picture)
+
+# --- Encoding and output to MediaMTX ---------------------------------------------
+gstx264.dll                # x264enc (CPU encoder)
+gstnvcodec.dll             # nvd3d11h264enc, nvcudah264enc, nvh264enc (NVIDIA)
+gstamfcodec.dll            # amfh264enc (AMD)
+gstqsv.dll                 # qsvh264enc (Intel)
+gstd3d11.dll               # D3D11 upload/convert for the GPU encoders
+gstd3d12.dll               # D3D12 (newer GPU paths)
+gstvideoparsersbad.dll     # h264parse
+gstopus.dll                # opusenc, opusdec
+gstmpegtsmux.dll           # mpegtsmux
+gstsrt.dll                 # srtsink (to MediaMTX), srtsrc
+
+# --- Inputs: files, HTTP, HLS, RTSP ----------------------------------------------
+gstplayback.dll            # uridecodebin3, decodebin3
+gsttypefindfunctions.dll   # format detection
+gstapp.dll                 # appsrc/appsink
+gstfallbackswitch.dll      # fallbacksrc (robust inputs)
+gstisomp4.dll              # MP4 demuxer
+gstmatroska.dll            # MKV/WebM demuxer
+gstaudioparsers.dll        # aacparse, mpegaudioparse, ...
+gstlibav.dll               # FFmpeg decoders: H.264, H.265, AAC, MP3, VP9, ...
+gstdav1d.dll               # AV1 decoder (YouTube)
+gstvpx.dll                 # VP8/VP9 decoder
+gstjpeg.dll                # JPEG images
+gstpng.dll                 # PNG images
+gstsoup.dll                # souphttpsrc (http/https)
+gstadaptivedemux2.dll      # hlsdemux2, dashdemux2 (Twitch, YouTube)
+?gsthls.dll                # hlsdemux (legacy fallback)
+gsttsdemux.dll             # MPEG-TS demuxer (HLS segments, SRT inputs)
+gstrtsp.dll                # rtspsrc (ingest from MediaMTX)
+gstrtpmanager.dll          # rtpbin
+gstrtp.dll                 # RTP depayloaders
+gstudp.dll                 # udpsrc
+gsttcp.dll                 # tcp
+gstid3demux.dll            # ID3 tags in audio/HLS

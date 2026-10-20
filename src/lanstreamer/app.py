@@ -216,7 +216,7 @@ class App:
 
     def _smoke_result(self) -> int:
         s = self.status
-        ok = s.switches >= 2 and s.fps >= 10 and not s.last_error
+        ok = s.switches >= 2 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
         log.info(
             "Smoke test %s: %d switches, %d failed, %.1f fps (target %d)",
             "passed" if ok else "FAILED", s.switches, s.failed_switches, s.fps, s.target_fps,

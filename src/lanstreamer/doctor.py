@@ -9,15 +9,21 @@ import sys
 from lanstreamer import __version__
 from lanstreamer.media import encoders, gst
 
-# Elements the output pipeline needs (see docs/architecture.md).
+# Elements lan-streamer uses. The Windows installer ships only the plugins in
+# packaging/windows/gstreamer-plugins.txt – keep both lists in step.
 REQUIRED_ELEMENTS = (
-    "videotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
-    "audioconvert", "audioresample", "audiomixer", "audioloudnorm", "opusenc",
-    "h264parse", "fallbacksrc", "uridecodebin3", "mpegtsmux", "srtsink", "textoverlay",
-)
+    # output pipeline
+    "videotestsrc", "audiotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
+    "audioconvert", "audioresample", "audiomixer", "volume", "textoverlay", "audioloudnorm",
+    "imagefreeze", "x264enc", "h264parse", "opusenc", "mpegtsmux", "srtsink",
+    # inputs: files, HTTP/HLS, RTSP, decoders
+    "fallbacksrc", "uridecodebin3", "decodebin3", "qtdemux", "matroskademux", "tsdemux",
+    "souphttpsrc", "hlsdemux2", "rtspsrc", "aacparse", "avdec_h264", "avdec_aac",
+    "dav1ddec", "vp9dec", "opusdec", "jpegdec", "pngdec",
+)  # fmt: skip
 
-# Windows plugins for GPU encoding and audio; they must load even without the hardware.
-WINDOWS_PLUGINS = ("d3d11", "d3d12", "nvcodec", "amfcodec", "qsv", "mediafoundation", "wasapi2")
+# Windows plugins for GPU encoding; they must load even without the hardware.
+WINDOWS_PLUGINS = ("d3d11", "d3d12", "nvcodec", "amfcodec", "qsv")
 
 
 def main(argv: list[str] | None = None) -> int:
