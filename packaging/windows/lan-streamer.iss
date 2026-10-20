@@ -1,0 +1,52 @@
+; Inno Setup script for the lan-streamer Windows installer.
+; Built by packaging\windows\build.ps1, which passes AppVersion and StageDir.
+
+#ifndef AppVersion
+  #define AppVersion "0.0.0-dev"
+#endif
+#ifndef NumVersion
+  #define NumVersion "0.0.0.0"
+#endif
+#ifndef StageDir
+  #error StageDir is not set
+#endif
+
+[Setup]
+AppId={{6F0B7C55-3D1E-4C1B-9E3A-6C2B9A1F4E21}
+AppName=lan-streamer
+AppVersion={#AppVersion}
+VersionInfoVersion={#NumVersion}
+AppPublisher=zGLados
+AppPublisherURL=https://github.com/zGLados/lan-streamer
+DefaultDirName={localappdata}\Programs\lan-streamer
+DefaultGroupName=lan-streamer
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
+LicenseFile={#StageDir}\LICENSE
+OutputBaseFilename=lan-streamer-setup-{#AppVersion}
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+UninstallDisplayName=lan-streamer {#AppVersion}
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+
+[Files]
+Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\lan-streamer self-test"; Filename: "{app}\self-test.cmd"; WorkingDir: "{app}"
+Name: "{group}\Uninstall lan-streamer"; Filename: "{uninstallexe}"
+
+[Run]
+Filename: "{app}\self-test.cmd"; Description: "Run the self-test now"; Flags: postinstall shellexec skipifsilent
+
+[UninstallDelete]
+; GStreamer plugin registry cache written by the app
+Type: files; Name: "{localappdata}\lan-streamer\gst-registry.bin"
+Type: dirifempty; Name: "{localappdata}\lan-streamer"

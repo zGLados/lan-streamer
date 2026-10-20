@@ -31,3 +31,6 @@ data/
 
 # Local dependencies installed by scripts/setup-*.ps1 / .sh
 .deps/
+
+# Build output
+build/

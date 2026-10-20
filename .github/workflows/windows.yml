@@ -1,7 +1,7 @@
-# Windows CI.
-# 1. Builds PyGObject against the official GStreamer MSVC build. GStreamer's own
-#    bindings are tied to Python 3.9 (EOL), so lan-streamer ships its own wheel.
-# 2. Runs scripts/install-windows.ps1 on a clean runner with that wheel.
+# Windows CI: builds the test installer and installs it on a clean runner.
+#
+# GStreamer's own Python bindings are tied to Python 3.9 (EOL), so PyGObject is
+# built here against the official GStreamer MSVC build and shipped in the installer.
 name: Windows
 
 on:
@@ -14,18 +14,22 @@ env:
   GST_VERSION: "1.28.6"
   PYGOBJECT_VERSION: "3.50.2"
   GST_ROOT: C:\gstreamer\1.0\msvc_x86_64
+  VERSION: 0.0.1-test.${{ github.run_number }}
+  NUM_VERSION: 0.0.1.${{ github.run_number }}
 
 jobs:
-  pygobject-wheel:
+  build:
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install GStreamer
+      - name: Install GStreamer (build machine only)
         shell: pwsh
         run: |
           $exe = "$env:RUNNER_TEMP\gstreamer.exe"
@@ -34,48 +38,65 @@ jobs:
           "$env:GST_ROOT\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
           "PKG_CONFIG_PATH=$env:GST_ROOT\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
-      - name: Build wheel
+      - name: Build PyGObject wheel
         shell: pwsh
         run: |
-          pkg-config --modversion gobject-introspection-1.0 glib-2.0
           python -m pip install --upgrade pip
           python -m pip wheel "pygobject==$env:PYGOBJECT_VERSION" --no-deps --no-binary pygobject `
-            --config-settings=setup-args=-Dpycairo=disabled -w dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pygobject-win_amd64
-          path: dist/*.whl
-
-  install-script:
-    needs: pygobject-wheel
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        id: python
-        with:
-          python-version: "3.13"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: pygobject-win_amd64
-          path: wheel
-
-      - name: Run install-windows.ps1
-        shell: pwsh
-        run: |
-          $wheel = (Get-ChildItem wheel\*.whl).FullName
-          ./scripts/install-windows.ps1 -Ref "${{ github.sha }}" `
-            -PythonExe "${{ steps.python.outputs.python-path }}" -PyGObjectWheelPath $wheel
-          $py = "$env:LOCALAPPDATA\lan-streamer\venv\Scripts\python.exe"
-          & $py -m lanstreamer.doctor --encoder cpu
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+            --config-settings=setup-args=-Dpycairo=disabled -w wheels
 
       - name: Unit tests
         shell: pwsh
         run: |
-          $py = "$env:LOCALAPPDATA\lan-streamer\venv\Scripts\python.exe"
-          & $py -m pip install --quiet pytest
-          & $py -m pytest -q
+          python -m pip install -e ".[dev]"
+          python -m ruff check .
+          python -m pytest -q
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          ./packaging/windows/build.ps1 -GstRoot $env:GST_ROOT `
+            -PyGObjectWheel (Get-ChildItem wheels\*.whl).FullName `
+            -Version $env:VERSION -NumVersion $env:NUM_VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lan-streamer-setup-${{ env.VERSION }}
+          path: build/windows/lan-streamer-setup-*.exe
+          compression-level: 0
+
+  test-install:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-setup-${{ env.VERSION }}
+          path: setup
+
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem setup\*.exe).FullName
+          $p = Start-Process -Wait -PassThru -FilePath $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+
+      - name: Self-test of the installed app
+        shell: pwsh
+        run: |
+          # No GPU on the runner: test the CPU encoder; the GPU candidates are probed and reported too.
+          & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor
+          & "$env:LOCALAPPDATA\Programs\lan-streamer\python\python.exe" -m lanstreamer.doctor --encoder cpu
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          $p = Start-Process -Wait -PassThru -FilePath "$env:LOCALAPPDATA\Programs\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          Start-Sleep 3
+          if (Test-Path "$env:LOCALAPPDATA\Programs\lan-streamer\python") { throw 'uninstall left files behind' }

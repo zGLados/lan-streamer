@@ -6,6 +6,8 @@ import argparse
 import platform
 import sys
 
+from lanstreamer import __version__
+
 from lanstreamer.media import encoders, gst
 
 # Elements the output pipeline needs (see docs/architecture.md).
@@ -21,13 +23,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--encoder", default="auto", choices=("auto", *encoders.AUTO_ORDER))
     args = parser.parse_args(argv)
 
+    print(f"lan-streamer {__version__}")
     print(f"Python     {platform.python_version()} ({sys.platform})")
     try:
         Gst = gst.init()
     except Exception as exc:  # noqa: BLE001 – report any import problem
         print(f"GStreamer  NOT AVAILABLE: {exc}")
         return 1
-    print(f"GStreamer  {Gst.version_string()}")
+    location = gst.root()
+    print(f"GStreamer  {Gst.version_string()}" + (f" ({location})" if location else ""))
 
     missing = [name for name in REQUIRED_ELEMENTS if Gst.ElementFactory.find(name) is None]
     print("Elements   " + ("all present" if not missing else "MISSING: " + ", ".join(missing)))

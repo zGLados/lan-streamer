@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-_WINDOWS_DEFAULT_ROOTS = (
+_WINDOWS_SYSTEM_ROOTS = (
     # Per-user install (the default of the official installer and winget)
     Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/gstreamer/1.0/msvc_x86_64",
     Path(r"C:\Program Files\gstreamer\1.0\msvc_x86_64"),
@@ -17,13 +17,44 @@ _WINDOWS_DEFAULT_ROOTS = (
 _gst: ModuleType | None = None
 
 
+def bundled_root() -> Path | None:
+    """GStreamer shipped by the Windows installer: <app>\\gstreamer next to <app>\\python."""
+    root = Path(sys.executable).resolve().parent.parent / "gstreamer"
+    return root if (root / "bin").is_dir() else None
+
+
 def windows_root() -> Path | None:
-    """Returns the GStreamer install directory on Windows, or None."""
+    """Returns a system-wide GStreamer installation on Windows, or None."""
     env = os.environ.get("GSTREAMER_1_0_ROOT_MSVC_X86_64")
-    for root in ([Path(env)] if env else []) + list(_WINDOWS_DEFAULT_ROOTS):
+    for root in ([Path(env)] if env else []) + list(_WINDOWS_SYSTEM_ROOTS):
         if (root / "bin" / "gst-launch-1.0.exe").exists():
             return root
     return None
+
+
+def root() -> Path | None:
+    """The GStreamer directory in use on Windows (None on Linux or if not found)."""
+    if sys.platform != "win32":
+        return None
+    return bundled_root() or windows_root()
+
+
+def _use_windows_root(root: Path, bundled: bool) -> None:
+    bin_dir = str(root / "bin")
+    # Python 3.8+ no longer uses PATH to find DLLs of extension modules, but
+    # GStreamer's plugins and its plugin scanner still do.
+    os.add_dll_directory(bin_dir)
+    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+    if bundled:
+        # Keep the bundled GStreamer apart from any other installation.
+        data = Path(os.environ.get("LOCALAPPDATA", str(root))) / "lan-streamer"
+        data.mkdir(parents=True, exist_ok=True)
+        os.environ["GST_REGISTRY_1_0"] = str(data / "gst-registry.bin")
+        os.environ["GST_PLUGIN_SYSTEM_PATH_1_0"] = str(root / "lib" / "gstreamer-1.0")
+        os.environ["GST_PLUGIN_SCANNER_1_0"] = str(
+            root / "libexec" / "gstreamer-1.0" / "gst-plugin-scanner.exe"
+        )
+        os.environ["GI_TYPELIB_PATH"] = str(root / "lib" / "girepository-1.0")
 
 
 def init() -> ModuleType:
@@ -33,13 +64,13 @@ def init() -> ModuleType:
         return _gst
 
     if sys.platform == "win32":
-        root = windows_root()
-        if root is None:
-            raise RuntimeError("GStreamer not found. Run scripts\\setup-windows.ps1.")
-        # Python 3.8+ no longer uses PATH to find DLLs of extension modules.
+        bundled = bundled_root()
+        win_root = bundled or windows_root()
+        if win_root is None:
+            raise RuntimeError("GStreamer not found. Reinstall lan-streamer.")
         # PyGObject itself comes from lan-streamer's own wheel: the bindings
         # inside GStreamer's install are built for Python 3.9 only.
-        os.add_dll_directory(str(root / "bin"))
+        _use_windows_root(win_root, bundled is not None)
 
     import gi
 

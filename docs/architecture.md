@@ -171,7 +171,15 @@ lan-streamer runs natively on Windows and Linux, so it can be developed and run 
 
 After installing, the admin UI opens at `http://<host>:8080`. On first start it asks for the admin password.
 
-**Open risk, checked in M1:** the media pipeline uses GStreamer from Python (PyGObject). On Linux that is routine. On Windows it is unclear whether the official GStreamer binaries can be combined with PyGObject. If not, the output worker becomes a small Rust binary (gstreamer-rs), which works well with the official Windows binaries. The rest stays Python. The output worker is a separate process anyway, so this choice touches only that one part.
+**PyGObject on Windows:** the Python bindings inside the official GStreamer Windows build only work with Python 3.9, which is end of life. CI therefore builds PyGObject for Python 3.13 against the official GStreamer MSVC build, and the installer ships that build.
+
+### Windows test installer (now)
+
+`.github/workflows/windows.yml` builds `lan-streamer-setup-<version>.exe` on every push to `main`, using `packaging/windows/build.ps1` and Inno Setup. CI then installs it on a clean runner, runs the self-test and uninstalls it again. The installer:
+
+- installs per user to `%LOCALAPPDATA%\Programs\lan-streamer` without admin rights and needs no internet;
+- ships an embeddable CPython 3.13 with lan-streamer and the PyGObject build, a private copy of the GStreamer runtime (`gstreamer\`, with its own plugin registry so other GStreamer installs do not interfere) and MediaMTX;
+- adds a start menu entry "lan-streamer self-test" (`self-test.cmd` → `python -m lanstreamer.doctor`).
 
 ## Repository layout (planned)
 

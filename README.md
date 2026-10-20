@@ -2,7 +2,7 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** concept / early development. Nothing is usable yet. See the [roadmap](docs/roadmap.md).
+> **Status:** early development. A Windows test installer exists, but so far it only runs a self-test (GStreamer, encoders). See the [roadmap](docs/roadmap.md).
 
 ## How it works
 
