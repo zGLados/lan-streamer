@@ -39,3 +39,8 @@ def data_dir() -> Path:
     path = base / "lan-streamer"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def plugins_dir() -> Path:
+    """Uploaded plugins, one folder each (plugin.toml + code). Instance data lives in plugin-data/."""
+    return data_dir() / "plugins"

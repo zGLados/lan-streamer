@@ -150,3 +150,10 @@ def test_changed_settings_restart_the_plugin(tmp_path):
         assert runtime.inputs["a"].proc is not old_proc and runtime.inputs["a"].proc.running
 
     asyncio.run(run(cfg, tmp_path, 0.1, during=change))
+
+
+def test_instance_data_is_not_in_the_plugin_folder(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a")])
+    asyncio.run(run(cfg, tmp_path, 0.2))
+    assert (tmp_path / "plugin-data" / "a").is_dir()
+    assert not (tmp_path / "plugins").exists()

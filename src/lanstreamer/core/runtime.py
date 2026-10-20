@@ -151,7 +151,7 @@ class OutputRuntime:
             log.error("Input %s: %s", inp.cfg.name, inp.error)
             return
         inp.proc = PluginProcess(
-            inp.cfg.id, inp.plugin_dir, self.data_dir / "plugins" / inp.cfg.id,
+            inp.cfg.id, inp.plugin_dir, self.data_dir / "plugin-data" / inp.cfg.id,
             inp.cfg.settings, self._on_plugin_event,
         )  # fmt: skip
         try:

@@ -132,7 +132,7 @@ class App:
         except WorkerError as exc:
             raise RuntimeError(str(exc)) from exc
 
-        plugins = {pid: m.path for pid, m in discover(paths.data_dir() / "plugins").items()}
+        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
         self.runtime = OutputRuntime(
             out, plugins, paths.data_dir(), self.worker, on_change=self._on_change
         )
@@ -207,7 +207,7 @@ class App:
             return
         stored = self.store.output(output_id)
         self.output.inputs = stored.inputs  # format/encoder changes need a restart
-        plugins = {pid: m.path for pid, m in discover(paths.data_dir() / "plugins").items()}
+        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
         await self.runtime.apply(self.output, plugins)
         self.status.sources = [i.name for i in self.output.inputs]
 
@@ -215,7 +215,7 @@ class App:
         store = self.store or Store(paths.data_dir() / "lanstreamer.db")
         return Backend(
             status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
-            plugins=lambda: discover(paths.data_dir() / "plugins"), apply=self.apply_config,
+            plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
         )  # fmt: skip
 
