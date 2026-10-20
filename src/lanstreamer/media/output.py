@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import threading
 import time
@@ -125,6 +126,7 @@ class Output:
         for pad in mux.sinkpads:
             pad.add_probe(Gst.PadProbeType.BUFFER, self._on_mux_input)
         mux_src = mux.get_static_pad("src")
+        mux_src.add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self._strip_streamheader)
         data = Gst.PadProbeType.BUFFER | Gst.PadProbeType.BUFFER_LIST
         mux_src.add_probe(data, self._inspect_mux_output)  # runs before the hold
         mux_src.add_probe(data, self._hold_mux_output)
@@ -138,6 +140,35 @@ class Output:
         if len(self.muxed) == 2:
             self.muxed_all_at = time.monotonic()
         return self.Gst.PadProbeReturn.REMOVE
+
+    def _strip_streamheader(self, pad, info):
+        """Removes the PAT/PMT copy ("streamheader") from the muxer's caps.
+
+        srtsink sends the caps' streamheader before any data, and mpegtsmux sets
+        it once – when maybe only one track existed – and never updates it.
+        MediaMTX keeps the first PMT it sees, so it then ignores the other track
+        (seen with NVENC: only Opus, video "undeclared"). Without the header the
+        first PMT it gets comes from the stream after the hold, with both tracks.
+        """
+        try:
+            event = info.get_event()
+            if event.type != self.Gst.EventType.CAPS:
+                return self.Gst.PadProbeReturn.OK
+            text = event.parse_caps().to_string()
+            if "streamheader" not in text:
+                return self.Gst.PadProbeReturn.OK
+            reader = TableReader()
+            for chunk in re.findall(r"\b47[0-9a-f]{374,}\b", text):
+                for pmt in reader.feed(bytes.fromhex(chunk)):
+                    emit("ts_table", pmt=f"caps streamheader (removed) {pmt.describe()}", sent=False)
+            stripped = re.sub(r",\s*streamheader=\(buffer\)<[^>]*>", "", text)
+            peer = pad.get_peer()
+            if peer is not None:
+                peer.send_event(self.Gst.Event.new_caps(self.Gst.Caps.from_string(stripped)))
+            return self.Gst.PadProbeReturn.DROP
+        except Exception as exc:  # noqa: BLE001 – never raise in the streaming thread
+            log(f"cannot strip streamheader: {exc}")
+            return self.Gst.PadProbeReturn.OK
 
     def _mux_ready(self) -> bool:
         return self.muxed_all_at is not None and time.monotonic() - self.muxed_all_at >= MUX_HOLD_S
