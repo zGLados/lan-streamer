@@ -154,8 +154,8 @@ async function pollStatus() {
     $("version").textContent = status.version;
     $("current").textContent = status.current || "–";
     $("encoder").textContent = status.encoder || "–";
-    const m = (status.stream || "").match(/profile=([\w-]+).*level=([\w.]+)/);
-    $("stream").textContent = m ? `${m[1]} ${m[2]}` : "–";
+    const field = (name) => ((status.stream || "").match(new RegExp(`${name}=\\(string\\)([\\w.-]+)`)) || [])[1];
+    $("stream").textContent = status.stream ? `${field("profile") || "?"} ${field("level") || ""}` : "–";
     $("stream").title = status.stream || "";
     $("format").textContent = `${status.resolution} @ ${status.target_fps}`;
     $("fps").textContent = status.fps ? status.fps.toFixed(1) : "–";

@@ -134,15 +134,15 @@ class Output:
         return self.Gst.PadProbeReturn.REMOVE
 
     def _report_caps(self, pad, _info):
-        caps = pad.get_current_caps()
-        if caps:
-            s = caps.get_structure(0)
-            fields = [s.get_name()] + [
-                f"{key}={s.get_value(key)}"
-                for key in ("profile", "level", "width", "height", "framerate", "stream-format")
-                if s.has_field(key)
-            ]
-            emit("stream", caps=", ".join(str(f) for f in fields))
+        # Runs in the streaming thread: it must never raise, or PyGObject drops
+        # the buffer. caps.to_string() avoids reading GstFraction values, which
+        # our PyGObject build (no gst-python overrides) cannot convert.
+        try:
+            caps = pad.get_current_caps()
+            if caps:
+                emit("stream", caps=caps.to_string())
+        except Exception as exc:  # noqa: BLE001
+            log(f"cannot report stream caps: {exc}")
         return self.Gst.PadProbeReturn.REMOVE
 
     def _count_frame(self, _pad, _info):
