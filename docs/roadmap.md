@@ -6,12 +6,12 @@ The milestones follow the requirements specification. Each one ends with somethi
 
 Goal: prove the riskiest part first. A 1080p stream plays in the browser over WebRTC and switches between two sources without a dropout.
 
-- [ ] Dev setup on Windows and Linux: GStreamer 1.26 (incl. gst-plugins-rs), MediaMTX, Python
+- [ ] Dev setup on Windows first (primary platform), then Linux: GStreamer 1.26 (incl. gst-plugins-rs), MediaMTX, Python
 - [ ] Check PyGObject with the official GStreamer binaries on Windows; if it does not work, write the output worker in Rust (see architecture)
 - [ ] Output worker: background layer + two input slots → compositor → H.264/Opus → MediaMTX
 - [ ] Switch between a local file and a second source (file or URL) by command, with a crossfade
 - [ ] Minimal web page with a WHEP player; measure the latency
-- [ ] Encoder auto-detection (NVIDIA, AMD, Intel, CPU) with a manual override
+- [ ] Encoders for all vendors (NVIDIA, AMD, Intel, CPU) with auto-detection and a manual override; NVIDIA is tested first
 - [ ] Measure the CPU/GPU load of one and of two outputs on the target machine
 
 ## M2 – Core

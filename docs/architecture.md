@@ -161,7 +161,7 @@ class InputPlugin(Generic[S]):
 
 ## Installation and packaging
 
-lan-streamer runs natively on Windows and Linux, so it can be developed and run on either system. Every release builds both installers in GitHub Actions. Each installer brings everything with it: a standalone Python runtime, the app and its dependencies, GStreamer and MediaMTX.
+lan-streamer runs natively on Windows and Linux, so it can be developed and run on either system. **Windows is the primary platform:** new features are built and tested there first, and Linux follows. Every release builds both installers in GitHub Actions. Each installer brings everything with it: a standalone Python runtime, the app and its dependencies, GStreamer and MediaMTX.
 
 | System | Format | Runs as |
 | --- | --- | --- |
