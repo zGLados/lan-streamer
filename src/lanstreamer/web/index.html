@@ -67,6 +67,7 @@
       <dl>
         <dt>On air</dt><dd id="current">–</dd>
         <dt>Encoder</dt><dd id="encoder">–</dd>
+        <dt>H.264</dt><dd id="stream">–</dd>
         <dt>Format</dt><dd id="format">–</dd>
         <dt>Encoded fps</dt><dd id="fps">–</dd>
         <dt>Switches</dt><dd id="switches">–</dd>
@@ -76,6 +77,10 @@
     <section>
       <h2>Player (WebRTC)</h2>
       <dl>
+        <dt>Video codec</dt><dd id="rx-codec">–</dd>
+        <dt>Video packets</dt><dd id="rx-vpackets">–</dd>
+        <dt>Frames decoded</dt><dd id="rx-decoded">–</dd>
+        <dt>Audio packets</dt><dd id="rx-apackets">–</dd>
         <dt>Received</dt><dd id="rx-size">–</dd>
         <dt>Displayed fps</dt><dd id="rx-fps">–</dd>
         <dt>Jitter buffer</dt><dd id="rx-buffer">–</dd>
@@ -147,6 +152,9 @@ async function pollStatus() {
     $("version").textContent = status.version;
     $("current").textContent = status.current || "–";
     $("encoder").textContent = status.encoder || "–";
+    const m = (status.stream || "").match(/profile=([\w-]+).*level=([\w.]+)/);
+    $("stream").textContent = m ? `${m[1]} ${m[2]}` : "–";
+    $("stream").title = status.stream || "";
     $("format").textContent = `${status.resolution} @ ${status.target_fps}`;
     $("fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
     $("switches").textContent = `${status.switches}` + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");
@@ -168,7 +176,15 @@ async function pollStats() {
   const stats = await pc.getStats();
   let rtt = null;
   stats.forEach((s) => {
+    if (s.type === "inbound-rtp" && s.kind === "audio") {
+      $("rx-apackets").textContent = s.packetsReceived ?? "–";
+    }
     if (s.type === "inbound-rtp" && s.kind === "video") {
+      const codec = s.codecId && stats.get(s.codecId);
+      $("rx-codec").textContent = codec ? `${codec.mimeType.split("/")[1]} ${(codec.sdpFmtpLine || "").match(/profile-level-id=(\w+)/)?.[1] || ""}` : "–";
+      $("rx-codec").title = codec ? codec.sdpFmtpLine || "" : "";
+      $("rx-vpackets").textContent = s.packetsReceived ?? "–";
+      $("rx-decoded").textContent = s.framesDecoded ?? "–";
       $("rx-size").textContent = s.frameWidth ? `${s.frameWidth}x${s.frameHeight}` : "–";
       $("rx-fps").textContent = s.framesPerSecond ?? "–";
       $("rx-lost").textContent = s.packetsLost ?? "–";

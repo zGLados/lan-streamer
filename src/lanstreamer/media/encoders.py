@@ -23,8 +23,9 @@ Preference = Literal["auto", "nvidia", "amd", "intel", "cpu"]
 
 AUTO_ORDER: tuple[Vendor, ...] = ("nvidia", "amd", "intel", "cpu")
 
-# Profiles every browser decodes over WebRTC, in order of preference.
-H264_CAPS = "video/x-h264,profile=(string){ constrained-baseline, baseline, main }"
+# Constrained baseline (42e0xx) is what WebRTC announces for H.264. Browsers that
+# decode with the GPU may reject other profiles even though they negotiated H.264.
+H264_CAPS = "video/x-h264,profile=constrained-baseline"
 
 Settings = tuple[tuple[tuple[str, ...], str], ...]
 

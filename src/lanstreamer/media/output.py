@@ -18,6 +18,7 @@ Protocol, one JSON object per line:
     stdout: {"event": "ready"} {"event": "playing", "label": "..."}
             {"event": "switch_failed", "label": "...", "reason": "..."}
             {"event": "stats", "fps": 59.9} {"event": "error", "message": "..."}
+            {"event": "stream", "caps": "video/x-h264, profile=..., level=..."}
 """
 
 from __future__ import annotations
@@ -107,6 +108,7 @@ class Output:
             raise RuntimeError(f"cannot link encoder {a.encoder}")
 
         parse.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self._count_frame)
+        parse.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self._report_caps)
 
         # MediaMTX only reads the first stream table (PMT) of the MPEG-TS. Hold the
         # output back until video and audio both reached the muxer, so the first
@@ -129,6 +131,18 @@ class Output:
     def _hold_mux_output(self, _pad, _info):
         if len(self.muxed) < 2:
             return self.Gst.PadProbeReturn.DROP
+        return self.Gst.PadProbeReturn.REMOVE
+
+    def _report_caps(self, pad, _info):
+        caps = pad.get_current_caps()
+        if caps:
+            s = caps.get_structure(0)
+            fields = [s.get_name()] + [
+                f"{key}={s.get_value(key)}"
+                for key in ("profile", "level", "width", "height", "framerate", "stream-format")
+                if s.has_field(key)
+            ]
+            emit("stream", caps=", ".join(str(f) for f in fields))
         return self.Gst.PadProbeReturn.REMOVE
 
     def _count_frame(self, _pad, _info):

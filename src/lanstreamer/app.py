@@ -40,6 +40,7 @@ class Status:
     version: str = __version__
     state: str = "starting"
     encoder: str = ""
+    stream: str = ""  # negotiated H.264 caps (profile, level)
     resolution: str = ""
     target_fps: int = 0
     fps: float = 0.0
@@ -165,6 +166,9 @@ class App:
         elif kind == "switch_failed":
             self.status.failed_switches += 1
             log.warning("Switch to %s failed: %s", event["label"], event["reason"])
+        elif kind == "stream":
+            self.status.stream = event["caps"]
+            log.info("Encoded stream: %s", event["caps"])
         elif kind == "stats":
             self.status.fps = event["fps"]
         elif kind == "error":
