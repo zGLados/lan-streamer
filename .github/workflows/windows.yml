@@ -8,7 +8,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md", "LICENSE"]  # no build for documentation-only changes
   pull_request:
+    paths-ignore: ["docs/**", "**.md", "LICENSE"]
 
 env:
   GST_VERSION: "1.28.6"
@@ -16,6 +18,8 @@ env:
   GST_ROOT: C:\gstreamer\1.0\msvc_x86_64
   VERSION: 0.0.1-test.${{ github.run_number }}
   NUM_VERSION: 0.0.1.${{ github.run_number }}
+  # Test builds compress fast; release tags get the smallest installer.
+  COMPRESSION: ${{ startsWith(github.ref, 'refs/tags/') && 'max' || 'fast' }}
 
 jobs:
   build:
@@ -27,18 +31,38 @@ jobs:
         with:
           python-version: "3.13"
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      # GStreamer and the PyGObject wheel only change with their versions: cached.
+      - uses: actions/cache@v4
+        id: gst-cache
+        with:
+          path: C:\gstreamer
+          key: gstreamer-msvc-${{ env.GST_VERSION }}
+
+      - uses: actions/cache@v4
+        id: wheel-cache
+        with:
+          path: wheels
+          key: pygobject-${{ env.PYGOBJECT_VERSION }}-gst${{ env.GST_VERSION }}-cp313-win_amd64
 
       - name: Install GStreamer (build machine only)
+        if: steps.gst-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $exe = "$env:RUNNER_TEMP\gstreamer.exe"
           Invoke-WebRequest "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GST_VERSION/msvc/gstreamer-1.0-msvc-x86_64-$env:GST_VERSION.exe" -OutFile $exe
           Start-Process -Wait -FilePath $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$env:GST_ROOT"
+
+      - name: GStreamer environment
+        shell: pwsh
+        run: |
           "$env:GST_ROOT\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
           "PKG_CONFIG_PATH=$env:GST_ROOT\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
+      # Needed for the wheel build and for dumpbin in build.ps1
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build PyGObject wheel
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
@@ -62,7 +86,7 @@ jobs:
         run: |
           ./packaging/windows/build.ps1 -GstRoot $env:GST_ROOT `
             -PyGObjectWheel (Get-ChildItem wheels\*.whl).FullName `
-            -Version $env:VERSION -NumVersion $env:NUM_VERSION
+            -Version $env:VERSION -NumVersion $env:NUM_VERSION -Compression $env:COMPRESSION
 
       - uses: actions/upload-artifact@v4
         with:
@@ -113,7 +137,7 @@ jobs:
           $dir = "$env:ProgramFiles\lan-streamer\python"
           & "$dir\python.exe" -c "import pydantic, pystray, PIL; print('dependencies ok')"
           $p = Start-Process -Wait -PassThru -FilePath "$dir\pythonw.exe" `
-            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '20', '--switch-interval', '6'
+            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '12', '--switch-interval', '4'
           Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 8
           if ($p.ExitCode -ne 0) { throw "windowless run failed ($($p.ExitCode))" }
 
@@ -126,8 +150,8 @@ jobs:
         run: |
           $py = "$env:ProgramFiles\lan-streamer\python\python.exe"
           $app = Start-Process -PassThru -NoNewWindow -FilePath $py `
-            -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '60', '--switch-interval', '8'
-          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 50
+            -ArgumentList '-m', 'lanstreamer', '--encoder', 'cpu', '--smoke-test', '35', '--switch-interval', '8'
+          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 30
           $player = $LASTEXITCODE
           $app.WaitForExit()
           $mtx = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\mediamtx.log"

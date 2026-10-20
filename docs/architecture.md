@@ -182,6 +182,8 @@ After installing, the admin UI opens at `http://<host>:8080`. On first start it 
 - ships an embeddable CPython 3.13 with lan-streamer and the PyGObject build, a private copy of the GStreamer runtime (`gstreamer\`, with its own plugin registry so other GStreamer installs do not interfere) and MediaMTX;
 - adds a start menu entry "lan-streamer self-test" (`self-test.cmd` → `python -m lanstreamer.doctor`).
 
+CI caches the GStreamer build install and the PyGObject wheel (keyed by their versions), compresses test installers with `lzma2/fast` (release tags: `max`) and skips the build for documentation-only changes.
+
 ## Repository layout (planned)
 
 ```

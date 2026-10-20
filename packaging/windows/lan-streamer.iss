@@ -7,6 +7,9 @@
 #ifndef NumVersion
   #define NumVersion "0.0.0.0"
 #endif
+#ifndef Compression
+  #define Compression "max"
+#endif
 #ifndef StageDir
   #error StageDir is not set
 #endif
@@ -37,8 +40,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 LicenseFile={#StageDir}\LICENSE
 OutputBaseFilename=lan-streamer-setup-{#AppVersion}
-Compression=lzma2/max
+Compression=lzma2/{#Compression}
 SolidCompression=yes
+LZMAUseSeparateProcess=yes
+LZMANumBlockThreads=4
 WizardStyle=modern
 UninstallDisplayName=lan-streamer
 

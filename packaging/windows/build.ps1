@@ -14,6 +14,7 @@ param(
     [Parameter(Mandatory)] [string]$PyGObjectWheel,
     [Parameter(Mandatory)] [string]$Version,      # shown to users, e.g. 0.0.1-test.7
     [Parameter(Mandatory)] [string]$NumVersion,   # numeric for the file version, e.g. 0.0.1.7
+    [ValidateSet('fast', 'normal', 'max')] [string]$Compression = 'max',
     [string]$MediaMtxVersion = 'v1.21.2',
     [string]$MediaMtxSha256 = 'a84224f5a490855684e62ba6fb71e80ea2a5e16aed61883bb58380290e93e467'
 )
@@ -148,6 +149,6 @@ Copy-Item (Join-Path $Repo 'LICENSE') $Stage
 Step "Installer $Version"
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
 if (-not $iscc) { $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
-& $iscc /Qp "/DAppVersion=$Version" "/DNumVersion=$NumVersion" "/DStageDir=$Stage" "/O$Out" (Join-Path $PSScriptRoot 'lan-streamer.iss')
+& $iscc /Qp "/DAppVersion=$Version" "/DNumVersion=$NumVersion" "/DCompression=$Compression" "/DStageDir=$Stage" "/O$Out" (Join-Path $PSScriptRoot 'lan-streamer.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
 Get-ChildItem $Out -Filter '*.exe' | ForEach-Object { Write-Host "    $($_.Name)  $([math]::Round($_.Length / 1MB)) MB" }
