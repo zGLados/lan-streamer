@@ -178,7 +178,7 @@ After installing, the admin UI opens at `http://<host>:8080`. On first start it 
 
 `.github/workflows/windows.yml` builds `lan-streamer-setup-<version>.exe` on every push to `main`, using `packaging/windows/build.ps1` and Inno Setup. CI then installs it on a clean runner, runs the self-test and uninstalls it again. The installer:
 
-- installs per user to `%LOCALAPPDATA%\Programs\lan-streamer` without admin rights and needs no internet;
+- installs to `C:\Program Files\lan-streamer` for all users (Windows asks for admin rights), or with "only for me" to `%LOCALAPPDATA%\Programs\lan-streamer` without admin rights. It needs no internet and is listed under Settings → Apps; its uninstaller also removes `%LOCALAPPDATA%\lan-streamer`;
 - ships an embeddable CPython 3.13 with lan-streamer and the PyGObject build, a private copy of the GStreamer runtime (`gstreamer\`, with its own plugin registry so other GStreamer installs do not interfere) and MediaMTX;
 - adds a start menu entry "lan-streamer self-test" (`self-test.cmd` → `python -m lanstreamer.doctor`).
 

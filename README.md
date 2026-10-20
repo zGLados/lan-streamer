@@ -6,7 +6,7 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 ## Try the prototype (Windows)
 
-1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs per user, no admin rights needed.
+1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps.
 2. Start **lan-streamer (1080p60)** from the start menu. The player page opens at `http://localhost:8080`.
 3. It switches between two test inputs every 20 s. Add your own: `start.cmd --source C:\path\video.mp4 --source https://…`.
 
