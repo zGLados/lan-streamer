@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lanstreamer"
+version = "0.0.1"
+description = "Self-hosted modular LAN streaming platform"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+# PyGObject is not listed: it ships with GStreamer on Windows and comes from
+# the distribution packages on Linux (see scripts/).
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lanstreamer"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

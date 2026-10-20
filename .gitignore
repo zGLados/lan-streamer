@@ -28,3 +28,6 @@ data/
 .vscode/
 .idea/
 .DS_Store
+
+# Local dependencies installed by scripts/setup-*.ps1 / .sh
+.deps/
