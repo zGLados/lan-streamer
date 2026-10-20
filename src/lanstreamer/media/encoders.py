@@ -49,10 +49,9 @@ CANDIDATES: dict[str, dict[Vendor, tuple[EncoderSpec, ...]]] = {
             EncoderSpec("nvidia", "nvh264enc", _NVIDIA),
         ),
         "amd": (EncoderSpec("amd", "amfh264enc", _AMD),),
-        "intel": (
-            EncoderSpec("intel", "qsvh264enc", _INTEL),
-            EncoderSpec("intel", "mfh264enc", ((("low-latency",), "true"),)),
-        ),
+        # Not mfh264enc: Media Foundation may pick a software encoder and would
+        # then be reported as a GPU encoder.
+        "intel": (EncoderSpec("intel", "qsvh264enc", _INTEL),),
         "cpu": (EncoderSpec("cpu", "x264enc", _X264),),
     },
     "linux": {
