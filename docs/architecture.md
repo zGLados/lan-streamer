@@ -28,7 +28,7 @@ flowchart LR
     end
 
     MTX[MediaMTX]
-    WEB[Browser: viewer + admin SPA]
+    WEB[Browser: player page + admin page]
     OBS[OBS] -- RTMP/SRT --> MTX
 
     plugins -- "activity, metadata (JSON-RPC over stdio)" --> SCH
@@ -175,11 +175,11 @@ Built-in plugins (`src/lanstreamer/plugins/builtin/`):
 - **Viewer page** `/` (no login, LAN only): player (WebRTC via WHEP), what is on air, the inputs with state and priority, a link to the admin page. "Next input" shows only for a logged-in admin. Live status comes over the WebSocket `/api/ws` (pushed on every change, at least once a second), polling `/api/status` is the fallback. Planned: hls.js fallback, embedded plugin UIs.
 - **Admin login:** one password, set on first start (`POST /api/admin/setup`, only while none is set), stored as a scrypt hash in the `settings` table; session cookie (HttpOnly, SameSite=Strict, 7 days, in memory – a restart logs out); a wrong password costs one second.
 - **Admin API** `/api/admin/…`: plugins with their settings schema, outputs, add/change/delete/reorder inputs (priority, override force/block, durations, settings), logs. Settings are validated by the plugin itself in a short-lived plugin host process (`host.py --check`), so the core never imports plugin code. Every change is stored and taken over at once by `OutputRuntime.apply()`; output format and encoder need a restart (the API says so).
-- **Admin page** `/admin` (`web/admin.html`, on top of the API): first start sets the password, then login; live "on air" status and "Next input"; the inputs as a table with live state, priority, fallback and override (force/block) editable in place, order by drag and drop, edit and delete; "Add input" with the settings form generated from the plugin's JSON Schema (enums → select, numbers with limits, booleans, lists of strings, anything else as JSON); output settings (restart note for format/encoder); logs; change password. Plugin upload follows as its own step.
+- **Admin page** `/admin` (`web/admin.html`, on top of the API): first start sets the password, then login; live "on air" status and "Next input"; the inputs as a table with live state, priority, fallback and override (force/block) editable in place, order by drag and drop, edit and delete; "Add input" with the settings form generated from the plugin's JSON Schema (enums → select, numbers with limits, booleans, lists of strings, anything else as JSON); output settings (restart note for format/encoder); plugins (list, upload as .zip, remove); logs; change password.
 
 ## Installation and packaging
 
-lan-streamer runs natively on Windows and Linux, so it can be developed and run on either system. **Windows is the primary platform:** new features are built and tested there first, and Linux follows. Every release builds both installers in GitHub Actions. Each installer brings everything with it: a standalone Python runtime, the app and its dependencies, GStreamer and MediaMTX.
+lan-streamer is meant to run natively on Windows and Linux. **Windows is the primary platform:** new features are built and tested there first, Linux follows. Today GitHub Actions builds the Windows installer on every push; the Linux packages follow in M5. Each installer brings everything with it: a standalone Python runtime, the app and its dependencies, GStreamer and MediaMTX.
 
 | System | Format | Runs as |
 | --- | --- | --- |
@@ -187,7 +187,7 @@ lan-streamer runs natively on Windows and Linux, so it can be developed and run 
 | Linux x64 | `.deb` (Debian/Ubuntu) and a `.tar.gz` with `install.sh` for other distributions | systemd service |
 | Linux server (optional) | Docker Compose with GPU passthrough | Container |
 
-After starting, the player page opens at `http://<host>:8080`. The admin area (M2 step 4) will ask for an admin password on first start.
+After starting, the player page opens at `http://<host>:8080`. The admin page `http://<host>:8080/admin` asks for the admin password on its first visit.
 
 **PyGObject on Windows:** the Python bindings inside the official GStreamer Windows build only work with Python 3.9, which is end of life. CI therefore builds PyGObject for Python 3.13 against the official GStreamer MSVC build, and the installer ships that build.
 
@@ -210,18 +210,21 @@ CI caches the GStreamer build install and the PyGObject wheel (keyed by their ve
 src/lanstreamer/
   app.py             starts everything: encoder choice, MediaMTX, output worker, runtime, web, tray
   scheduler.py       decide() + Debounce – pure, unit-tested
-  core/              config.py, store.py (SQLite), runtime.py (plugins + scheduler + worker), worker.py
+  core/              config.py, store.py (SQLite), auth.py (admin login), runtime.py (plugins +
+                     scheduler + worker), worker.py (output worker handle), simworker.py (--simulate)
   media/             gst.py (GStreamer setup), encoders.py, output.py (output worker), mpegts.py
-  plugins/           host.py (plugin process), process.py (core side), registry.py, builtin/
-  web/               server.py (player page; FastAPI in M2 step 3), index.html
-  doctor.py, tray.py, paths.py, assets/
+  plugins/           host.py (plugin process), process.py (core side), registry.py, install.py
+                     (upload), builtin/ (standby, playlist, test-pattern)
+  web/               api.py (FastAPI), index.html (player), admin.html (admin page)
+  doctor.py, tray.py, paths.py, assets/ (icon, standby slate)
 src/lanstreamer_sdk/ plugin SDK: InputPlugin, sources, context, manifest
+examples/            hello-plugin – template for plugin authors
 packaging/windows/   build.ps1, lan-streamer.iss, gstreamer-plugins.txt, make_icon.py, *.cmd
-tests/               unit tests; e2e/check_player.py (browser check in CI)
-docs/                architecture, roadmap
+tests/               unit tests; e2e/ (check_api, check_admin, check_player, run_local, edge.py)
+docs/                architecture, roadmap, development
 ```
 
-Planned: `packaging/linux/` (.deb, install.sh, systemd), a plugin developer guide (M6).
+Planned: `packaging/linux/` (.deb, install.sh, systemd) in M5, a full plugin developer guide in M6.
 
 ## Tech stack
 

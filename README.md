@@ -1,4 +1,10 @@
-# lan-streamer
+<p align="center">
+  <img src="src/lanstreamer/assets/icon.png" alt="lan-streamer logo" width="128">
+</p>
+
+<h1 align="center">lan-streamer</h1>
+
+<p align="center">Your own TV channel for the LAN – inputs as plugins, automatic switching, 1080p in the browser.</p>
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
@@ -21,13 +27,13 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 - **Outputs** are permanently running encoders. They switch between inputs without the stream ever dropping, and [MediaMTX](https://github.com/bluenviron/mediamtx) serves them via WebRTC and LL-HLS.
 - **Everything is configured in the web UI**, including installing new input plugins as `.zip` uploads.
 
-Details: [docs/architecture.md](docs/architecture.md).
+Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: start from [examples/hello-plugin](examples/hello-plugin).
 
-## Planned stack
+## Stack
 
 Python 3.13 (asyncio, FastAPI) · GStreamer · MediaMTX · plain HTML/JS · SQLite
 
-Runs natively on **Windows and Linux**; each release will ship an installer for both. Hardware encoding is picked automatically (NVIDIA, AMD, Intel, or CPU as a fallback) and can be overridden in the settings.
+Windows first (installer today), Linux packages follow (M5). Hardware encoding is picked automatically (NVIDIA, AMD, Intel, or CPU as a fallback) and can be overridden in the settings.
 
 ## Scope
 

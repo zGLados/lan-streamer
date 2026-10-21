@@ -24,7 +24,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Core runtime (`core/runtime.py`): plugin processes + scheduler + output worker, playback events back to the plugins
 - [x] Supervisor with restart and backoff (plugin processes)
 - [x] Scheduler as a pure function, fully unit-tested
-- [x] Activity events + polling, debounce, min/max duration, overrides (in the runtime; admin UI follows)
+- [x] Activity events + polling, debounce, min/max duration, overrides (force/block)
 - [x] SQLite configuration store (`core/store.py`, versioned schema) and live reconfiguration (`OutputRuntime.apply`)
 - [x] FastAPI admin API with login, live status over WebSocket (`web/api.py`)
 - [x] Admin page `/admin` (confirmed on the test PC, 2026-10-21): login, inputs (add/edit/delete, priority, fallback, force/block, order by drag and drop), generated settings forms, live status, output settings, logs
