@@ -41,7 +41,10 @@ def test_public_pages_and_status(setup):
     assert "lan-streamer" in client.get("/").text
     assert client.get("/favicon.png").headers["content-type"] == "image/png"
     assert client.get("/api/status").json()["current"] == "Test input A"
-    assert client.post("/api/next").status_code == 204 and skipped == [1]
+    assert "lan-streamer admin" in client.get("/admin").text
+    assert client.post("/api/admin/next").status_code == 401 and skipped == []
+    login(client)
+    assert client.post("/api/admin/next").status_code == 204 and skipped == [1]
 
 
 def test_websocket_pushes_status(setup):

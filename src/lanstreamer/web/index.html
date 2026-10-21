@@ -16,6 +16,8 @@
   header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   header .version { color: var(--muted); font-size: 13px; }
+  header .admin { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none; }
+  header .admin:hover { color: var(--text); }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
   .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
@@ -47,6 +49,7 @@
   <h1>lan-streamer</h1>
   <span class="dot" id="dot"></span>
   <span class="version" id="version"></span>
+  <a class="admin" href="/admin">Admin</a>
 </header>
 <main>
   <div>
@@ -55,7 +58,7 @@
       <div class="overlay" id="overlay">Connecting …</div>
     </div>
     <div class="controls">
-      <button class="primary" id="next">Next input</button>
+      <button class="primary" id="next" hidden title="Only for the admin">Next input</button>
       <button id="sound">Sound on</button>
       <button id="reconnect">Reconnect</button>
     </div>
@@ -225,7 +228,9 @@ async function pollStats() {
   $("rx-rtt").textContent = rtt != null ? `${(rtt * 1000).toFixed(0)} ms` : "–";
 }
 
-$("next").onclick = () => fetch("/api/next", { method: "POST" });
+// "Next input" is for the admin only: shown when logged in (same browser session).
+$("next").onclick = () => fetch("/api/admin/next", { method: "POST" });
+fetch("/api/admin/session").then((r) => r.json()).then((s) => { $("next").hidden = !s.logged_in; }).catch(() => {});
 $("reconnect").onclick = connect;
 $("sound").onclick = () => {
   video.muted = !video.muted;

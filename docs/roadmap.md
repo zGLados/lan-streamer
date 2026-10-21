@@ -27,7 +27,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Activity events + polling, debounce, min/max duration, overrides (in the runtime; admin UI follows)
 - [x] SQLite configuration store (`core/store.py`, versioned schema) and live reconfiguration (`OutputRuntime.apply`)
 - [x] FastAPI admin API with login, live status over WebSocket (`web/api.py`)
-- [ ] Admin SPA: outputs, input instances, rankings, generated settings forms, live status
+- [x] Admin page `/admin`: login, inputs (add/edit/delete, priority, fallback, force/block, order by drag and drop), generated settings forms, live status, output settings, logs
 - [ ] Plugin upload (.zip, manifest, version check, per-plugin virtualenv)
 - [ ] Fallback playlist as the first real plugin
 

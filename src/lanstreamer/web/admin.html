@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lan-streamer admin</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1d212a; --line: #262b36; --text: #e6e8ee;
+    --muted: #8b93a7; --accent: #4f8cff; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .version { color: var(--muted); font-size: 13px; }
+  header nav { margin-left: auto; display: flex; gap: 8px; }
+  a { color: var(--accent); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  section h2 .spacer { flex: 1; }
+  [hidden] { display: none !important; }
+  button, input, select, textarea { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; }
+  button { padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  button.small { padding: 3px 8px; font-size: 13px; }
+  input, select, textarea { padding: 6px 8px; }
+  input[type=number] { width: 90px; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  textarea { width: 100%; min-height: 80px; font-family: ui-monospace, Consolas, monospace; }
+  label { display: grid; gap: 4px; }
+  label .hint { color: var(--muted); font-size: 12px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .status { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+  .status .item { display: grid; gap: 2px; }
+  .status .item span { color: var(--muted); font-size: 12px; }
+  .status .item b { font-size: 16px; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.dragging { opacity: .4; }
+  tr.drop-before td { border-top: 2px solid var(--accent); }
+  .handle { cursor: grab; color: var(--muted); user-select: none; font-size: 16px; }
+  .name b { display: block; }
+  .name small { color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); white-space: nowrap; }
+  .badge.on-air { background: rgba(63,185,80,.15); border-color: var(--ok); color: var(--ok); }
+  .badge.active { color: var(--text); }
+  .badge.inactive { color: var(--muted); }
+  .badge.error, .badge.cooling-down { color: var(--bad); border-color: var(--bad); }
+  .actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .center { max-width: 380px; margin: 60px auto; }
+  .error { color: var(--bad); margin: 8px 0 0; white-space: pre-wrap; }
+  .note { color: var(--warn); margin: 8px 0 0; }
+  .muted { color: var(--muted); }
+  pre.log { background: #0a0c10; border: 1px solid var(--line); border-radius: 6px; padding: 10px; max-height: 420px; overflow: auto; font-size: 12px; margin: 10px 0 0; white-space: pre-wrap; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(560px, 94vw); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog form { padding: 18px; display: grid; gap: 12px; }
+  dialog h3 { margin: 0; font-size: 16px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 10px; margin: 0; }
+  legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+  #toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; max-width: 420px; }
+  #toast.bad { border-color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <img src="/favicon.png" alt="" width="24" height="24">
+  <h1>lan-streamer admin</h1>
+  <span class="dot" id="dot"></span>
+  <span class="version" id="version"></span>
+  <nav>
+    <a href="/">Player</a>
+    <button class="small" id="logout" hidden>Log out</button>
+  </nav>
+</header>
+
+<!-- first start / login -->
+<div id="auth" hidden>
+  <section class="center">
+    <h2 id="auth-title">Log in</h2>
+    <form id="auth-form" class="row" style="display:grid">
+      <p class="muted" id="auth-hint"></p>
+      <label>Password <input type="password" id="auth-password" autocomplete="current-password" required></label>
+      <label id="auth-repeat-label" hidden>Repeat password <input type="password" id="auth-repeat" autocomplete="new-password"></label>
+      <button class="primary" type="submit" id="auth-submit">Log in</button>
+      <p class="error" id="auth-error"></p>
+    </form>
+  </section>
+</div>
+
+<main id="app" hidden>
+  <section>
+    <h2>On air</h2>
+    <div class="status">
+      <div class="item"><span>Now</span><b id="s-current">–</b></div>
+      <div class="item"><span>Encoder</span><b id="s-encoder">–</b></div>
+      <div class="item"><span>Format</span><b id="s-format">–</b></div>
+      <div class="item"><span>Encoded fps</span><b id="s-fps">–</b></div>
+      <div class="item"><span>Switches</span><b id="s-switches">–</b></div>
+      <button id="next">Next input</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inputs <span class="spacer"></span><button class="primary small" id="add-input">Add input</button></h2>
+    <p class="muted" style="margin-top:0">The highest priority that is active goes on air. Equal priorities take turns in the order of this list – drag rows to change it.</p>
+    <table>
+      <thead><tr><th></th><th>Input</th><th>State</th><th>Priority</th><th>Fallback</th><th>Override</th><th></th></tr></thead>
+      <tbody id="inputs"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Output</h2>
+    <form id="output-form" class="row">
+      <label>Name <input id="o-name" required></label>
+      <label>Frame rate <select id="o-fps"><option value="60">60 fps</option><option value="30">30 fps</option></select></label>
+      <label>Width <input type="number" id="o-width" min="320" max="3840"></label>
+      <label>Height <input type="number" id="o-height" min="240" max="2160"></label>
+      <label>Bitrate (kbit/s) <input type="number" id="o-bitrate" min="0" max="50000"><span class="hint">0 = automatic</span></label>
+      <label>Encoder <select id="o-encoder">
+        <option value="auto">Automatic</option><option value="nvidia">NVIDIA</option><option value="amd">AMD</option>
+        <option value="intel">Intel</option><option value="cpu">CPU</option></select></label>
+      <button class="primary" type="submit">Save</button>
+    </form>
+    <p class="note" id="output-note" hidden>Saved. Format, bitrate and encoder take effect after restarting lan-streamer.</p>
+  </section>
+
+  <section>
+    <h2>Logs</h2>
+    <div class="row">
+      <label>File <select id="log-name">
+        <option>lan-streamer.log</option><option>output.log</option><option>mediamtx.log</option></select></label>
+      <label>Lines <input type="number" id="log-lines" value="200" min="10" max="5000"></label>
+      <button id="log-refresh">Refresh</button>
+    </div>
+    <pre class="log" id="log"></pre>
+  </section>
+
+  <section>
+    <h2>Admin password</h2>
+    <form id="pw-form" class="row">
+      <label>Current <input type="password" id="pw-current" autocomplete="current-password" required></label>
+      <label>New <input type="password" id="pw-new" autocomplete="new-password" minlength="8" required></label>
+      <button type="submit">Change</button>
+    </form>
+  </section>
+</main>
+
+<dialog id="input-dialog">
+  <form id="input-form" method="dialog">
+    <h3 id="input-title">Add input</h3>
+    <label id="plugin-label">Plugin <select id="i-plugin"></select><span class="hint" id="plugin-description"></span></label>
+    <label>Name <input id="i-name" required maxlength="80"></label>
+    <div class="row">
+      <label>Priority <input type="number" id="i-priority" min="0" max="1000" value="10"></label>
+      <label>Min. on air (s) <input type="number" id="i-min" min="0" step="1" value="0"></label>
+      <label>Max. on air (s) <input type="number" id="i-max" min="1" step="1" placeholder="no limit"></label>
+      <label style="grid-auto-flow:column;align-items:center;gap:8px"><input type="checkbox" id="i-fallback"> Fallback</label>
+    </div>
+    <fieldset id="settings"><legend>Settings</legend></fieldset>
+    <p class="error" id="input-error"></p>
+    <div class="actions">
+      <button type="button" id="input-cancel">Cancel</button>
+      <button class="primary" type="submit" id="input-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let outputs = [], plugins = {}, status = null, editing = null;
+
+// --- helpers ------------------------------------------------------------------------
+class ApiError extends Error {
+  constructor(status, detail) {
+    super(typeof detail === "string" ? detail : detail?.message || `HTTP ${status}`);
+    this.status = status; this.detail = detail;
+  }
+}
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: options.body ? { "Content-Type": "application/json" } : {},
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (res.status === 401 && !path.startsWith("/api/admin/login") && !path.startsWith("/api/admin/password")) {
+    showAuth(true); throw new ApiError(401, "login required");
+  }
+  const text = await res.text();
+  const data = text && res.headers.get("content-type")?.includes("json") ? JSON.parse(text) : text;
+  if (!res.ok) throw new ApiError(res.status, data?.detail ?? data);
+  return data;
+}
+function toast(message, bad = false) {
+  const t = $("toast");
+  t.textContent = message; t.className = bad ? "bad" : ""; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 4000);
+}
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const child of children) node.append(child);
+  return node;
+}
+
+// --- login --------------------------------------------------------------------------
+let firstStart = false;
+function showAuth(passwordSet) {
+  firstStart = !passwordSet;
+  $("app").hidden = true; $("logout").hidden = true; $("auth").hidden = false;
+  $("auth-title").textContent = firstStart ? "Set the admin password" : "Log in";
+  $("auth-hint").textContent = firstStart ? "First start: choose the admin password (at least 8 characters)." : "";
+  $("auth-repeat-label").hidden = !firstStart;
+  $("auth-submit").textContent = firstStart ? "Set password" : "Log in";
+  $("auth-password").autocomplete = firstStart ? "new-password" : "current-password";
+  $("auth-password").focus();
+}
+$("auth-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("auth-error").textContent = "";
+  const password = $("auth-password").value;
+  try {
+    if (firstStart) {
+      if (password !== $("auth-repeat").value) throw new Error("The passwords do not match.");
+      await api("/api/admin/setup", { method: "POST", body: { password } });
+    } else {
+      await api("/api/admin/login", { method: "POST", body: { password } });
+    }
+    $("auth-password").value = $("auth-repeat").value = "";
+    await start();
+  } catch (err) { $("auth-error").textContent = err.message; }
+};
+$("logout").onclick = async () => { await api("/api/admin/logout", { method: "POST" }); location.reload(); };
+
+// --- data ---------------------------------------------------------------------------
+async function start() {
+  const session = await api("/api/admin/session");
+  if (!session.logged_in) return showAuth(session.password_set);
+  $("auth").hidden = true; $("app").hidden = false; $("logout").hidden = false;
+  const list = await api("/api/admin/plugins");
+  plugins = Object.fromEntries(list.map((p) => [p.id, p]));
+  await reload();
+  openSocket();
+  refreshLog();
+}
+async function reload() {
+  outputs = await api("/api/admin/outputs");
+  renderOutput();
+  renderInputs();
+}
+const output = () => outputs[0];  // several outputs: milestone M4
+
+// --- live status --------------------------------------------------------------------
+function openSocket() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`);
+  ws.onmessage = (e) => { status = JSON.parse(e.data); renderStatus(); };
+  ws.onclose = () => { $("dot").className = "dot bad"; setTimeout(openSocket, 2000); };
+}
+function renderStatus() {
+  $("dot").className = "dot " + (status.state === "running" ? "ok" : status.state === "failed" ? "bad" : "");
+  $("version").textContent = status.version;
+  $("s-current").textContent = status.current || "–";
+  $("s-encoder").textContent = status.encoder || "–";
+  $("s-format").textContent = `${status.resolution} @ ${status.target_fps}`;
+  $("s-fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
+  $("s-switches").textContent = status.switches + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");
+  for (const input of status.inputs || []) {
+    const badge = document.querySelector(`[data-state="${CSS.escape(input.id)}"]`);
+    if (!badge) continue;
+    badge.textContent = input.state;
+    badge.className = "badge " + input.state.replace(" ", "-");
+    badge.title = input.error || input.title || "";
+  }
+}
+$("next").onclick = async () => {
+  try { await api("/api/admin/next", { method: "POST" }); } catch (err) { toast(err.message, true); }
+};
+
+// --- inputs -------------------------------------------------------------------------
+function renderInputs() {
+  const body = $("inputs");
+  body.replaceChildren();
+  for (const input of output().inputs) {
+    const plugin = plugins[input.plugin];
+    const priority = el("input", { type: "number", min: 0, max: 1000, value: input.priority });
+    priority.onchange = () => patch(input, { priority: Number(priority.value) });
+    const fallback = el("input", { type: "checkbox", checked: input.fallback, title: "Always active, plays when nothing else does" });
+    fallback.onchange = () => patch(input, { fallback: fallback.checked });
+    const override = el("select", {},
+      el("option", { value: "none", textContent: "–" }),
+      el("option", { value: "force", textContent: "Force on air" }),
+      el("option", { value: "block", textContent: "Block" }));
+    override.value = input.override;
+    override.onchange = () => patch(input, { override: override.value });
+    const edit = el("button", { className: "small", textContent: "Edit", onclick: () => openDialog(input) });
+    const del = el("button", { className: "small danger", textContent: "Delete" });
+    del.onclick = async () => {
+      if (!confirm(`Delete the input "${input.name}"?`)) return;
+      try { await api(`/api/admin/inputs/${encodeURIComponent(input.id)}`, { method: "DELETE" }); toast(`Deleted ${input.name}`); await reload(); }
+      catch (err) { toast(err.message, true); }
+    };
+    const row = el("tr", { draggable: true },
+      el("td", {}, el("span", { className: "handle", textContent: "⋮⋮", title: "Drag to reorder" })),
+      el("td", { className: "name" }, el("b", { textContent: input.name }), el("small", { textContent: plugin ? plugin.name : input.plugin })),
+      el("td", {}, el("span", { className: "badge", textContent: "–", dataset: { state: input.id } })),
+      el("td", {}, priority),
+      el("td", {}, fallback),
+      el("td", {}, override),
+      el("td", {}, el("div", { className: "actions" }, edit, del)));
+    row.dataset.id = input.id;
+    addDrag(row);
+    body.append(row);
+  }
+  if (status) renderStatus();
+}
+async function patch(input, changes) {
+  try {
+    await api(`/api/admin/inputs/${encodeURIComponent(input.id)}`, { method: "PATCH", body: changes });
+    Object.assign(input, changes);
+  } catch (err) { toast(err.message, true); await reload(); }
+}
+
+// drag & drop ordering
+let dragged = null;
+function addDrag(row) {
+  row.addEventListener("dragstart", () => { dragged = row; row.classList.add("dragging"); });
+  row.addEventListener("dragend", () => { row.classList.remove("dragging"); clearDrop(); });
+  row.addEventListener("dragover", (e) => { e.preventDefault(); clearDrop(); if (row !== dragged) row.classList.add("drop-before"); });
+  row.addEventListener("drop", async (e) => {
+    e.preventDefault(); clearDrop();
+    if (!dragged || dragged === row) return;
+    row.before(dragged);
+    const ids = [...$("inputs").children].map((r) => r.dataset.id);
+    try { await api(`/api/admin/outputs/${encodeURIComponent(output().id)}/order`, { method: "PUT", body: { ids } }); await reload(); }
+    catch (err) { toast(err.message, true); await reload(); }
+  });
+}
+function clearDrop() { document.querySelectorAll(".drop-before").forEach((r) => r.classList.remove("drop-before")); }
+
+// --- add / edit dialog with settings generated from the plugin's JSON schema -----------
+function resolve(schema, root) {
+  if (schema.$ref) return resolve(root.$defs?.[schema.$ref.split("/").pop()] || {}, root);
+  if (schema.anyOf) {
+    const real = schema.anyOf.find((s) => s.type !== "null") || {};
+    return { ...resolve(real, root), ...schema, anyOf: undefined, nullable: true };
+  }
+  return schema;
+}
+function fieldFor(name, raw, root, value) {
+  const s = resolve(raw, root);
+  const title = s.title || name;
+  const hint = el("span", { className: "hint", textContent: s.description || "" });
+  let input, read;
+  if (s.enum) {
+    input = el("select", {}, ...s.enum.map((v) => el("option", { value: String(v), textContent: String(v) })));
+    input.value = String(value ?? s.default ?? s.enum[0]);
+    read = () => s.enum.find((v) => String(v) === input.value);
+  } else if (s.type === "boolean") {
+    input = el("input", { type: "checkbox", checked: Boolean(value ?? s.default) });
+    read = () => input.checked;
+  } else if (s.type === "integer" || s.type === "number") {
+    input = el("input", { type: "number", step: s.type === "integer" ? 1 : "any" });
+    if (s.minimum !== undefined) input.min = s.minimum;
+    if (s.maximum !== undefined) input.max = s.maximum;
+    input.value = value ?? s.default ?? "";
+    read = () => (input.value === "" ? (s.nullable ? null : undefined) : Number(input.value));
+  } else if (s.type === "array" && resolve(s.items || {}, root).type === "string") {
+    input = el("textarea", { value: (value ?? s.default ?? []).join("\n"), placeholder: "one per line" });
+    read = () => input.value.split("\n").map((l) => l.trim()).filter(Boolean);
+  } else if (s.type === "string") {
+    input = el("input", { value: value ?? s.default ?? "" });
+    if (s.format === "password" || /password|token|secret|key/i.test(name)) input.type = "password";
+    read = () => (input.value === "" && s.nullable ? null : input.value);
+  } else {
+    input = el("textarea", { value: JSON.stringify(value ?? s.default ?? null, null, 2) });
+    read = () => JSON.parse(input.value);
+    hint.textContent = (s.description ? s.description + " – " : "") + "JSON";
+  }
+  return { label: el("label", {}, title, input, hint), read };
+}
+let readers = {};
+function renderSettings(pluginId, values = {}) {
+  const box = $("settings");
+  box.replaceChildren(el("legend", { textContent: "Settings" }));
+  readers = {};
+  const schema = plugins[pluginId]?.schema || {};
+  if (schema.error) { box.append(el("p", { className: "error", textContent: schema.error })); return; }
+  const props = schema.properties || {};
+  if (!Object.keys(props).length) box.append(el("p", { className: "muted", textContent: "This plugin has no settings." }));
+  for (const [name, prop] of Object.entries(props)) {
+    const field = fieldFor(name, prop, schema, values[name]);
+    readers[name] = field.read;
+    box.append(field.label);
+  }
+  $("plugin-description").textContent = plugins[pluginId]?.description || "";
+}
+function openDialog(input = null) {
+  editing = input;
+  $("input-error").textContent = "";
+  $("input-title").textContent = input ? `Edit ${input.name}` : "Add input";
+  $("plugin-label").hidden = Boolean(input);
+  const select = $("i-plugin");
+  select.replaceChildren(...Object.values(plugins).map((p) => el("option", { value: p.id, textContent: `${p.name} (${p.version})` })));
+  select.value = input ? input.plugin : (select.value || Object.keys(plugins)[0]);
+  $("i-name").value = input ? input.name : plugins[select.value]?.name || "";
+  $("i-priority").value = input ? input.priority : 10;
+  $("i-min").value = input ? input.min_duration_s : 0;
+  $("i-max").value = input?.max_duration_s ?? "";
+  $("i-fallback").checked = input ? input.fallback : false;
+  renderSettings(select.value, input ? input.settings : {});
+  $("input-dialog").showModal();
+}
+$("i-plugin").onchange = () => {
+  const known = Object.values(plugins).some((p) => p.name === $("i-name").value);
+  if (!$("i-name").value || known) $("i-name").value = plugins[$("i-plugin").value]?.name || "";
+  renderSettings($("i-plugin").value);
+};
+$("add-input").onclick = () => openDialog();
+$("input-cancel").onclick = () => $("input-dialog").close();
+$("input-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("input-error").textContent = "";
+  let settings = {};
+  try {
+    for (const [name, read] of Object.entries(readers)) {
+      const value = read();
+      if (value !== undefined) settings[name] = value;
+    }
+  } catch (err) { $("input-error").textContent = `Invalid value: ${err.message}`; return; }
+  const body = {
+    name: $("i-name").value.trim(),
+    priority: Number($("i-priority").value || 0),
+    min_duration_s: Number($("i-min").value || 0),
+    max_duration_s: $("i-max").value === "" ? null : Number($("i-max").value),
+    fallback: $("i-fallback").checked,
+    settings,
+  };
+  try {
+    if (editing) {
+      await api(`/api/admin/inputs/${encodeURIComponent(editing.id)}`, { method: "PATCH", body });
+    } else {
+      await api(`/api/admin/outputs/${encodeURIComponent(output().id)}/inputs`, {
+        method: "POST", body: { ...body, plugin: $("i-plugin").value },
+      });
+    }
+    $("input-dialog").close();
+    toast(`Saved ${body.name}`);
+    await reload();
+  } catch (err) {
+    const errors = err.detail?.errors;
+    $("input-error").textContent = errors
+      ? errors.map((x) => `${x.field || "settings"}: ${x.message}`).join("\n")
+      : Array.isArray(err.detail) ? err.detail.map((x) => `${x.loc?.slice(1).join(".")}: ${x.msg}`).join("\n") : err.message;
+  }
+};
+
+// --- output -------------------------------------------------------------------------
+function renderOutput() {
+  const o = output();
+  $("o-name").value = o.name; $("o-fps").value = o.fps; $("o-width").value = o.width;
+  $("o-height").value = o.height; $("o-bitrate").value = o.bitrate_kbps; $("o-encoder").value = o.encoder;
+}
+$("output-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const o = output();
+  const wanted = {
+    name: $("o-name").value.trim(), fps: Number($("o-fps").value), width: Number($("o-width").value),
+    height: Number($("o-height").value), bitrate_kbps: Number($("o-bitrate").value), encoder: $("o-encoder").value,
+  };
+  const changes = Object.fromEntries(Object.entries(wanted).filter(([k, v]) => v !== o[k]));
+  if (!Object.keys(changes).length) return toast("Nothing changed");
+  try {
+    const result = await api(`/api/admin/outputs/${encodeURIComponent(o.id)}`, { method: "PATCH", body: changes });
+    $("output-note").hidden = !result.restart_required;
+    toast("Output saved");
+    await reload();
+  } catch (err) { toast(err.message, true); }
+};
+
+// --- logs and password ----------------------------------------------------------------
+async function refreshLog() {
+  try {
+    const text = await api(`/api/admin/logs/${$("log-name").value}?lines=${Number($("log-lines").value) || 200}`);
+    const log = $("log");
+    log.textContent = text || "(empty)";
+    log.scrollTop = log.scrollHeight;
+  } catch (err) { toast(err.message, true); }
+}
+$("log-refresh").onclick = refreshLog;
+$("log-name").onchange = refreshLog;
+$("pw-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/admin/password", { method: "POST", body: { current: $("pw-current").value, new: $("pw-new").value } });
+    $("pw-current").value = $("pw-new").value = "";
+    toast("Password changed");
+  } catch (err) { toast(err.message, true); }
+};
+
+start().catch((err) => toast(err.message, true));
+</script>
+</body>
+</html>

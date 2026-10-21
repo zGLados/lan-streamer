@@ -2,9 +2,9 @@
 
 Public (LAN):
     GET  /                    player page
+    GET  /admin               admin page (logs in through the API below)
     GET  /api/status          status of the output
     WS   /api/ws              the same status, pushed on every change
-    POST /api/next            "Next input"
 
 Admin login (one password, session cookie):
     GET  /api/admin/session   {"password_set", "logged_in"}
@@ -12,6 +12,7 @@ Admin login (one password, session cookie):
     POST /api/admin/login | /logout | /password
 
 Admin (logged in):
+    POST   /api/admin/next                       "Next input": the input on air hands over
     GET    /api/admin/plugins                    installed plugins + settings schema
     GET    /api/admin/outputs                    outputs and their inputs
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
@@ -175,6 +176,10 @@ def create_app(backend: Backend) -> FastAPI:
     def player() -> str:
         return PAGES.joinpath("index.html").read_text(encoding="utf-8")
 
+    @app.get("/admin", response_class=HTMLResponse)
+    def admin_page() -> str:
+        return PAGES.joinpath("admin.html").read_text(encoding="utf-8")
+
     @app.get("/favicon.png")
     def favicon() -> Response:
         return Response(ICON.read_bytes(), media_type="image/png")
@@ -182,10 +187,6 @@ def create_app(backend: Backend) -> FastAPI:
     @app.get("/api/status")
     def status() -> dict[str, Any]:
         return backend.status()
-
-    @app.post("/api/next", status_code=204)
-    def next_input() -> None:
-        backend.skip()
 
     @app.websocket("/api/ws")
     async def live(ws: WebSocket) -> None:
@@ -240,6 +241,10 @@ def create_app(backend: Backend) -> FastAPI:
         set_cookie(response, backend.auth.login(body.new) or "")
 
     # --- configuration --------------------------------------------------------------------
+
+    @app.post("/api/admin/next", status_code=204, dependencies=[Depends(logged_in)])
+    def next_input() -> None:
+        backend.skip()
 
     @app.get("/api/admin/plugins", dependencies=[Depends(logged_in)])
     async def plugins() -> list[dict[str, Any]]:
