@@ -29,6 +29,7 @@ from lanstreamer import BUILD, paths, tray
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import OutputConfig, demo_output
 from lanstreamer.core.runtime import OutputRuntime
+from lanstreamer.core.simworker import SimulatedWorker
 from lanstreamer.core.store import Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
@@ -93,7 +94,7 @@ class App:
         self.mediamtx: subprocess.Popen | None = None
         self.mediamtx_log: Any = subprocess.DEVNULL  # replaced by log files in run()
         self.worker_log: Any = subprocess.DEVNULL
-        self.worker: OutputWorker | None = None
+        self.worker: OutputWorker | SimulatedWorker | None = None
         self.runtime: OutputRuntime | None = None
         self.quit = threading.Event()  # set by the tray menu
         self.failed = threading.Event()
@@ -103,7 +104,23 @@ class App:
     async def start(self) -> None:
         out = self.output
         log.info("lan-streamer %s – %dx%d @ %d fps", BUILD, out.width, out.height, out.fps)
+        if self.args.simulate:
+            log.info("Simulation: no video pipeline, no MediaMTX (local tests)")
+            self.status.encoder = "simulated"
+            self.worker = SimulatedWorker(self._on_worker_event, out.fps)
+            await self.worker.start()
+        else:
+            await self._start_media(out)
+        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
+        self.runtime = OutputRuntime(
+            out, plugins, paths.data_dir(), self.worker, on_change=self._on_change
+        )
+        log.info("Starting %d inputs", len(out.inputs))
+        await self.runtime.start()
+        self.status.state = "running"
+        self._refresh_status()
 
+    async def _start_media(self, out: OutputConfig) -> None:
         log.info("Selecting encoder (preference: %s) ...", out.encoder)
         spec, tries = await asyncio.to_thread(encoders.select, out.encoder, out.fps)
         for line in tries:
@@ -131,15 +148,6 @@ class App:
             await self.worker.start()
         except WorkerError as exc:
             raise RuntimeError(str(exc)) from exc
-
-        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
-        self.runtime = OutputRuntime(
-            out, plugins, paths.data_dir(), self.worker, on_change=self._on_change
-        )
-        log.info("Starting %d inputs", len(out.inputs))
-        await self.runtime.start()
-        self.status.state = "running"
-        self._refresh_status()
 
     def _start_mediamtx(self) -> None:
         exe = paths.mediamtx()
@@ -274,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="how long each test input stays on air at least")  # fmt: skip
     parser.add_argument("--port", type=int, default=8080, help="web page port")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--simulate", action="store_true",
+                        help="no video pipeline (no GStreamer needed): for local tests")  # fmt: skip
     parser.add_argument("--smoke-test", type=float, default=0, metavar="SECONDS",
                         help="run this long, then exit 0 if switching worked")  # fmt: skip
     parser.add_argument("--pause-on-error", action="store_true",

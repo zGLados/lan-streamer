@@ -5,11 +5,15 @@ admin password was set by check_api.py. Uses the page like a person would: log
 in, add an input through the generated form, watch it go on air, lower its
 priority in the table, press "Next input", delete the input, show a log.
 
-    python tests/e2e/check_admin.py http://localhost:8080
+    python tests/e2e/check_admin.py http://localhost:8080 [--cdp <DevTools WebSocket URL>]
+
+--cdp connects to a running browser (local runs: the Windows Edge, see edge.py)
+instead of launching Edge through Playwright (CI).
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 
 from playwright.sync_api import expect, sync_playwright
@@ -22,10 +26,14 @@ def step(text: str) -> None:
 
 
 def main() -> int:
-    base = sys.argv[1].rstrip("/")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("url")
+    parser.add_argument("--cdp", help="DevTools WebSocket URL of a running browser")
+    args = parser.parse_args()
+    base = args.url.rstrip("/")
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="msedge")
-        page = browser.new_page(viewport={"width": 1280, "height": 1000})
+        browser = p.chromium.connect_over_cdp(args.cdp) if args.cdp else p.chromium.launch(channel="msedge")
+        page = browser.new_context(viewport={"width": 1280, "height": 1000}).new_page()
         page.on("console", lambda msg: print(f"  [page] {msg.text}") if msg.type == "error" else None)
         errors: list[str] = []
         page.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [page error] {exc}")))
