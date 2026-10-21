@@ -36,6 +36,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [ ] Short-video submissions (built-in plugin): TikTok and every other link yt-dlp supports; queue, max length, limit per device with display name, yt-dlp updates itself on start
 - [ ] Input forms on the viewer page, described by the plugin (F-IN-04, F-WEB-03)
 - [ ] Viewer page shows what is playing
+- [ ] Fullscreen-only page `/tv`: just the stream (no text, no buttons), click for sound and fullscreen, Edge kiosk command for display PCs
 
 ## M4 – Expansion
 
