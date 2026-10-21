@@ -136,6 +136,10 @@ jobs:
           foreach ($l in $links) { $t = $shell.CreateShortcut($l.FullName); Write-Host "Start menu: $($l.BaseName) -> $($t.TargetPath) $($t.Arguments)" }
           if ($links.Count -lt 3) { throw "expected 3 start menu entries in $menu" }
           if ($links | Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -notlike '*.exe' }) { throw 'a shortcut does not point to an .exe' }
+          # The answers about the built-in inputs (silent: the defaults – test pattern off)
+          $ini = Get-Content "$env:ProgramFiles\lan-streamer\setup.ini" -Raw
+          Write-Host "setup.ini:`n$ini"
+          foreach ($want in 'submissions=on', 'playlist=on', 'test-pattern=off') { if ($ini -notmatch [regex]::Escape($want)) { throw "setup.ini lacks $want" } }
 
       - name: Self-test of the installed app
         shell: pwsh

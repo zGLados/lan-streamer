@@ -47,7 +47,7 @@ class Settings(BaseModel):
 class SubmitForm(BaseModel):
     link: str = Field(title="Link", description="TikTok, YouTube Shorts, Instagram Reels, …",
                       min_length=8, max_length=500)  # fmt: skip
-    name: str = Field(title="Your name", min_length=1, max_length=32)
+    name: str = Field("", title="Your name (optional)", max_length=32)
 
     @field_validator("link")
     @classmethod
@@ -222,12 +222,12 @@ class Plugin(InputPlugin[Settings]):
     async def viewer_items(self) -> list[ViewerItem]:
         items = []
         for entry in self.queue:
-            detail = f"by {entry['name']}"
+            parts = [f"by {entry['name']}"] if entry["name"] else []
             if entry["id"] == self.playing:
-                detail += " · on air"
+                parts.append("on air")
             elif entry["state"] == "loading":
-                detail += " · loading"
-            items.append(ViewerItem(entry["id"], entry["title"], detail))
+                parts.append("loading")
+            items.append(ViewerItem(entry["id"], entry["title"], " · ".join(parts)))
         return items
 
     async def remove_item(self, item_id: str) -> None:

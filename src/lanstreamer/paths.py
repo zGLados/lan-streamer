@@ -14,6 +14,12 @@ def app_root() -> Path | None:
     return root if (root / "mediamtx").is_dir() else None
 
 
+def setup_file() -> Path | None:
+    """setup.ini written by the installer (which built-in inputs are on), or None."""
+    root = app_root()
+    return root / "setup.ini" if root else None
+
+
 def mediamtx() -> Path | None:
     """The MediaMTX executable: bundled, $LANSTREAMER_MEDIAMTX, a repo checkout's .deps or PATH."""
     name = "mediamtx.exe" if sys.platform == "win32" else "mediamtx"

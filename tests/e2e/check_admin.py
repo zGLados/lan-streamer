@@ -1,9 +1,10 @@
 """End-to-end check of the admin page in headless Microsoft Edge (Playwright).
 
-Runs against a lan-streamer with the stored configuration (Test input A/B) whose
-admin password was set by check_api.py. Uses the page like a person would: log
-in, add an input through the generated form, watch it go on air, lower its
-priority in the table, press "Next input", delete the input, show a log.
+Runs against a lan-streamer with the stored configuration (Standby, Short-video
+submissions) whose admin password was set by check_api.py. Uses the page like a
+person would: log in, turn on the test-pattern plugin, add inputs through the
+generated form, watch one go on air, lower its priority in the table, press
+"Next input", block inputs, delete them, upload a plugin, show a log.
 
     python tests/e2e/check_admin.py http://localhost:8080 [--cdp <DevTools WebSocket URL>]
 
@@ -47,8 +48,26 @@ def main() -> int:
             page.fill("#auth-password", PASSWORD)
             page.click("#auth-submit")
             expect(page.locator("#app")).to_be_visible(timeout=10_000)
-            expect(page.locator("#inputs tr")).to_have_count(3, timeout=10_000)
-            step("logged in, three inputs listed (Test input A/B, Standby)")
+            expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
+            step("logged in, two inputs listed (Standby, Short-video submissions)")
+
+            toggle = page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]')
+            expect(toggle).not_to_be_checked(timeout=10_000)
+            expect(page.locator('#plugins tr[data-plugin="standby"] input[type="checkbox"]')).to_be_disabled()
+            toggle.check()
+            expect(page.locator("#toast")).to_contain_text("turned on", timeout=10_000)
+            expect(page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]')).to_be_checked()
+            step("turned on the test-pattern plugin (Standby cannot be turned off)")
+
+            for name, pattern in (("Bars", "smpte"), ("Ball", "ball")):  # two test inputs, same priority
+                page.click("#add-input")
+                page.select_option("#i-plugin", "test-pattern")
+                page.fill("#i-name", name)
+                page.fill("#i-priority", "10")
+                page.locator("#settings select").first.select_option(pattern)
+                page.click("#input-save")
+                expect(page.locator("#input-dialog")).not_to_be_visible(timeout=10_000)
+            expect(page.locator("#inputs tr")).to_have_count(4, timeout=10_000)
 
             page.click("#add-input")
             page.select_option("#i-plugin", "test-pattern")
@@ -73,17 +92,26 @@ def main() -> int:
             step(f"'Next input' switched from {before} to {page.locator('#s-current').inner_text()}")
 
             row.locator("button.danger").click()
-            expect(page.locator("#inputs tr")).to_have_count(3, timeout=10_000)
+            expect(page.locator("#inputs tr")).to_have_count(4, timeout=10_000)
             step("deleted the input")
 
             # Standby: with both test inputs blocked, the fallback goes on air
-            for input_id in ("test-a", "test-b"):
+            for input_id in ("bars", "ball"):
                 page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("block")
             expect(page.locator("#s-current")).to_have_text("Standby", timeout=20_000)
-            for input_id in ("test-a", "test-b"):
+            for input_id in ("bars", "ball"):
                 page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("none")
             expect(page.locator("#s-current")).not_to_have_text("Standby", timeout=20_000)
             step("blocked both test inputs: Standby went on air; unblocked again")
+            for input_id in ("bars", "ball"):
+                page.locator(f'#inputs tr[data-id="{input_id}"] button.danger').click()
+            expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
+            page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]').uncheck()
+            expect(page.locator("#toast")).to_contain_text("turned off", timeout=10_000)
+            page.click("#add-input")
+            assert page.locator('#i-plugin option[value="test-pattern"]').count() == 0, "a plugin that is off is offered"
+            page.keyboard.press("Escape")
+            step("deleted them and turned the plugin off: it is no longer offered for new inputs")
 
             # Upload the example plugin, use it, remove it
             archive = Path(tempfile.mkdtemp()) / "hello-plugin.zip"

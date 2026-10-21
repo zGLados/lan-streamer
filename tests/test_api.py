@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.store import Store
+from lanstreamer.plugins import choice
 from lanstreamer.plugins.registry import discover
 from lanstreamer.web.api import Backend, Changes, create_app
 
@@ -32,6 +33,7 @@ def setup(tmp_path):
         plugins_dir=tmp_path / "plugins",
         plugins_changed=plugins_changed,
     )
+    choice.set_enabled(store, "test-pattern", True)  # the tests add test-pattern inputs
     client = TestClient(create_app(backend))
     yield client, store, applied, skipped
     client.close()
@@ -116,7 +118,8 @@ def test_invalid_settings_and_unknown_plugin(setup):
     assert r.status_code == 422 and r.json()["detail"]["errors"][0]["field"] == "tone_hz"
     r = client.post("/api/admin/outputs/out1/inputs", json={"name": "x", "plugin": "nope"})
     assert r.status_code == 422 and "not installed" in r.json()["detail"]
-    r = client.patch("/api/admin/inputs/test-a", json={"settings": {"pattern": "rainbow"}})
+    client.post("/api/admin/outputs/out1/inputs", json={"name": "A", "plugin": "test-pattern"})
+    r = client.patch("/api/admin/inputs/a", json={"settings": {"pattern": "rainbow"}})
     assert r.status_code == 422
 
 
@@ -221,3 +224,20 @@ def test_tv_page(setup):
     for path in ("/tv", "/tv/out1"):
         r = client.get(path)
         assert r.status_code == 200 and "<video" in r.text and "lan-streamer TV" in r.text
+
+
+def test_plugins_can_be_turned_off(setup):
+    client = setup[0]
+    login(client)
+    plugins = {p["id"]: p for p in client.get("/api/admin/plugins").json()}
+    assert plugins["test-pattern"]["enabled"] and plugins["standby"]["always_on"]
+    assert client.patch("/api/admin/plugins/standby", json={"enabled": False}).status_code == 409
+    assert client.post("/api/admin/outputs/out1/inputs", json={"name": "T", "plugin": "test-pattern"}).status_code == 201
+    r = client.patch("/api/admin/plugins/test-pattern", json={"enabled": False})
+    assert r.status_code == 409 and "T" in r.json()["detail"]  # still in use
+    assert client.delete("/api/admin/inputs/t").status_code == 204
+    assert client.patch("/api/admin/plugins/test-pattern", json={"enabled": False}).status_code == 200
+    assert not {p["id"]: p for p in client.get("/api/admin/plugins").json()}["test-pattern"]["enabled"]
+    r = client.post("/api/admin/outputs/out1/inputs", json={"name": "T", "plugin": "test-pattern"})
+    assert r.status_code == 422 and "turned off" in r.json()["detail"]
+    assert client.patch("/api/admin/plugins/nope", json={"enabled": True}).status_code == 404

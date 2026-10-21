@@ -18,6 +18,7 @@ Admin (logged in):
     POST   /api/admin/next                       "Next input": the input on air hands over
     GET    /api/admin/plugins                    installed plugins + settings schema
     PUT    /api/admin/plugins                    upload a plugin (.zip as the request body)
+    PATCH  /api/admin/plugins/{id}               turn a plugin on or off ({"enabled": bool})
     DELETE /api/admin/plugins/{id}               remove an uploaded plugin (not in use)
     GET    /api/admin/outputs                    outputs and their inputs
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
@@ -59,7 +60,7 @@ from pydantic import BaseModel, Field
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig
 from lanstreamer.core.store import NotFound, Store
-from lanstreamer.plugins import install
+from lanstreamer.plugins import choice, install
 from lanstreamer.plugins.process import PluginError, PluginRejected, check_settings
 from lanstreamer.plugins.registry import BUILTIN
 from lanstreamer_sdk import Manifest
@@ -128,6 +129,10 @@ class OutputPatch(BaseModel):
     fps: Literal[30, 60] | None = None
     bitrate_kbps: int | None = Field(None, ge=0, le=50000)
     encoder: Literal["auto", "nvidia", "amd", "intel", "cpu"] | None = None
+
+
+class PluginSwitch(BaseModel):
+    enabled: bool
 
 
 class InputNew(BaseModel):
@@ -293,6 +298,7 @@ def create_app(backend: Backend) -> FastAPI:
 
     @app.get("/api/admin/plugins", dependencies=[Depends(logged_in)])
     async def plugins() -> list[dict[str, Any]]:
+        off = choice.disabled(backend.store)
         result = []
         for manifest in backend.plugins().values():
             key = (manifest.id, manifest.version)
@@ -306,8 +312,22 @@ def create_app(backend: Backend) -> FastAPI:
                 "id": manifest.id, "name": manifest.name, "version": manifest.version,
                 "description": manifest.description, "schema": schema_cache.get(key, {}),
                 "builtin": builtin, "requirements": manifest.requirements,
+                "enabled": manifest.id not in off, "always_on": manifest.id in choice.ALWAYS_ON,
             })  # fmt: skip
         return result
+
+    @app.patch("/api/admin/plugins/{plugin_id}", dependencies=[Depends(logged_in)])
+    async def switch_plugin(plugin_id: str, body: PluginSwitch) -> dict[str, Any]:
+        if plugin_id not in backend.plugins():
+            raise HTTPException(404, f"no plugin {plugin_id!r}")
+        try:
+            choice.set_enabled(backend.store, plugin_id, body.enabled)
+        except ValueError as exc:
+            raise HTTPException(409, "Standby is always on – every output needs it") from exc
+        except choice.InUse as exc:
+            raise HTTPException(409, f"still used by: {exc} – delete these inputs first") from exc
+        backend.changes.notify()
+        return {"id": plugin_id, "enabled": body.enabled}
 
     @app.put("/api/admin/plugins", status_code=201, dependencies=[Depends(logged_in)])
     async def upload_plugin(request: Request) -> dict[str, Any]:
@@ -365,6 +385,8 @@ def create_app(backend: Backend) -> FastAPI:
     @app.post("/api/admin/outputs/{output_id}/inputs", status_code=201,
               dependencies=[Depends(logged_in)])  # fmt: skip
     async def add_input(output_id: str, body: InputNew) -> dict[str, Any]:
+        if body.plugin in choice.disabled(backend.store):
+            raise HTTPException(422, f"the plugin {body.plugin!r} is turned off (Plugins on the admin page)")
         settings = await validated(body.plugin, body.settings)
         cfg = InputConfig(id="", **{**body.model_dump(), "settings": settings})
         try:

@@ -40,7 +40,7 @@ def test_queue_limits_and_playback(tmp_path, monkeypatch):
 
         msg = await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/1", "name": "Anna"}, "dev-a", "10.0.0.2")
         assert msg == "Added – position 1 in the queue."
-        await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/2", "name": "Anna"}, "dev-a", "10.0.0.2")
+        await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/2"}, "dev-a", "10.0.0.2")  # no name
         with pytest.raises(PluginRejected, match="already have 2 videos waiting"):
             await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/3", "name": "Anna"}, "dev-a", "10.0.0.2")
         with pytest.raises(PluginRejected, match="already in the queue"):
@@ -49,7 +49,7 @@ def test_queue_limits_and_playback(tmp_path, monkeypatch):
             await proc.viewer_submit({"link": "not a link at all", "name": "Ben"}, "dev-b", "10.0.0.3")
 
         items = await proc.viewer_items()
-        assert [(i["text"], i["detail"].split(" ·")[0]) for i in items] == [("Video 1", "by Anna"), ("Video 2", "by Anna")]
+        assert [(i["text"], i["detail"].split(" ·")[0]) for i in items] == [("Video 1", "by Anna"), ("Video 2", "")]
         await wait_until(lambda: proc.call("can_release"))  # nothing on air yet: releasable
 
         source = await proc.get_source()

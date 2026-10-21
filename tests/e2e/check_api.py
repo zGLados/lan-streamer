@@ -1,8 +1,9 @@
 """End-to-end check of the web API against a running lan-streamer (stored configuration).
 
-Sets the admin password, adds an input with a high priority and waits until it
-is on air, lowers its priority, deletes it, and reads the live status over the
-WebSocket and a log over the API.
+Sets the admin password, turns on the test-pattern plugin (off after
+installing), adds two inputs and checks that the higher priority goes on air
+and hands over when lowered, deletes them, turns the plugin off again, and
+reads the live status over the WebSocket and a log over the API.
 
     python tests/e2e/check_api.py http://localhost:8080
 """
@@ -51,7 +52,20 @@ def main() -> int:
     plugins = {p["id"]: p for p in api.get("/api/admin/plugins").json()}
     assert "pattern" in plugins["test-pattern"]["schema"]["properties"], plugins
     print(f"  ok: plugins {sorted(plugins)}")
+    inputs = [i["plugin"] for i in api.get("/api/admin/outputs").json()[0]["inputs"]]
+    assert sorted(inputs) == ["standby", "submissions"], inputs
+    print("  ok: a fresh setup has Standby and Short-video submissions")
 
+    assert not plugins["test-pattern"]["enabled"], "test pattern should be off after installing"
+    r = api.post("/api/admin/outputs/out1/inputs", json={"name": "Bars", "plugin": "test-pattern"})
+    assert r.status_code == 422 and "turned off" in r.text, r.text
+    assert api.patch("/api/admin/plugins/standby", json={"enabled": False}).status_code == 409
+    assert api.patch("/api/admin/plugins/test-pattern", json={"enabled": True}).status_code == 200
+    print("  ok: test pattern was off (no new inputs), turned on; Standby cannot be turned off")
+
+    r = api.post("/api/admin/outputs/out1/inputs", json={"name": "Bars", "plugin": "test-pattern", "priority": 10})
+    assert r.status_code == 201, r.text
+    bars = r.json()["id"]
     r = api.post("/api/admin/outputs/out1/inputs", json={
         "name": "API input", "plugin": "test-pattern", "settings": {"pattern": "snow"}, "priority": 50,
     })  # fmt: skip
@@ -66,6 +80,10 @@ def main() -> int:
     wait_for("the input is gone", lambda: all(
         i["id"] != input_id for i in api.get("/api/status").json()["inputs"]
     ))  # fmt: skip
+    assert api.patch("/api/admin/plugins/test-pattern", json={"enabled": False}).status_code == 409  # Bars
+    assert api.delete(f"/api/admin/inputs/{bars}").status_code == 204
+    assert api.patch("/api/admin/plugins/test-pattern", json={"enabled": False}).status_code == 200
+    print("  ok: test pattern turned off again (refused while an input used it)")
 
     with connect(base.replace("http", "ws", 1) + "/api/ws") as ws:
         status = json.loads(ws.recv(timeout=10))

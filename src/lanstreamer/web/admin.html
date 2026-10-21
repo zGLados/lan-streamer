@@ -123,7 +123,7 @@
     <h2>Plugins</h2>
     <p class="muted" style="margin-top:0">Plugins provide the kinds of input. Upload a plugin as a .zip (see <code>examples/hello-plugin</code>); its Python requirements are downloaded during the upload. A plugin is code that runs on this PC – only upload plugins you trust.</p>
     <table>
-      <thead><tr><th>Plugin</th><th>Version</th><th>Origin</th><th></th></tr></thead>
+      <thead><tr><th>Plugin</th><th>Version</th><th>Origin</th><th>On</th><th></th></tr></thead>
       <tbody id="plugins"></tbody>
     </table>
     <div class="row" style="margin-top:12px">
@@ -471,8 +471,9 @@ function openDialog(input = null) {
   $("input-title").textContent = input ? `Edit ${input.name}` : "Add input";
   $("plugin-label").hidden = Boolean(input);
   const select = $("i-plugin");
-  select.replaceChildren(...Object.values(plugins).map((p) => el("option", { value: p.id, textContent: `${p.name} (${p.version})` })));
-  select.value = input ? input.plugin : (select.value || Object.keys(plugins)[0]);
+  const offered = Object.values(plugins).filter((p) => p.enabled || (input && p.id === input.plugin));
+  select.replaceChildren(...offered.map((p) => el("option", { value: p.id, textContent: `${p.name} (${p.version})` })));
+  select.value = input ? input.plugin : (offered.some((p) => p.id === select.value) ? select.value : offered[0]?.id);
   $("i-name").value = input ? input.name : plugins[select.value]?.name || "";
   $("i-priority").value = input ? input.priority : 10;
   $("i-min").value = input ? input.min_duration_s : 0;
@@ -538,10 +539,20 @@ async function loadPlugins() {
       try { await api(`/api/admin/plugins/${encodeURIComponent(p.id)}`, { method: "DELETE" }); toast(`Removed ${p.name}`); await loadPlugins(); }
       catch (err) { toast(err.message, true); }
     };
+    const toggle = el("input", { type: "checkbox", checked: p.enabled, disabled: p.always_on,
+      title: p.always_on ? "always on – every output needs it" : "offered for new inputs" });
+    toggle.onchange = async () => {
+      try {
+        await api(`/api/admin/plugins/${encodeURIComponent(p.id)}`, { method: "PATCH", body: { enabled: toggle.checked } });
+        await loadPlugins();
+        toast(`${p.name} turned ${toggle.checked ? "on" : "off"}`);
+      } catch (err) { toast(err.message, true); await loadPlugins(); }
+    };
     const row = el("tr", {},
       el("td", { className: "name" }, el("b", { textContent: p.name }), el("small", { textContent: `${p.id} – ${p.description || ""}` })),
       el("td", { textContent: p.version }),
       el("td", {}, el("span", { className: "badge", textContent: p.builtin ? "built-in" : "uploaded" })),
+      el("td", {}, toggle),
       el("td", {}, el("div", { className: "actions" }, remove)));
     row.dataset.plugin = p.id;
     body.append(row);

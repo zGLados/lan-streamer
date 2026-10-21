@@ -14,9 +14,9 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps.
 2. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
-3. It switches between two test inputs every 20 s; without an active input it shows a standby picture. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
+3. It shows the standby picture until a viewer submits a video. The installer asks which built-in inputs to turn on (short-video submissions and playlist by default; the test pattern is for tests); this can be changed later on the admin page. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
 
-**Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link – once the admin has added the input "Short-video submissions".
+**Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name.
 
 **TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 

@@ -13,11 +13,16 @@ def store(tmp_path):
     s.close()
 
 
-def test_first_start_seeds_one_output_with_two_test_inputs_and_standby(store):
+def two_inputs(store):
+    store.add_input("out1", InputConfig("test-a", "Test input A", "test-pattern"))
+    store.add_input("out1", InputConfig("test-b", "Test input B", "test-pattern"))
+
+
+def test_first_start_seeds_one_output_with_standby(store):
     [out] = store.outputs()
     assert (out.id, out.fps) == ("out1", 60)
-    assert [i.name for i in out.inputs] == ["Test input A", "Test input B", "Standby"]
-    standby = out.inputs[2]
+    assert [i.name for i in out.inputs] == ["Standby"]
+    standby = out.inputs[0]
     assert (standby.plugin, standby.fallback, standby.priority) == ("standby", True, 0)
 
 
@@ -37,12 +42,14 @@ def test_reopening_keeps_the_data(tmp_path):
 
 
 def test_update_input_fields(store):
+    two_inputs(store)
     store.update_input("test-a", priority=20, override="force", fallback=True, settings={"pattern": "ball"})
-    a = store.output("out1").inputs[0]
+    a = store.output("out1").inputs[1]
     assert (a.priority, a.override, a.fallback, a.settings) == (20, "force", True, {"pattern": "ball"})
 
 
 def test_unknown_fields_and_ids_are_rejected(store):
+    two_inputs(store)
     with pytest.raises(ValueError, match="cannot change"):
         store.update_input("test-a", output_id="other")
     with pytest.raises(NotFound):
@@ -60,6 +67,7 @@ def test_delete_output_removes_its_inputs(store):
 
 
 def test_reorder_inputs(store):
+    two_inputs(store)
     store.reorder_inputs("out1", ["test-b", "test-a", "standby"])
     assert [i.id for i in store.output("out1").inputs] == ["test-b", "test-a", "standby"]
 
@@ -84,3 +92,17 @@ def test_upgrade_from_schema_1_keeps_the_data(tmp_path):
     store.set_setting("admin_password", "x")
     assert store.get_setting("admin_password") == "x"
     store.close()
+
+
+def test_upgrade_removes_the_old_test_inputs(tmp_path):
+    db = sqlite3.connect(tmp_path / "old.db")
+    db.executescript(f"BEGIN; {MIGRATIONS[0]}; {MIGRATIONS[1]}; PRAGMA user_version = 2; COMMIT;")
+    db.execute("INSERT INTO outputs VALUES ('out1', 'Output 1', 1920, 1080, 60, 8000, 'auto', 0)")
+    for n, (input_id, plugin) in enumerate([("test-a", "test-pattern"), ("test-b", "test-pattern"),
+                                            ("mine", "test-pattern"), ("test-a2", "playlist")]):  # fmt: skip
+        db.execute("INSERT INTO inputs VALUES (?, 'out1', ?, ?, '{}', 10, 0, 0, NULL, 'none', ?)",
+                   (input_id, input_id, plugin, n))  # fmt: skip
+    db.commit()
+    db.close()
+    ids = [i.id for i in Store(tmp_path / "old.db").output("out1").inputs]
+    assert ids == ["mine", "test-a2", "standby-out1"]

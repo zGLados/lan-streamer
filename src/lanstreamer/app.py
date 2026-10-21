@@ -33,6 +33,7 @@ from lanstreamer.core.simworker import SimulatedWorker
 from lanstreamer.core.store import Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
+from lanstreamer.plugins import choice
 from lanstreamer.plugins.registry import discover
 from lanstreamer.web.api import Backend, Changes, create_app
 
@@ -321,6 +322,7 @@ def run(args: argparse.Namespace) -> int:
     )
 
     store = Store(paths.data_dir() / "lanstreamer.db")
+    choice.on_start(store, paths.setup_file())
     if args.source:  # test run, nothing is stored
         output = demo_output(60, args.switch_interval, args.source)
     else:
