@@ -27,6 +27,8 @@ def main() -> int:
         browser = p.chromium.launch(channel="msedge")
         page = browser.new_page(viewport={"width": 1280, "height": 1000})
         page.on("console", lambda msg: print(f"  [page] {msg.text}") if msg.type == "error" else None)
+        errors: list[str] = []
+        page.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [page error] {exc}")))
         page.on("dialog", lambda dialog: dialog.accept())  # confirm() on delete
         try:
             page.goto(f"{base}/admin")
@@ -65,6 +67,8 @@ def main() -> int:
             page.click("#log-refresh")
             expect(page.locator("#log")).to_contain_text("Input removed: UI input", timeout=10_000)
             step("log shown")
+            if errors:
+                raise AssertionError(f"JavaScript errors on the page: {errors}")
             page.screenshot(path="admin.png", full_page=True)
         except Exception:
             page.screenshot(path="admin.png", full_page=True)

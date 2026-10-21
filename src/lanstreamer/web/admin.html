@@ -209,7 +209,9 @@ function toast(message, bad = false) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 4000);
 }
 function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
+  const { dataset, ...rest } = props;  // dataset is read-only: copy its entries instead
+  const node = Object.assign(document.createElement(tag), rest);
+  if (dataset) Object.assign(node.dataset, dataset);
   for (const child of children) node.append(child);
   return node;
 }

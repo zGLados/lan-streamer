@@ -45,6 +45,7 @@ def main() -> int:
         )
         page = browser.new_page()
         page.on("console", lambda msg: print(f"  [page] {msg.text}"))
+        page.on("pageerror", lambda exc: print(f"  [page error] {exc}"))
         deadline = time.monotonic() + args.timeout
         loaded = False
         while time.monotonic() < deadline:
