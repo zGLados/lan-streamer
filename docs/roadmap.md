@@ -17,7 +17,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Test NVENC on the NVIDIA test PC (`nvd3d11h264enc` auto-selected, 2026-10-20)
 - [ ] Measure the CPU/GPU load of one and of two outputs on the target machine
 
-## M2 – Core
+## M2 – Core (done, confirmed on the test PC 2026-10-21)
 
 - [x] Plugin SDK v1 (`lanstreamer_sdk`: `InputPlugin`, sources, context, manifest)
 - [x] Plugin host process + JSON lines over stdio
