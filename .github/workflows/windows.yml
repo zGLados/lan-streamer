@@ -154,6 +154,7 @@ jobs:
         run: |
           $dir = "$env:ProgramFiles\lan-streamer\python"
           & "$dir\python.exe" -c "import pydantic, pystray, PIL, fastapi, uvicorn, websockets; print('dependencies ok')"
+          & "$dir\python.exe" -m pip --version
           $p = Start-Process -PassThru -FilePath "$dir\pythonw.exe" `
             -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '90'
           python tests/e2e/check_api.py http://localhost:8080

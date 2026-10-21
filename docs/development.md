@@ -12,6 +12,10 @@
 
 Run the local tests before pushing; push (and so build) only what needs GStreamer to be checked.
 
+## Writing a plugin
+
+Start from `examples/hello-plugin/` (`plugin.toml` + one Python file). Zip the folder and upload it in the admin page. The API is described in `docs/architecture.md` (Plugin system) and in `src/lanstreamer_sdk/`.
+
 ## Simulation mode
 
 `python -m lanstreamer --simulate` – no GStreamer, no MediaMTX. Useful to work on the web pages and the scheduler; the player shows no video.

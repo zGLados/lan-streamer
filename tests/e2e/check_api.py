@@ -9,9 +9,11 @@ WebSocket and a log over the API.
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import time
+import zipfile
 
 import httpx
 from websockets.sync.client import connect
@@ -69,6 +71,20 @@ def main() -> int:
         status = json.loads(ws.recv(timeout=10))
         assert status["state"] == "running", status
     print("  ok: live status over the WebSocket")
+
+    # A plugin with a real requirement: pip of the installed app downloads it into the plugin
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("plugin.toml", 'id = "deps-check"\nname = "Deps check"\nversion = "1.0.0"\n'
+                   'api_version = 1\nentry = "deps_check:Plugin"\nrequirements = ["six==1.16.0"]\n')
+        z.writestr("deps_check.py", "import six\nfrom lanstreamer_sdk import InputPlugin, TestSource\n"
+                   "class Plugin(InputPlugin):\n    async def get_source(self):\n"
+                   "        return TestSource(pattern=six.text_type('ball'))\n")  # fmt: skip
+    r = api.put("/api/admin/plugins", content=buffer.getvalue(), headers={"Content-Type": "application/zip"},
+                timeout=300)  # fmt: skip
+    assert r.status_code == 201, r.text
+    assert api.delete("/api/admin/plugins/deps-check").status_code == 204
+    print("  ok: plugin with a requirement installed (pip) and removed")
 
     log = api.get("/api/admin/logs/lan-streamer.log").text
     assert "Input added: API input" in log and "Input removed: API input" in log, log[-2000:]

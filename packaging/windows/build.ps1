@@ -48,6 +48,9 @@ if ($LASTEXITCODE -ne 0) { throw 'pip install of PyGObject failed' }
 # With its dependencies (pydantic, pystray, Pillow) as wheels for this Python.
 python -m pip install --quiet --target $Site $Repo
 if ($LASTEXITCODE -ne 0) { throw 'pip install of lan-streamer failed' }
+# pip: installs the requirements of uploaded plugins (plugins/install.py)
+python -m pip install --quiet --target $Site pip
+if ($LASTEXITCODE -ne 0) { throw 'pip install of pip failed' }
 # Build version shown on the page, in the logs and in the self-test
 Set-Content -Path (Join-Path $Site 'lanstreamer\BUILD') -Value $Version -NoNewline
 

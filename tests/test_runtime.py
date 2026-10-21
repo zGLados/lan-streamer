@@ -184,3 +184,21 @@ def test_a_playlist_on_its_own_plays_its_next_item_after_one_ended(tmp_path):
     _, worker = asyncio.run(run(cfg, tmp_path, 0.1, during=end_item))
     assert worker.plays[:2] == ["list", "list"]
     assert [s["uri"].rsplit("/", 1)[-1] for s in worker.sources[:2]] == ["1.mp4", "2.mp4"]
+
+
+def test_a_replaced_input_leaves_no_process_behind(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a")])
+
+    async def change(runtime, worker):
+        await asyncio.sleep(0.3)
+        old_input = runtime.inputs["a"]
+        old = old_input.proc
+        new = pattern("a")
+        new.settings = {"pattern": "ball"}
+        await runtime.apply(OutputConfig(inputs=[new]))
+        await asyncio.sleep(rt.RESTART_BACKOFF_S[0] + 0.5)  # long enough for a wrong restart
+        assert old_input.proc is old and not old.running  # not restarted as a "crash"
+        assert runtime.inputs["a"].proc is not old and runtime.inputs["a"].proc.running
+        assert runtime.inputs["a"].restarts == 0 and not runtime.inputs["a"].error
+
+    asyncio.run(run(cfg, tmp_path, 0.1, during=change))

@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: M1 (prototype) done; M2 (core) in progress – the output pipeline, scheduler, plugin system, core runtime and SQLite configuration work, the web API and admin area are next. Details in [roadmap.md](roadmap.md).
+Status: M1 (prototype) and M2 (core) done – output pipeline, scheduler, plugin system with upload, core runtime, SQLite configuration, web API and admin page work. Next: M3, the first real sources (Twitch, TikTok). Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -134,7 +134,7 @@ entry = "tiktok_queue:Plugin"
 requirements = ["yt-dlp>=2026.1"]
 ```
 
-On upload the core checks `api_version` and rejects incompatible plugins with a clear message (F-PLG-04). It then installs the requirements into a virtualenv for that plugin, so plugins cannot break each other's dependencies.
+Upload (admin page → Plugins, `PUT /api/admin/plugins`, `plugins/install.py`): the zip is checked (size, no paths outside the plugin folder; `plugin.toml` at the top or in one folder) and unpacked into a staging folder; the manifest is checked including `api_version` – incompatible plugins are rejected with a clear message (F-PLG-04); the `requirements` are installed with pip into the plugin's own `.deps` folder (internet needed only then; the installer ships pip), so plugins cannot break each other's dependencies; the plugin is imported once in a plugin host process; only then it replaces an older version, and running inputs that use it restart with the new code. Uploaded plugins live in `<data>/plugins/<id>`, their instance data in `<data>/plugin-data/<instance>`. Built-in plugin ids cannot be taken; a plugin still used by an input cannot be removed. A template is in `examples/hello-plugin/`.
 
 Plugin authors depend only on the small SDK package `lanstreamer_sdk` (today in `src/lanstreamer_sdk/`, shipped with the app; to be published separately in M6). It holds the base class, the source types, the context object and the manifest check. The plugin API, version 1:
 
@@ -155,7 +155,12 @@ class InputPlugin[S: BaseModel]:
     def routes(self) -> APIRouter | None: ...                   # own UI (F-IN-04) – planned
 ```
 
-Built-in plugins (`src/lanstreamer/plugins/builtin/`): **test-pattern** (always active) and **playlist** (files or URLs one after another, hands over when an item has ended; the usual fallback).
+Sources: `TestSource`, `UriSource`, `FileSource`, `ImageSource` (PNG/JPEG with silence). `ctx.next_source()` asks for `get_source()` again while the input stays on air (a playlist's next item).
+
+Built-in plugins (`src/lanstreamer/plugins/builtin/`):
+- **standby** – a still picture (the lan-streamer slate or your own), always active. Every output gets a "Standby" input as fallback (priority 0) from the start (F-SCH-02).
+- **playlist** – files, folders (their media files sorted by name) or URLs one after another; pictures are shown for `image_duration_s`; after an item it hands over to an input of the same priority, or plays its next item itself.
+- **test-pattern** – a generated test picture with a tone, always active.
 
 - `PluginContext` gives each instance a persistent key-value store, a logger, its own data folder and a way to publish metadata such as title, channel and thumbnail (F-IN-06, F-PLG-06). An HTTP client follows with the first network plugins.
 - `on_playback` closes the loop for queue-style inputs: the TikTok plugin learns that a clip has ended, pops its queue and can release.

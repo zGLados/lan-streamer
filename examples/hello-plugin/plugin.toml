@@ -1,0 +1,10 @@
+# Example input plugin – a template for your own. Zip this folder and upload it
+# in the admin page (Plugins → Upload).
+id = "hello"
+name = "Hello (example)"
+version = "1.0.0"
+api_version = 1
+entry = "hello:Plugin"
+description = "Example plugin: a colour test picture that is active during the first seconds of every minute."
+# Python packages your plugin needs, installed with pip at upload:
+requirements = []

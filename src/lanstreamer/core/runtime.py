@@ -44,6 +44,7 @@ class InputRuntime:
     raw_active: bool = False
     reported: bool = False  # sent its first activity report
     wants_next: bool = False  # the plugin asked for its next item (ctx.next_source())
+    retired: bool = False  # replaced or removed: its process's events are ignored
     debounce: Debounce = field(default_factory=lambda: Debounce(ACTIVITY_HOLD_S))
     releasable: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -128,8 +129,7 @@ class OutputRuntime:
             log.info("Input removed: %s", inp.cfg.name)
             if self.pending and self.pending[1] == input_id:
                 self.pending = None
-            if inp.proc:
-                await inp.proc.stop()
+            await self._retire(inp)
         updated: dict[str, InputRuntime] = {}
         for icfg in cfg.inputs:
             inp = self.inputs.get(icfg.id)
@@ -139,8 +139,7 @@ class OutputRuntime:
                 self._spawn(self._start_plugin(inp))
             elif (inp.cfg.plugin, inp.cfg.settings) != (icfg.plugin, icfg.settings):
                 log.info("Input changed, restarting: %s", icfg.name)
-                if inp.proc:
-                    await inp.proc.stop()
+                await self._retire(inp)
                 inp = InputRuntime(icfg, self.plugins.get(icfg.plugin))
                 self._spawn(self._start_plugin(inp))
             else:
@@ -150,6 +149,25 @@ class OutputRuntime:
         self.cfg = cfg
         self.on_change()
 
+    async def reload_plugin(self, plugin_id: str, plugins: dict[str, Path]) -> None:
+        """A plugin was uploaded again or removed: restart the inputs that use it."""
+        self.plugins = plugins
+        for input_id, inp in list(self.inputs.items()):
+            if inp.cfg.plugin != plugin_id:
+                continue
+            log.info("Plugin %s changed, restarting input %s", plugin_id, inp.cfg.name)
+            await self._retire(inp)
+            fresh = InputRuntime(inp.cfg, plugins.get(plugin_id))
+            self.inputs[input_id] = fresh
+            self._spawn(self._start_plugin(fresh))
+        self.on_change()
+
+    async def _retire(self, inp: InputRuntime) -> None:
+        """Stops an input's process for good (its "exited" must not restart it)."""
+        inp.retired = True
+        if inp.proc:
+            await inp.proc.stop()
+
     async def _start_plugin(self, inp: InputRuntime) -> None:
         if inp.plugin_dir is None:
             inp.error = f"plugin {inp.cfg.plugin!r} is not installed"
@@ -157,7 +175,7 @@ class OutputRuntime:
             return
         inp.proc = PluginProcess(
             inp.cfg.id, inp.plugin_dir, self.data_dir / "plugin-data" / inp.cfg.id,
-            inp.cfg.settings, self._on_plugin_event,
+            inp.cfg.settings, lambda _id, event: self._on_plugin_event(inp, event),
         )  # fmt: skip
         try:
             await inp.proc.start()
@@ -173,7 +191,7 @@ class OutputRuntime:
 
         async def restart() -> None:
             await asyncio.sleep(delay)
-            if not self._stopped:
+            if not self._stopped and not inp.retired and self.inputs.get(inp.cfg.id) is inp:
                 await self._start_plugin(inp)
 
         self._spawn(restart())
@@ -310,10 +328,9 @@ class OutputRuntime:
         if inp.proc is not None:
             self._spawn(inp.proc.playback(kind, detail))
 
-    def _on_plugin_event(self, instance_id: str, event: dict[str, Any]) -> None:
-        inp = self.inputs.get(instance_id)
-        if inp is None:
-            return
+    def _on_plugin_event(self, inp: InputRuntime, event: dict[str, Any]) -> None:
+        if inp.retired or self.inputs.get(inp.cfg.id) is not inp:
+            return  # an old process of a replaced or removed input
         kind = event.get("event")
         if kind == "active":
             inp.raw_active = bool(event["value"])

@@ -14,6 +14,8 @@ Admin login (one password, session cookie):
 Admin (logged in):
     POST   /api/admin/next                       "Next input": the input on air hands over
     GET    /api/admin/plugins                    installed plugins + settings schema
+    PUT    /api/admin/plugins                    upload a plugin (.zip as the request body)
+    DELETE /api/admin/plugins/{id}               remove an uploaded plugin (not in use)
     GET    /api/admin/outputs                    outputs and their inputs
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
     POST   /api/admin/outputs/{id}/inputs        add an input
@@ -51,7 +53,9 @@ from pydantic import BaseModel, Field
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig
 from lanstreamer.core.store import NotFound, Store
+from lanstreamer.plugins import install
 from lanstreamer.plugins.process import PluginError, check_settings
+from lanstreamer.plugins.registry import BUILTIN
 from lanstreamer_sdk import Manifest
 
 COOKIE = "lanstreamer_session"
@@ -93,6 +97,8 @@ class Backend:
     apply: Callable[[str], Awaitable[None]]  # output id → running output takes over its config
     logs: Path
     changes: Changes
+    plugins_dir: Path | None = None  # where uploaded plugins go
+    plugins_changed: Callable[[str], Awaitable[None]] | None = None  # plugin id → restart its inputs
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -256,11 +262,52 @@ def create_app(backend: Backend) -> FastAPI:
                     schema_cache[key] = (await check_settings(manifest.path))["schema"]
                 except PluginError as exc:
                     schema_cache[key] = {"error": str(exc)}
+            builtin = manifest.path is not None and manifest.path.parent == BUILTIN
             result.append({
                 "id": manifest.id, "name": manifest.name, "version": manifest.version,
                 "description": manifest.description, "schema": schema_cache.get(key, {}),
+                "builtin": builtin, "requirements": manifest.requirements,
             })  # fmt: skip
         return result
+
+    @app.put("/api/admin/plugins", status_code=201, dependencies=[Depends(logged_in)])
+    async def upload_plugin(request: Request) -> dict[str, Any]:
+        if backend.plugins_dir is None:
+            raise HTTPException(501, "plugin upload is not available")
+        size = int(request.headers.get("content-length") or 0)
+        if size > install.MAX_ZIP_BYTES:
+            raise HTTPException(413, f"the zip is larger than {install.MAX_ZIP_BYTES // 2**20} MB")
+        data = await request.body()
+        builtin_ids = {m.id for m in backend.plugins().values() if m.path and m.path.parent == BUILTIN}
+        try:
+            manifest = await install.install_zip(data, backend.plugins_dir, builtin_ids)
+        except install.InstallError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        for key in [k for k in schema_cache if k[0] == manifest.id]:
+            del schema_cache[key]
+        if backend.plugins_changed:
+            await backend.plugins_changed(manifest.id)
+        backend.changes.notify()
+        return {"id": manifest.id, "name": manifest.name, "version": manifest.version}
+
+    @app.delete("/api/admin/plugins/{plugin_id}", status_code=204, dependencies=[Depends(logged_in)])
+    async def remove_plugin(plugin_id: str) -> None:
+        manifest = backend.plugins().get(plugin_id)
+        if manifest is None or backend.plugins_dir is None:
+            raise HTTPException(404, f"no plugin {plugin_id!r}")
+        if manifest.path is not None and manifest.path.parent == BUILTIN:
+            raise HTTPException(409, "built-in plugins cannot be removed")
+        users = [i.name for o in backend.store.outputs() for i in o.inputs if i.plugin == plugin_id]
+        if users:
+            raise HTTPException(409, f"still used by: {', '.join(users)} – delete these inputs first")
+        try:
+            install.remove(backend.plugins_dir, plugin_id)
+        except install.InstallError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        for key in [k for k in schema_cache if k[0] == plugin_id]:
+            del schema_cache[key]
+        if backend.plugins_changed:
+            await backend.plugins_changed(plugin_id)
 
     @app.get("/api/admin/outputs", dependencies=[Depends(logged_in)])
     def outputs() -> list[dict[str, Any]]:

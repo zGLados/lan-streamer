@@ -17,15 +17,20 @@ def setup(tmp_path):
     async def apply(output_id):
         applied.append(output_id)
 
+    async def plugins_changed(plugin_id):
+        applied.append(f"plugin:{plugin_id}")
+
     backend = Backend(
         status=lambda: {"state": "running", "current": "Test input A"},
         skip=lambda: skipped.append(1),
         store=store,
         auth=Auth(store),
-        plugins=discover,
+        plugins=lambda: discover(tmp_path / "plugins"),
         apply=apply,
         logs=tmp_path / "logs",
         changes=Changes(),
+        plugins_dir=tmp_path / "plugins",
+        plugins_changed=plugins_changed,
     )
     client = TestClient(create_app(backend))
     yield client, store, applied, skipped
@@ -130,3 +135,37 @@ def test_logs(setup):
     assert client.get("/api/admin/logs/lan-streamer.log?lines=2").text == "two\nthree"
     assert client.get("/api/admin/logs/output.log").text == ""
     assert client.get("/api/admin/logs/secret.txt").status_code == 404
+
+
+def test_upload_use_and_remove_a_plugin(setup):
+    import io
+    import zipfile
+    from pathlib import Path
+
+    client, _, applied, _ = setup
+    login(client)
+    example = Path(__file__).resolve().parents[1] / "examples" / "hello-plugin"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        for f in example.iterdir():
+            z.write(f, f.name)
+
+    r = client.put("/api/admin/plugins", content=buffer.getvalue(), headers={"Content-Type": "application/zip"})
+    assert r.status_code == 201, r.text
+    assert r.json() == {"id": "hello", "name": "Hello (example)", "version": "1.0.0"}
+    assert "plugin:hello" in applied
+    plugins = {p["id"]: p for p in client.get("/api/admin/plugins").json()}
+    assert plugins["hello"]["builtin"] is False and plugins["playlist"]["builtin"] is True
+    assert "active_seconds" in plugins["hello"]["schema"]["properties"]
+
+    r = client.post("/api/admin/outputs/out1/inputs", json={"name": "Hello", "plugin": "hello"})
+    assert r.status_code == 201
+    r = client.delete("/api/admin/plugins/hello")
+    assert r.status_code == 409 and "Hello" in r.json()["detail"]
+    client.delete("/api/admin/inputs/hello")
+    assert client.delete("/api/admin/plugins/hello").status_code == 204
+    assert "hello" not in {p["id"] for p in client.get("/api/admin/plugins").json()}
+
+    assert client.delete("/api/admin/plugins/playlist").status_code == 409
+    r = client.put("/api/admin/plugins", content=b"not a zip")
+    assert r.status_code == 422 and "not a zip" in r.json()["detail"]

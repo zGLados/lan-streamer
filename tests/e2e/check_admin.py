@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
+import zipfile
+from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
 PASSWORD = "ci-password-123"  # set by check_api.py
+EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "hello-plugin"
 
 
 def step(text: str) -> None:
@@ -71,6 +75,37 @@ def main() -> int:
             row.locator("button.danger").click()
             expect(page.locator("#inputs tr")).to_have_count(3, timeout=10_000)
             step("deleted the input")
+
+            # Standby: with both test inputs blocked, the fallback goes on air
+            for input_id in ("test-a", "test-b"):
+                page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("block")
+            expect(page.locator("#s-current")).to_have_text("Standby", timeout=20_000)
+            for input_id in ("test-a", "test-b"):
+                page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("none")
+            expect(page.locator("#s-current")).not_to_have_text("Standby", timeout=20_000)
+            step("blocked both test inputs: Standby went on air; unblocked again")
+
+            # Upload the example plugin, use it, remove it
+            archive = Path(tempfile.mkdtemp()) / "hello-plugin.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                for file in EXAMPLE.iterdir():
+                    z.write(file, file.name)
+            page.set_input_files("#plugin-file", str(archive))
+            page.click("#plugin-upload")
+            expect(page.locator('#plugins tr[data-plugin="hello"]')).to_be_visible(timeout=60_000)
+            step("uploaded the example plugin")
+            page.click("#add-input")
+            page.select_option("#i-plugin", "hello")
+            page.fill("#i-name", "Hello")
+            page.fill("#i-priority", "90")
+            page.click("#input-save")
+            expect(page.locator("#s-current")).to_have_text("Hello", timeout=30_000)
+            step("an input from the uploaded plugin went on air")
+            page.locator('#inputs tr[data-id="hello"] button.danger').click()
+            expect(page.locator('#inputs tr[data-id="hello"]')).to_have_count(0, timeout=10_000)
+            page.locator('#plugins tr[data-plugin="hello"] button.danger').click()
+            expect(page.locator('#plugins tr[data-plugin="hello"]')).to_have_count(0, timeout=10_000)
+            step("deleted the input and removed the plugin")
 
             page.click("#log-refresh")
             expect(page.locator("#log")).to_contain_text("Input removed: UI input", timeout=10_000)

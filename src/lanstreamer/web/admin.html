@@ -120,6 +120,20 @@
   </section>
 
   <section>
+    <h2>Plugins</h2>
+    <p class="muted" style="margin-top:0">Plugins provide the kinds of input. Upload a plugin as a .zip (see <code>examples/hello-plugin</code>); its Python requirements are downloaded during the upload. A plugin is code that runs on this PC – only upload plugins you trust.</p>
+    <table>
+      <thead><tr><th>Plugin</th><th>Version</th><th>Origin</th><th></th></tr></thead>
+      <tbody id="plugins"></tbody>
+    </table>
+    <div class="row" style="margin-top:12px">
+      <label>Upload a plugin (.zip) <input type="file" id="plugin-file" accept=".zip,application/zip"></label>
+      <button class="primary" id="plugin-upload">Upload</button>
+      <span class="muted" id="plugin-status"></span>
+    </div>
+  </section>
+
+  <section>
     <h2>Output</h2>
     <form id="output-form" class="row">
       <label>Name <input id="o-name" required></label>
@@ -250,8 +264,7 @@ async function start() {
   const session = await api("/api/admin/session");
   if (!session.logged_in) return showAuth(session.password_set);
   $("auth").hidden = true; $("app").hidden = false; $("logout").hidden = false;
-  const list = await api("/api/admin/plugins");
-  plugins = Object.fromEntries(list.map((p) => [p.id, p]));
+  await loadPlugins();
   await reload();
   openSocket();
   refreshLog();
@@ -465,6 +478,45 @@ $("input-form").onsubmit = async (e) => {
       ? errors.map((x) => `${x.field || "settings"}: ${x.message}`).join("\n")
       : Array.isArray(err.detail) ? err.detail.map((x) => `${x.loc?.slice(1).join(".")}: ${x.msg}`).join("\n") : err.message;
   }
+};
+
+// --- plugins ------------------------------------------------------------------------
+async function loadPlugins() {
+  const list = await api("/api/admin/plugins");
+  plugins = Object.fromEntries(list.map((p) => [p.id, p]));
+  const body = $("plugins");
+  body.replaceChildren();
+  for (const p of list) {
+    const remove = el("button", { className: "small danger", textContent: "Remove", hidden: p.builtin });
+    remove.onclick = async () => {
+      if (!confirm(`Remove the plugin "${p.name}"?`)) return;
+      try { await api(`/api/admin/plugins/${encodeURIComponent(p.id)}`, { method: "DELETE" }); toast(`Removed ${p.name}`); await loadPlugins(); }
+      catch (err) { toast(err.message, true); }
+    };
+    const row = el("tr", {},
+      el("td", { className: "name" }, el("b", { textContent: p.name }), el("small", { textContent: `${p.id} – ${p.description || ""}` })),
+      el("td", { textContent: p.version }),
+      el("td", {}, el("span", { className: "badge", textContent: p.builtin ? "built-in" : "uploaded" })),
+      el("td", {}, el("div", { className: "actions" }, remove)));
+    row.dataset.plugin = p.id;
+    body.append(row);
+  }
+}
+$("plugin-upload").onclick = async () => {
+  const file = $("plugin-file").files[0];
+  if (!file) return toast("Choose a .zip file first", true);
+  $("plugin-upload").disabled = true;
+  $("plugin-status").textContent = "Installing … (requirements are downloaded, this can take a minute)";
+  try {
+    const res = await fetch("/api/admin/plugins", { method: "PUT", headers: { "Content-Type": "application/zip" }, body: file });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, data.detail);
+    toast(`Installed ${data.name} ${data.version}`);
+    $("plugin-file").value = "";
+    await loadPlugins();
+    await reload();
+  } catch (err) { toast(err.message, true); }
+  finally { $("plugin-upload").disabled = false; $("plugin-status").textContent = ""; }
 };
 
 // --- output -------------------------------------------------------------------------

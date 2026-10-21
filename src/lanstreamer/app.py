@@ -225,7 +225,14 @@ class App:
             status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
+            plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
         )  # fmt: skip
+
+    async def plugin_changed(self, plugin_id: str) -> None:
+        """A plugin was uploaded or removed: inputs using it restart with the new code."""
+        if self.runtime is not None:
+            plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
+            await self.runtime.reload_plugin(plugin_id, plugins)
 
     async def run(self, web: asyncio.Task | None = None) -> int:
         assert self.runtime is not None

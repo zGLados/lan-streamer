@@ -17,10 +17,17 @@ All notable changes to this project are documented here. The format follows [Kee
 - Plugin SDK v1 (`lanstreamer_sdk`), one process per plugin instance, built-in plugins "test-pattern" and "playlist".
 - Core runtime: plugins + scheduler + output worker; the output reports when a source ended or broke.
 - Configuration in SQLite with live changes while running.
+- Plugin upload in the admin page (.zip; manifest and API version check; requirements installed with pip into the plugin's own folder; replace and remove); example plugin `examples/hello-plugin`.
+- Standby fallback: every output shows the lan-streamer slate (or your own picture) when no input is active.
+- Playlist: folders, pictures (shown for a set time) and the next item without a gap.
+- Local tests without GStreamer: `--simulate` and `tests/e2e/run_local.py` (see `docs/development.md`).
 - Admin page at `/admin`: set the password on first start, manage the inputs (add with forms generated from the plugin settings, edit, delete, priority, fallback, force/block, order by drag and drop), live status with "Next input", output settings, logs, change password. "Next input" is admin-only now.
 - Web server on FastAPI: live status over a WebSocket, admin login (password set on first start), admin API for plugins (with settings schema), outputs, inputs (add, change, reorder, delete, force/block) and logs; API docs at `/api/docs`.
 
 ### Fixed
+
+- A reconfigured input could leave its old plugin process running (it was restarted as if it had crashed).
+- At start, a less important input could go on air for a moment before the right one.
 
 - Black picture in the browser on fast machines: mpegtsmux's stale stream header made MediaMTX drop the video track.
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.

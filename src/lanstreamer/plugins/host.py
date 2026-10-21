@@ -59,6 +59,8 @@ def load_plugin(folder: Path) -> type[InputPlugin]:
     manifest = load_manifest(folder)
     module_name, class_name = manifest.entry.split(":")
     sys.path.insert(0, str(folder))
+    if (folder / ".deps").is_dir():  # requirements installed at upload (plugins/install.py)
+        sys.path.insert(0, str(folder / ".deps"))
     cls = getattr(importlib.import_module(module_name), class_name)
     if not (isinstance(cls, type) and issubclass(cls, InputPlugin)):
         raise ManifestError(f"{manifest.entry} is not an InputPlugin")
