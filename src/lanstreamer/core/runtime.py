@@ -274,11 +274,18 @@ class OutputRuntime:
         return self._settled
 
     async def _poll_release(self, now: float) -> None:
-        """Asks the plugin on air whether it may hand over (only matters with peers)."""
-        if self.on_air is None or now - self._last_release_poll < RELEASE_POLL_S:
+        """Asks the plugin on air whether it may hand over (only matters with peers).
+
+        Asked at once when it wants its next item: a playlist whose item ended
+        may hand over now, and deciding with the old answer would replay it.
+        """
+        if self.on_air is None:
+            return
+        inp = self.inputs.get(self.on_air.id)
+        urgent = inp is not None and inp.wants_next and not inp.releasable
+        if not urgent and now - self._last_release_poll < RELEASE_POLL_S:
             return
         self._last_release_poll = now
-        inp = self.inputs.get(self.on_air.id)
         if inp and inp.proc and inp.proc.running:
             try:
                 inp.releasable = await inp.proc.can_release()

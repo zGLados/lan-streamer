@@ -82,7 +82,10 @@ def test_higher_priority_wins_and_stays(tmp_path):
     assert runtime.status()["current"] == "HIGH"
 
 
-def test_playlist_hands_over_when_its_item_ended(tmp_path):
+@pytest.mark.parametrize("poll_s", [0.05, 30.0])
+def test_playlist_hands_over_when_its_item_ended(tmp_path, monkeypatch, poll_s):
+    # with a slow release poll the answer must still be fresh when the item ended
+    monkeypatch.setattr(rt, "RELEASE_POLL_S", poll_s)
     clip = tmp_path / "clip.mp4"
     clip.write_bytes(b"")
     cfg = OutputConfig(inputs=[
