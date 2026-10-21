@@ -45,7 +45,8 @@ def main() -> int:
     args = parser.parse_args()
     base = f"http://localhost:{PORT}"
     data = Path(tempfile.mkdtemp(prefix="lanstreamer-e2e-"))
-    env = {**os.environ, "XDG_DATA_HOME": str(data)}
+    # fake downloads: the submissions input needs no internet in the simulated run
+    env = {**os.environ, "XDG_DATA_HOME": str(data), "LANSTREAMER_FAKE_DOWNLOADS": "1"}
     log = open(data / "app.out", "w")  # noqa: SIM115 – closed in finally, outlives the with-free flow
     app = subprocess.Popen(
         [sys.executable, "-m", "lanstreamer", "--simulate", "--no-browser", "--port", str(PORT)],
@@ -71,6 +72,11 @@ def main() -> int:
                 results["admin page"] = subprocess.run(
                     [sys.executable, str(HERE / "check_admin.py"), base, "--cdp", ws], check=False
                 ).returncode
+                print("== viewer side (submit form, /tv) in Edge")
+                results["viewer side"] = subprocess.run(
+                    [sys.executable, str(HERE / "check_viewer.py"), base, "--cdp", ws,
+                     "--link", "https://www.tiktok.com/@ci/video/1"], check=False,
+                ).returncode  # fmt: skip
         if args.keep_running:
             print(f"\nStill running: {base}/admin (password ci-password-123) – Ctrl+C to stop")
             app.wait()

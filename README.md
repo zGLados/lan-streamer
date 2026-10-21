@@ -8,13 +8,17 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration) and the admin page work; the first real sources (Twitch, TikTok) are next. See the [roadmap](docs/roadmap.md).
+> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Next: YouTube, OBS ingest, overlays, several outputs. See the [roadmap](docs/roadmap.md).
 
 ## Try the prototype (Windows)
 
 1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps.
 2. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
 3. It switches between two test inputs every 20 s; without an active input it shows a standby picture. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
+
+**Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link – once the admin has added the input "Short-video submissions".
+
+**TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 
 **Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the inputs (add, priority, force/block, order), the output and the logs there.
 

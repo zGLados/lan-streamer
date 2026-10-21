@@ -34,3 +34,7 @@ data/
 
 # Build output
 build/
+
+# Screenshots of the e2e checks
+/*.png
+examples/*.zip

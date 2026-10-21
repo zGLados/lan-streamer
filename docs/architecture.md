@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: M1 (prototype) and M2 (core) done – output pipeline, scheduler, plugin system with upload, core runtime, SQLite configuration, web API and admin page work. Next: M3, the first real sources (Twitch, TikTok). Details in [roadmap.md](roadmap.md).
+Status: M1 (prototype), M2 (core) and M3 (submissions, viewer forms, TV page) done. Next: M4 (YouTube, RTMP/SRT ingest, overlays, several outputs). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -157,7 +157,10 @@ class InputPlugin[S: BaseModel]:
 
 Sources: `TestSource`, `UriSource`, `FileSource`, `ImageSource` (PNG/JPEG with silence). `ctx.next_source()` asks for `get_source()` again while the input stays on air (a playlist's next item).
 
+Viewer forms (F-IN-04, F-WEB-03): a plugin can declare a `ViewerForm` (Pydantic model) and a `viewer_title`; the player page builds the form from its JSON Schema and sends it to `on_viewer_submit(form, viewer)`, which returns a message or raises `Rejected("…")` (shown to the viewer as it is). `viewer_items()` lists lines under the form (e.g. the queue), `remove_item()` lets the admin delete one, `ctx.changed()` tells the pages to reload them, and `ctx.set_info("…")` sets the status line in the admin. A viewer is identified per device: a long-lived browser cookie plus the LAN address. Custom HTML pages for plugins (`routes()`) are not needed for now.
+
 Built-in plugins (`src/lanstreamer/plugins/builtin/`):
+- **submissions** – "Short-video submissions": viewers submit links on the player page (TikTok, YouTube Shorts, Instagram Reels, plain video URLs – anything yt-dlp reads). Checked (max. length, videos per device, queue size, already queued), downloaded with yt-dlp into the instance's data folder, played in order, deleted afterwards; active while a video is ready; the queue survives a restart. yt-dlp updates itself on start (pip into the data folder; offline the installed version keeps working). Without ffmpeg only files with picture and sound in one file are used – fine for TikTok, YouTube Shorts then come in 360p (proper YouTube support: M4).
 - **standby** – a still picture (the lan-streamer slate or your own), always active. Every output gets a "Standby" input as fallback (priority 0) from the start (F-SCH-02).
 - **playlist** – files, folders (their media files sorted by name) or URLs one after another; pictures are shown for `image_duration_s`; after an item it hands over to an input of the same priority, or plays its next item itself.
 - **test-pattern** – a generated test picture with a tone, always active.
@@ -172,7 +175,8 @@ Built-in plugins (`src/lanstreamer/plugins/builtin/`):
 
 - **Web server:** FastAPI on uvicorn, inside the app's asyncio loop (`web/api.py`). The app binds port 8080 itself, so a port in use gives a clear message instead of ending the app. Interactive API docs: `/api/docs`.
 - **Pages:** plain HTML and JavaScript without a build step (owner's decision: fast builds, no Node.js toolchain).
-- **Viewer page** `/` (no login, LAN only): player (WebRTC via WHEP), what is on air, the inputs with state and priority, a link to the admin page. "Next input" shows only for a logged-in admin. Live status comes over the WebSocket `/api/ws` (pushed on every change, at least once a second), polling `/api/status` is the fallback. Planned: hls.js fallback, embedded plugin UIs.
+- **Viewer page** `/` (no login, LAN only): player (WebRTC via WHEP), what is on air (title · channel · submitted by), the forms of the inputs (e.g. "Submit a video") with their lists ("Up next"), the inputs with state and priority, links to the admin page and the TV view.
+- **TV view** `/tv` (or `/tv/<output>`): only the video, black, no text; the pointer hides after 2 s; it reconnects by itself. A click or key turns the sound on and goes full screen; a display PC can open it in Edge kiosk mode with sound and no click (`docs/development.md`). "Next input" shows only for a logged-in admin. Live status comes over the WebSocket `/api/ws` (pushed on every change, at least once a second), polling `/api/status` is the fallback. Planned: hls.js fallback, embedded plugin UIs.
 - **Admin login:** one password, set on first start (`POST /api/admin/setup`, only while none is set), stored as a scrypt hash in the `settings` table; session cookie (HttpOnly, SameSite=Strict, 7 days, in memory – a restart logs out); a wrong password costs one second.
 - **Admin API** `/api/admin/…`: plugins with their settings schema, outputs, add/change/delete/reorder inputs (priority, override force/block, durations, settings), logs. Settings are validated by the plugin itself in a short-lived plugin host process (`host.py --check`), so the core never imports plugin code. Every change is stored and taken over at once by `OutputRuntime.apply()`; output format and encoder need a restart (the API says so).
 - **Admin page** `/admin` (`web/admin.html`, on top of the API): first start sets the password, then login; live "on air" status and "Next input"; the inputs as a table with live state, priority, fallback and override (force/block) editable in place, order by drag and drop, edit and delete; "Add input" with the settings form generated from the plugin's JSON Schema (enums → select, numbers with limits, booleans, lists of strings, anything else as JSON); output settings (restart note for format/encoder); plugins (list, upload as .zip, remove); logs; change password.

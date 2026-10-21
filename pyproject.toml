@@ -17,6 +17,8 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.32",
     "websockets>=13",
+    # built-in "submissions" input (updates itself on start, see its plugin)
+    "yt-dlp>=2025.1",
     # tray icon on Windows
     "pystray>=0.19; sys_platform == 'win32'",
     "pillow>=10; sys_platform == 'win32'",

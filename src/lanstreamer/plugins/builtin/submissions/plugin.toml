@@ -1,0 +1,6 @@
+id = "submissions"
+name = "Short-video submissions"
+version = "1.0.0"
+api_version = 1
+entry = "submissions:Plugin"
+description = "Viewers submit links (TikTok, YouTube Shorts, Instagram Reels, ...) on the player page; they play one after another."

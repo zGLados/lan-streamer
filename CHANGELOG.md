@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Plugin SDK v1 (`lanstreamer_sdk`), one process per plugin instance, built-in plugins "test-pattern" and "playlist".
 - Core runtime: plugins + scheduler + output worker; the output reports when a source ended or broke.
 - Configuration in SQLite with live changes while running.
+- Short-video submissions (built-in input): viewers submit TikTok/Shorts/Reels links on the player page, with a queue ("Up next"), max. length and a limit per device; yt-dlp updates itself on start; the admin sees and can delete queue entries.
+- Viewer forms: plugins can put a form on the player page; the page shows title, channel and who submitted what is on air.
+- TV view `/tv`: only the stream in the full window (kiosk mode for display PCs).
 - Plugin upload in the admin page (.zip; manifest and API version check; requirements installed with pip into the plugin's own folder; replace and remove); example plugin `examples/hello-plugin`.
 - Standby fallback: every output shows the lan-streamer slate (or your own picture) when no input is active.
 - Playlist: folders, pictures (shown for a set time) and the next item without a gap.

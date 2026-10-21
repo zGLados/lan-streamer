@@ -18,7 +18,7 @@ REQUIRED_ELEMENTS = (
     "imagefreeze", "x264enc", "h264parse", "opusenc", "mpegtsmux", "capssetter", "srtsink",
     # inputs: files, HTTP/HLS, RTSP, decoders
     "fallbacksrc", "uridecodebin3", "decodebin3", "qtdemux", "matroskademux", "tsdemux",
-    "souphttpsrc", "hlsdemux2", "rtspsrc", "aacparse", "avdec_h264", "avdec_aac",
+    "souphttpsrc", "hlsdemux2", "rtspsrc", "aacparse", "avdec_h264", "avdec_h265", "avdec_aac",
     "dav1ddec", "vp9dec", "opusdec", "jpegdec", "pngdec",
 )  # fmt: skip
 

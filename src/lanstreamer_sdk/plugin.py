@@ -80,6 +80,27 @@ class Metadata:
     submitter: str = ""
 
 
+@dataclass(frozen=True)
+class Viewer:
+    """Who sent a viewer form: a device id (browser cookie) and the LAN address."""
+
+    device: str
+    ip: str
+
+
+@dataclass(frozen=True)
+class ViewerItem:
+    """One line the input shows on the viewer page, e.g. a queue entry."""
+
+    id: str
+    text: str
+    detail: str = ""
+
+
+class Rejected(Exception):
+    """Raised in on_viewer_submit(): the message is shown to the viewer as it is."""
+
+
 @dataclass
 class PlaybackEvent:
     """Sent to the plugin when its source starts, ends or fails on an output."""
@@ -114,6 +135,8 @@ class PluginContext:
     store: Store
     _publish_metadata: Callable[[Metadata], None] = field(repr=False)
     _request_next: Callable[[], None] = field(repr=False, default=lambda: None)
+    _publish_info: Callable[[str], None] = field(repr=False, default=lambda _text: None)
+    _publish_changed: Callable[[], None] = field(repr=False, default=lambda: None)
 
     def set_metadata(self, metadata: Metadata) -> None:
         """Publishes what is playing now."""
@@ -126,6 +149,14 @@ class PluginContext:
         no other input takes over, the next item follows without a gap.
         """
         self._request_next()
+
+    def set_info(self, text: str) -> None:
+        """A short status line for the admin page, e.g. "3 videos waiting · yt-dlp 2026.10.1"."""
+        self._publish_info(text)
+
+    def changed(self) -> None:
+        """Tells the pages that viewer_items() changed (e.g. a new queue entry)."""
+        self._publish_changed()
 
 
 # --- The plugin base class ------------------------------------------------------------
@@ -145,6 +176,11 @@ class InputPlugin[S: BaseModel]:
     Settings: ClassVar[type[BaseModel]] = NoSettings
     #: How often the default watch_active() calls is_active() (F-AKT-02).
     poll_interval_s: ClassVar[float] = 5.0
+    #: A form viewers can send from the player page (F-IN-04), e.g. "submit a link".
+    #: The page builds it from the model's JSON Schema; see on_viewer_submit().
+    ViewerForm: ClassVar[type[BaseModel] | None] = None
+    #: Heading of the form and its list on the player page.
+    viewer_title: ClassVar[str] = ""
 
     def __init__(self, ctx: PluginContext, settings: S):
         self.ctx = ctx
@@ -184,3 +220,14 @@ class InputPlugin[S: BaseModel]:
 
     async def on_playback(self, event: PlaybackEvent) -> None:
         """Called when this input's source starts, ends or fails on air."""
+
+    async def on_viewer_submit(self, form: BaseModel, viewer: Viewer) -> str:
+        """A viewer sent the ViewerForm. Return a message for them, or raise Rejected."""
+        raise Rejected("this input takes no submissions")
+
+    async def viewer_items(self) -> list[ViewerItem]:
+        """Lines shown under the form on the player page (e.g. the queue)."""
+        return []
+
+    async def remove_item(self, item_id: str) -> None:
+        """The admin removes one of the viewer_items() (e.g. a queue entry)."""

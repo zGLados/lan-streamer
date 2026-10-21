@@ -18,6 +18,10 @@ class PluginError(RuntimeError):
     pass
 
 
+class PluginRejected(PluginError):
+    """The plugin refused a viewer submission; the message is meant for the viewer."""
+
+
 class PluginProcess:
     """One running plugin instance. Events arrive through `on_event(instance_id, event)`."""
 
@@ -64,13 +68,16 @@ class PluginProcess:
     def running(self) -> bool:
         return self.proc is not None and self.proc.returncode is None
 
-    async def call(self, method: str, timeout_s: float = 30.0) -> Any:
+    async def call(self, method: str, params: dict[str, Any] | None = None, timeout_s: float = 30.0) -> Any:
         if not self.running:
             raise PluginError(self.fatal or "plugin is not running")
         request_id = next(self._ids)
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
-        await self._send({"id": request_id, "method": method})
+        message: dict[str, Any] = {"id": request_id, "method": method}
+        if params is not None:
+            message["params"] = params
+        await self._send(message)
         try:
             return await asyncio.wait_for(future, timeout_s)
         finally:
@@ -81,6 +88,19 @@ class PluginProcess:
 
     async def can_release(self) -> bool:
         return bool(await self.call("can_release", timeout_s=5.0))
+
+    async def viewer_schema(self) -> dict[str, Any] | None:
+        return await self.call("viewer_schema", timeout_s=10.0)
+
+    async def viewer_submit(self, form: dict[str, Any], device: str, ip: str) -> str:
+        params = {"form": form, "viewer": {"device": device, "ip": ip}}
+        return str(await self.call("viewer_submit", params, timeout_s=60.0) or "")
+
+    async def viewer_items(self) -> list[dict[str, Any]]:
+        return list(await self.call("viewer_items", timeout_s=10.0) or [])
+
+    async def remove_item(self, item_id: str) -> None:
+        await self.call("remove_item", {"id": item_id}, timeout_s=10.0)
 
     async def playback(self, kind: str, detail: str = "") -> None:
         if self.running:
@@ -115,7 +135,8 @@ class PluginProcess:
                 future = self._pending.get(message["id"])
                 if future and not future.done():
                     if "error" in message:
-                        future.set_exception(PluginError(message["error"]))
+                        error = PluginRejected if message.get("rejected") else PluginError
+                        future.set_exception(error(message["error"]))
                     else:
                         future.set_result(message.get("result"))
                 continue

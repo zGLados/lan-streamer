@@ -169,3 +169,55 @@ def test_upload_use_and_remove_a_plugin(setup):
     assert client.delete("/api/admin/plugins/playlist").status_code == 409
     r = client.put("/api/admin/plugins", content=b"not a zip")
     assert r.status_code == 422 and "not a zip" in r.json()["detail"]
+
+
+def test_viewer_forms_and_submissions(setup, tmp_path):
+    client, *_ = setup
+    calls = []
+
+    class FakeRuntime:
+        async def viewer_forms(self):
+            return [{"input_id": "subs", "name": "Submissions", "title": "Submit a video",
+                     "schema": {"properties": {"link": {}}}, "items": []}]  # fmt: skip
+
+        async def viewer_submit(self, input_id, form, device, ip):
+            calls.append((input_id, form, device, ip))
+            if input_id != "subs":
+                raise KeyError(input_id)
+            if form.get("link") == "bad":
+                from lanstreamer.plugins.process import PluginRejected
+
+                raise PluginRejected("This link cannot be played.")
+            return "Added – position 1 in the queue."
+
+        async def items(self, input_id):
+            return [{"id": "x1", "text": "Cat", "detail": "by Anna"}]
+
+        async def remove_item(self, input_id, item_id):
+            calls.append(("removed", input_id, item_id))
+
+    client.app.state.backend.viewer = FakeRuntime()
+
+    assert client.get("/api/viewer").json()[0]["title"] == "Submit a video"
+    r = client.post("/api/viewer/subs", json={"link": "https://x/1", "name": "Anna"})
+    assert r.json() == {"message": "Added – position 1 in the queue."}
+    device = client.cookies.get("lanstreamer_device")
+    assert device and calls[0][2] == device
+    client.post("/api/viewer/subs", json={"link": "https://x/2", "name": "Anna"})
+    assert calls[1][2] == device  # the same device next time
+    r = client.post("/api/viewer/subs", json={"link": "bad"})
+    assert r.status_code == 422 and r.json()["detail"] == "This link cannot be played."
+    assert client.post("/api/viewer/other", json={}).status_code == 404
+
+    assert client.get("/api/admin/inputs/subs/items").status_code == 401
+    login(client)
+    assert client.get("/api/admin/inputs/subs/items").json()[0]["text"] == "Cat"
+    assert client.delete("/api/admin/inputs/subs/items/x1").status_code == 204
+    assert calls[-1] == ("removed", "subs", "x1")
+
+
+def test_tv_page(setup):
+    client = setup[0]
+    for path in ("/tv", "/tv/out1"):
+        r = client.get(path)
+        assert r.status_code == 200 and "<video" in r.text and "lan-streamer TV" in r.text

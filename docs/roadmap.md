@@ -31,12 +31,12 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Plugin upload (.zip, manifest and API version check, requirements via pip into the plugin's own folder, replace/remove; example plugin `examples/hello-plugin`)
 - [x] Fallback: built-in "Standby" picture on every output; playlist with folders, pictures and automatic next item
 
-## M3 – Reference inputs
+## M3 – Reference inputs (without Twitch)
 
-- [ ] Short-video submissions (built-in plugin): TikTok and every other link yt-dlp supports; queue, max length, limit per device with display name, yt-dlp updates itself on start
-- [ ] Input forms on the viewer page, described by the plugin (F-IN-04, F-WEB-03)
-- [ ] Viewer page shows what is playing
-- [ ] Fullscreen-only page `/tv`: just the stream (no text, no buttons), click for sound and fullscreen, Edge kiosk command for display PCs
+- [x] Short-video submissions (built-in plugin): TikTok and every other link yt-dlp supports; queue, max length, limit per device with display name, yt-dlp updates itself on start
+- [x] Input forms on the viewer page, described by the plugin (F-IN-04, F-WEB-03)
+- [x] Viewer page shows what is playing (title, channel, submitted by)
+- [x] Fullscreen-only page `/tv`: just the stream (no text, no buttons), click for sound and fullscreen, Edge kiosk command for display PCs
 
 ## M4 – Expansion
 

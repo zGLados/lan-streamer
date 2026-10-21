@@ -12,6 +12,16 @@
 
 Run the local tests before pushing; push (and so build) only what needs GStreamer to be checked.
 
+## A display PC or TV (kiosk mode)
+
+`http://<server>:8080/tv` shows only the stream. In a normal browser a click turns on the sound and goes full screen. A display PC can open it without anyone at it, with sound:
+
+```
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk http://<server>:8080/tv --edge-kiosk-type=fullscreen --autoplay-policy=no-user-gesture-required --no-first-run
+```
+
+Put that in the PC's autostart (`shell:startup`). Alt+F4 ends the kiosk mode.
+
 ## Writing a plugin
 
 Start from `examples/hello-plugin/` (`plugin.toml` + one Python file). Zip the folder and upload it in the admin page. The API is described in `docs/architecture.md` (Plugin system) and in `src/lanstreamer_sdk/`.

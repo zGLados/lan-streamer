@@ -12,9 +12,13 @@ Protocol, one JSON object per line:
             {"event": "active", "value": true}
             {"event": "metadata", "value": {...}}
             {"event": "next_source"}   play the input's next item (it stays on air)
+            {"event": "info", "value": "3 waiting"}   status line for the admin page
+            {"event": "changed"}       viewer_items() changed
             {"event": "fatal", "message": "..."}
             {"id": 7, "result": ...} | {"id": 7, "error": "..."}
-    stdin:  {"id": 7, "method": "get_source" | "can_release"}
+    stdin:  {"id": 7, "method": "get_source" | "can_release" | "viewer_schema" | "viewer_items"}
+            {"id": 8, "method": "viewer_submit", "params": {"form": {...}, "viewer": {...}}}
+            {"id": 9, "method": "remove_item", "params": {"id": "..."}}
             {"method": "playback", "params": {"kind": "ended", "detail": ""}}
             {"method": "stop"}
 
@@ -42,7 +46,9 @@ from lanstreamer_sdk import (
     ManifestError,
     PlaybackEvent,
     PluginContext,
+    Rejected,
     Store,
+    Viewer,
     load_manifest,
     source_to_dict,
 )
@@ -85,15 +91,38 @@ async def serve(plugin: InputPlugin) -> None:
         async for active in plugin.watch_active():
             send({"event": "active", "value": bool(active)})
 
-    async def call(request_id: int, method: str) -> None:
+    async def call(request_id: int, method: str, params: dict[str, Any]) -> None:
         try:
             if method == "get_source":
                 result: Any = source_to_dict(await plugin.get_source())
             elif method == "can_release":
                 result = bool(await plugin.can_release())
+            elif method == "viewer_schema":
+                form = type(plugin).ViewerForm
+                result = None if form is None else {
+                    "title": type(plugin).viewer_title, "schema": form.model_json_schema(),
+                }  # fmt: skip
+            elif method == "viewer_submit":
+                form_cls = type(plugin).ViewerForm
+                if form_cls is None:
+                    raise Rejected("this input takes no submissions")
+                try:
+                    form = form_cls.model_validate(params.get("form") or {})
+                except ValidationError as exc:
+                    raise Rejected("; ".join(
+                        f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+                    )) from exc  # fmt: skip
+                result = await plugin.on_viewer_submit(form, Viewer(**params["viewer"]))
+            elif method == "viewer_items":
+                result = [asdict(item) for item in await plugin.viewer_items()]
+            elif method == "remove_item":
+                await plugin.remove_item(str(params["id"]))
+                result = None
             else:
                 raise ValueError(f"unknown method {method}")
             send({"id": request_id, "result": result})
+        except Rejected as exc:
+            send({"id": request_id, "error": str(exc), "rejected": True})
         except Exception as exc:
             log.exception("%s failed", method)
             send({"id": request_id, "error": f"{exc.__class__.__name__}: {exc}"})
@@ -110,7 +139,7 @@ async def serve(plugin: InputPlugin) -> None:
             if method == "playback":
                 task = asyncio.create_task(plugin.on_playback(PlaybackEvent(**command["params"])))
             else:
-                task = asyncio.create_task(call(command["id"], method))
+                task = asyncio.create_task(call(command["id"], method, command.get("params") or {}))
             tasks.add(task)
             task.add_done_callback(tasks.discard)
     finally:
@@ -169,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
         store=Store(args.data_dir / "store.json"),
         _publish_metadata=lambda m: send({"event": "metadata", "value": asdict(m)}),
         _request_next=lambda: send({"event": "next_source"}),
+        _publish_info=lambda text: send({"event": "info", "value": str(text)}),
+        _publish_changed=lambda: send({"event": "changed"}),
     )
     try:
         asyncio.run(serve(cls(ctx, settings)))

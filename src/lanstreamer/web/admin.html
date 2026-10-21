@@ -190,6 +190,15 @@
   </form>
 </dialog>
 
+<dialog id="queue-dialog">
+  <form method="dialog">
+    <h3 id="queue-title">Queue</h3>
+    <table><tbody id="queue-items"></tbody></table>
+    <p class="muted" id="queue-empty">Nothing waiting.</p>
+    <div class="actions"><button type="submit">Close</button></div>
+  </form>
+</dialog>
+
 <div id="toast" hidden></div>
 
 <script>
@@ -296,6 +305,10 @@ function renderStatus() {
     badge.textContent = input.state;
     badge.className = "badge " + input.state.replace(" ", "-");
     badge.title = input.error || input.title || "";
+    const info = document.querySelector(`[data-info="${CSS.escape(input.id)}"]`);
+    if (info) info.textContent = input.info ? ` · ${input.info}` : "";
+    const queue = document.querySelector(`[data-queue="${CSS.escape(input.id)}"]`);
+    if (queue) queue.hidden = !input.viewer_form;
   }
 }
 $("next").onclick = async () => {
@@ -319,6 +332,8 @@ function renderInputs() {
     override.value = input.override;
     override.onchange = () => patch(input, { override: override.value });
     const edit = el("button", { className: "small", textContent: "Edit", onclick: () => openDialog(input) });
+    const queue = el("button", { className: "small", textContent: "Queue", hidden: true, onclick: () => openQueue(input) });
+    queue.dataset.queue = input.id;
     const del = el("button", { className: "small danger", textContent: "Delete" });
     del.onclick = async () => {
       if (!confirm(`Delete the input "${input.name}"?`)) return;
@@ -327,12 +342,13 @@ function renderInputs() {
     };
     const row = el("tr", { draggable: true },
       el("td", {}, el("span", { className: "handle", textContent: "⋮⋮", title: "Drag to reorder" })),
-      el("td", { className: "name" }, el("b", { textContent: input.name }), el("small", { textContent: plugin ? plugin.name : input.plugin })),
+      el("td", { className: "name" }, el("b", { textContent: input.name }),
+        el("small", {}, plugin ? plugin.name : input.plugin, el("span", { dataset: { info: input.id } }))),
       el("td", {}, el("span", { className: "badge", textContent: "–", dataset: { state: input.id } })),
       el("td", {}, priority),
       el("td", {}, fallback),
       el("td", {}, override),
-      el("td", {}, el("div", { className: "actions" }, edit, del)));
+      el("td", {}, el("div", { className: "actions" }, queue, edit, del)));
     row.dataset.id = input.id;
     addDrag(row);
     body.append(row);
@@ -344,6 +360,35 @@ async function patch(input, changes) {
     await api(`/api/admin/inputs/${encodeURIComponent(input.id)}`, { method: "PATCH", body: changes });
     Object.assign(input, changes);
   } catch (err) { toast(err.message, true); await reload(); }
+}
+
+// queue of an input with a viewer form (e.g. submissions)
+let queueOf = null;
+async function openQueue(input) {
+  queueOf = input;
+  $("queue-title").textContent = `Queue – ${input.name}`;
+  await renderQueue();
+  $("queue-dialog").showModal();
+}
+async function renderQueue() {
+  if (!queueOf) return;
+  let items = [];
+  try { items = await api(`/api/admin/inputs/${encodeURIComponent(queueOf.id)}/items`); }
+  catch (err) { toast(err.message, true); }
+  $("queue-empty").hidden = items.length > 0;
+  $("queue-items").replaceChildren(...items.map((item) => {
+    const del = el("button", { className: "small danger", type: "button", textContent: "Delete" });
+    del.onclick = async () => {
+      try {
+        await api(`/api/admin/inputs/${encodeURIComponent(queueOf.id)}/items/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        await renderQueue();
+      } catch (err) { toast(err.message, true); }
+    };
+    const row = el("tr", {}, el("td", { className: "name" }, el("b", { textContent: item.text }), el("small", { textContent: item.detail })),
+      el("td", {}, el("div", { className: "actions" }, del)));
+    row.dataset.item = item.id;
+    return row;
+  }));
 }
 
 // drag & drop ordering

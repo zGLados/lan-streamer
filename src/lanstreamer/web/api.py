@@ -5,6 +5,9 @@ Public (LAN):
     GET  /admin               admin page (logs in through the API below)
     GET  /api/status          status of the output
     WS   /api/ws              the same status, pushed on every change
+    GET  /api/viewer          forms of the inputs for viewers (e.g. submit a link) + their items
+    POST /api/viewer/{input}  send such a form (a device cookie identifies the viewer)
+    GET  /tv                  only the stream, full window (kiosk / TV)
 
 Admin login (one password, session cookie):
     GET  /api/admin/session   {"password_set", "logged_in"}
@@ -22,6 +25,8 @@ Admin (logged in):
     PUT    /api/admin/outputs/{id}/order         order of the inputs (ties in priority)
     PATCH  /api/admin/inputs/{id}                change an input (priority, override, settings, ...)
     DELETE /api/admin/inputs/{id}
+    GET    /api/admin/inputs/{id}/items          an input's items (e.g. its queue)
+    DELETE /api/admin/inputs/{id}/items/{item}   remove one
     GET    /api/admin/logs/{name}?lines=300      lan-streamer.log, output.log, mediamtx.log
 
 Every configuration change is saved in SQLite and taken over by the running
@@ -32,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from importlib import resources
@@ -54,11 +60,12 @@ from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig
 from lanstreamer.core.store import NotFound, Store
 from lanstreamer.plugins import install
-from lanstreamer.plugins.process import PluginError, check_settings
+from lanstreamer.plugins.process import PluginError, PluginRejected, check_settings
 from lanstreamer.plugins.registry import BUILTIN
 from lanstreamer_sdk import Manifest
 
 COOKIE = "lanstreamer_session"
+DEVICE_COOKIE = "lanstreamer_device"  # identifies a viewer's browser for per-device limits
 LOG_FILES = ("lan-streamer.log", "output.log", "mediamtx.log")
 RESTART_FIELDS = {"width", "height", "fps", "bitrate_kbps", "encoder"}
 
@@ -99,6 +106,7 @@ class Backend:
     changes: Changes
     plugins_dir: Path | None = None  # where uploaded plugins go
     plugins_changed: Callable[[str], Awaitable[None]] | None = None  # plugin id → restart its inputs
+    viewer: Any = None  # the running output (OutputRuntime): viewer_forms, viewer_submit, items, remove_item
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -151,6 +159,7 @@ class Order(BaseModel):
 
 def create_app(backend: Backend) -> FastAPI:
     app = FastAPI(title="lan-streamer", docs_url="/api/docs", redoc_url=None)
+    app.state.backend = backend  # for tests and tools
     schema_cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     def logged_in(request: Request) -> None:
@@ -186,6 +195,11 @@ def create_app(backend: Backend) -> FastAPI:
     def admin_page() -> str:
         return PAGES.joinpath("admin.html").read_text(encoding="utf-8")
 
+    @app.get("/tv", response_class=HTMLResponse)
+    @app.get("/tv/{output_id}", response_class=HTMLResponse)
+    def tv_page(output_id: str = "out1") -> str:
+        return PAGES.joinpath("tv.html").read_text(encoding="utf-8")
+
     @app.get("/favicon.png")
     def favicon() -> Response:
         return Response(ICON.read_bytes(), media_type="image/png")
@@ -193,6 +207,31 @@ def create_app(backend: Backend) -> FastAPI:
     @app.get("/api/status")
     def status() -> dict[str, Any]:
         return backend.status()
+
+    def viewer() -> Any:
+        if backend.viewer is None:
+            raise HTTPException(503, "not running yet")
+        return backend.viewer
+
+    @app.get("/api/viewer")
+    async def viewer_forms() -> list[dict[str, Any]]:
+        return await viewer().viewer_forms()
+
+    @app.post("/api/viewer/{input_id}")
+    async def viewer_submit(input_id: str, form: dict[str, Any], request: Request, response: Response) -> dict[str, str]:
+        device = request.cookies.get(DEVICE_COOKIE) or secrets.token_urlsafe(16)
+        response.set_cookie(DEVICE_COOKIE, device, httponly=True, samesite="strict", max_age=365 * 24 * 3600)
+        ip = request.client.host if request.client else ""
+        try:
+            message = await viewer().viewer_submit(input_id, form, device, ip)
+        except KeyError as exc:
+            raise HTTPException(404, "this input takes no submissions right now") from exc
+        except PluginRejected as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except (PluginError, TimeoutError) as exc:
+            raise HTTPException(503, f"the input could not take it: {exc}") from exc
+        backend.changes.notify()
+        return {"message": message}
 
     @app.websocket("/api/ws")
     async def live(ws: WebSocket) -> None:
@@ -366,6 +405,22 @@ def create_app(backend: Backend) -> FastAPI:
             raise HTTPException(404, f"no input {input_id!r}") from exc
         backend.store.delete_input(input_id)
         await changed(output_id)
+
+    @app.get("/api/admin/inputs/{input_id}/items", dependencies=[Depends(logged_in)])
+    async def input_items(input_id: str) -> list[dict[str, Any]]:
+        try:
+            return await viewer().items(input_id)
+        except KeyError as exc:
+            raise HTTPException(404, f"input {input_id!r} has no items") from exc
+
+    @app.delete("/api/admin/inputs/{input_id}/items/{item_id}", status_code=204,
+                dependencies=[Depends(logged_in)])  # fmt: skip
+    async def remove_input_item(input_id: str, item_id: str) -> None:
+        try:
+            await viewer().remove_item(input_id, item_id)
+        except KeyError as exc:
+            raise HTTPException(404, f"input {input_id!r} has no items") from exc
+        backend.changes.notify()
 
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
              dependencies=[Depends(logged_in)])  # fmt: skip

@@ -45,6 +45,8 @@ class InputRuntime:
     reported: bool = False  # sent its first activity report
     wants_next: bool = False  # the plugin asked for its next item (ctx.next_source())
     retired: bool = False  # replaced or removed: its process's events are ignored
+    info: str = ""  # the plugin's status line (ctx.set_info)
+    viewer: dict[str, Any] | None = None  # its viewer form: {"title", "schema"} or None
     debounce: Debounce = field(default_factory=lambda: Debounce(ACTIVITY_HOLD_S))
     releasable: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -65,7 +67,8 @@ class InputRuntime:
             "id": self.cfg.id, "name": self.cfg.name, "plugin": self.cfg.plugin,
             "priority": self.cfg.priority, "fallback": self.cfg.fallback,
             "override": self.cfg.override, "state": state, "error": self.error,
-            "title": self.metadata.get("title", ""),
+            "title": self.metadata.get("title", ""), "info": self.info,
+            "viewer_form": self.viewer is not None,
         }  # fmt: skip
 
 
@@ -92,6 +95,7 @@ class OutputRuntime:
         self.switches = 0
         self.failed_switches = 0
         self.skip_requested = False
+        self.viewer_version = 0  # changes when a viewer form or its items change
         self._last_release_poll = 0.0
         self._started_at: float | None = None
         self._settled = False  # every input has reported once (or the grace time is over)
@@ -180,7 +184,11 @@ class OutputRuntime:
         try:
             await inp.proc.start()
             inp.error = ""
-        except PluginError as exc:
+            inp.viewer = await inp.proc.viewer_schema()
+            if inp.viewer is not None:
+                self.viewer_version += 1
+                self.on_change()
+        except (PluginError, TimeoutError) as exc:
             inp.error = str(exc)
             log.error("Input %s did not start: %s", inp.cfg.name, exc)
 
@@ -341,6 +349,10 @@ class OutputRuntime:
             inp.metadata = event.get("value", {})
         elif kind == "next_source":
             inp.wants_next = True
+        elif kind == "info":
+            inp.info = str(event.get("value", ""))
+        elif kind == "changed":
+            self.viewer_version += 1
         elif kind == "fatal":
             inp.error = event.get("message", "plugin error")
         elif kind == "exited" and not self._stopped:
@@ -349,14 +361,54 @@ class OutputRuntime:
             self._restart_later(inp)
         self.on_change()
 
+    # --- viewer forms (F-IN-04) -------------------------------------------------------
+
+    def _viewer_input(self, input_id: str) -> InputRuntime:
+        inp = self.inputs.get(input_id)
+        if inp is None or inp.viewer is None or inp.proc is None or not inp.proc.running:
+            raise KeyError(input_id)
+        return inp
+
+    async def viewer_forms(self) -> list[dict[str, Any]]:
+        """The forms of all inputs that have one, with their current items."""
+        forms = []
+        for inp in self.inputs.values():
+            if inp.viewer is None or inp.proc is None or not inp.proc.running:
+                continue
+            try:
+                items = await inp.proc.viewer_items()
+            except (PluginError, TimeoutError):
+                items = []
+            forms.append({
+                "input_id": inp.cfg.id, "name": inp.cfg.name,
+                "title": inp.viewer.get("title") or inp.cfg.name,
+                "schema": inp.viewer.get("schema", {}), "items": items,
+            })  # fmt: skip
+        return forms
+
+    async def viewer_submit(self, input_id: str, form: dict[str, Any], device: str, ip: str) -> str:
+        """Raises KeyError (no such form) or PluginRejected (message for the viewer)."""
+        return await self._viewer_input(input_id).proc.viewer_submit(form, device, ip)
+
+    async def items(self, input_id: str) -> list[dict[str, Any]]:
+        return await self._viewer_input(input_id).proc.viewer_items()
+
+    async def remove_item(self, input_id: str, item_id: str) -> None:
+        await self._viewer_input(input_id).proc.remove_item(item_id)
+        self.viewer_version += 1
+        self.on_change()
+
     # --- status for the web page --------------------------------------------------
 
     def status(self) -> dict[str, Any]:
         now = self.clock()
         on_air_id = self.on_air.id if self.on_air else None
         on_air = self.inputs[on_air_id].cfg.name if on_air_id in self.inputs else ""
+        meta = self.inputs[on_air_id].metadata if on_air_id in self.inputs else {}
         return {
             "current": on_air,
+            "now": {key: meta.get(key) for key in ("title", "channel", "submitter", "thumbnail")},
+            "viewer_version": self.viewer_version,
             "switches": self.switches,
             "failed_switches": self.failed_switches,
             "inputs": [i.status(on_air_id, now) for i in self.inputs.values()],

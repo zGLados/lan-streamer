@@ -39,9 +39,12 @@ from lanstreamer_sdk.plugin import (
     NoSettings,
     PlaybackEvent,
     PluginContext,
+    Rejected,
     Store,
     TestSource,
     UriSource,
+    Viewer,
+    ViewerItem,
     source_to_dict,
 )
 
@@ -57,9 +60,12 @@ __all__ = [
     "NoSettings",
     "PlaybackEvent",
     "PluginContext",
+    "Rejected",
     "Store",
     "TestSource",
     "UriSource",
+    "Viewer",
+    "ViewerItem",
     "load_manifest",
     "source_to_dict",
 ]

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lan-streamer TV</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  video { width: 100vw; height: 100vh; object-fit: contain; display: block; background: #000; }
+  body.idle, body.idle video { cursor: none; }
+</style>
+</head>
+<body>
+<video id="video" autoplay muted playsinline></video>
+<script>
+// Only the stream: no text, no buttons. A click or a key turns the sound on and
+// goes full screen (browsers allow both only after a user action). For a display
+// PC without anyone at it, start Edge in kiosk mode – see docs/development.md.
+const video = document.getElementById("video");
+const output = location.pathname.split("/")[2] || "out1";
+let pc = null;
+
+async function connect() {
+  if (pc) pc.close();
+  pc = new RTCPeerConnection();
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
+  pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
+  pc.onconnectionstatechange = () => {
+    if (["failed", "disconnected", "closed"].includes(pc.connectionState)) setTimeout(connect, 2000);
+  };
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      pc.onicegatheringstatechange = () => pc.iceGatheringState === "complete" && resolve();
+      setTimeout(resolve, 2000);
+    });
+    let port = 8889;
+    try { port = (await (await fetch("/api/status")).json()).whep_port || port; } catch { /* default */ }
+    const res = await fetch(`${location.protocol}//${location.hostname}:${port}/${output}/whep`, {
+      method: "POST", headers: { "Content-Type": "application/sdp" }, body: pc.localDescription.sdp,
+    });
+    if (!res.ok) throw new Error(`WHEP ${res.status}`);
+    await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+  } catch {
+    setTimeout(connect, 2000);
+  }
+}
+
+function soundAndFullscreen() {
+  video.muted = false;
+  video.play().catch(() => {});
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+}
+document.addEventListener("click", soundAndFullscreen);
+document.addEventListener("keydown", soundAndFullscreen);
+
+// hide the mouse pointer after 2 s without movement
+let idle;
+document.addEventListener("mousemove", () => {
+  document.body.classList.remove("idle");
+  clearTimeout(idle);
+  idle = setTimeout(() => document.body.classList.add("idle"), 2000);
+});
+idle = setTimeout(() => document.body.classList.add("idle"), 2000);
+
+// with the kiosk start parameters autoplay with sound is allowed: try it
+video.addEventListener("playing", () => { if (video.muted) { video.muted = false; video.play().catch(() => { video.muted = true; video.play(); }); } }, { once: true });
+
+connect();
+</script>
+</body>
+</html>

@@ -149,28 +149,34 @@ jobs:
         shell: pwsh
         run: python -m pip install --quiet playwright httpx websockets
 
-      - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page
-        shell: pwsh
-        run: |
-          $dir = "$env:ProgramFiles\lan-streamer\python"
-          & "$dir\python.exe" -c "import pydantic, pystray, PIL, fastapi, uvicorn, websockets; print('dependencies ok')"
-          & "$dir\python.exe" -m pip --version
-          $p = Start-Process -PassThru -FilePath "$dir\pythonw.exe" `
-            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '90'
-          python tests/e2e/check_api.py http://localhost:8080
-          $api = $LASTEXITCODE
-          python tests/e2e/check_admin.py http://localhost:8080
-          $admin = $LASTEXITCODE
-          $p.WaitForExit()
-          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 15
-          if ($api -ne 0) { throw "web API check failed" }
-          if ($admin -ne 0) { throw "admin page check failed" }
-          if ($p.ExitCode -ne 0) { throw "windowless run failed ($($p.ExitCode))" }
-
       - uses: actions/download-artifact@v4
         with:
           name: testclip
           path: media
+
+      - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page + viewer side
+        shell: pwsh
+        run: |
+          $dir = "$env:ProgramFiles\lan-streamer\python"
+          & "$dir\python.exe" -c "import pydantic, pystray, PIL, fastapi, uvicorn, websockets, yt_dlp; print('dependencies ok')"
+          & "$dir\python.exe" -m pip --version
+          $p = Start-Process -PassThru -FilePath "$dir\pythonw.exe" `
+            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '240'
+          python tests/e2e/check_api.py http://localhost:8080
+          $api = $LASTEXITCODE
+          python tests/e2e/check_admin.py http://localhost:8080
+          $admin = $LASTEXITCODE
+          # a viewer submits the test clip by link: real yt-dlp (updated on start) downloads it
+          $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8000', '--directory', 'media'
+          python tests/e2e/check_viewer.py http://localhost:8080 --link http://127.0.0.1:8000/clip.mp4 --webrtc
+          $viewer = $LASTEXITCODE
+          Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
+          $p.WaitForExit()
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 15
+          if ($api -ne 0) { throw "web API check failed" }
+          if ($admin -ne 0) { throw "admin page check failed" }
+          if ($viewer -ne 0) { throw "viewer side check failed" }
+          if ($p.ExitCode -ne 0) { throw "windowless run failed ($($p.ExitCode))" }
 
       - name: Smoke test – stream with switching + playback in Edge (1080p60, CPU encoder)
         shell: pwsh
@@ -211,6 +217,8 @@ jobs:
           path: |
             player.png
             admin.png
+            viewer.png
+            tv.png
 
       - name: Upload logs
         if: always()

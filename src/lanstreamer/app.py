@@ -60,6 +60,8 @@ class Status:
     target_fps: int = 0
     fps: float = 0.0
     current: str = ""
+    now: dict[str, Any] = field(default_factory=dict)  # title, channel, submitter of what is on air
+    viewer_version: int = 0  # changes when a viewer form or its items change (pages reload them)
     sources: list[str] = field(default_factory=list)
     inputs: list[dict[str, Any]] = field(default_factory=list)
     switches: int = 0
@@ -193,6 +195,8 @@ class App:
             return
         snapshot = self.runtime.status()
         self.status.current = snapshot["current"]
+        self.status.now = snapshot["now"]
+        self.status.viewer_version = snapshot["viewer_version"]
         self.status.switches = snapshot["switches"]
         self.status.failed_switches = snapshot["failed_switches"]
         self.status.inputs = snapshot["inputs"]
@@ -226,6 +230,7 @@ class App:
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
+            viewer=_RuntimeProxy(self),
         )  # fmt: skip
 
     async def plugin_changed(self, plugin_id: str) -> None:
@@ -380,6 +385,18 @@ async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray |
         elif sock is not None:
             sock.close()
         await app.stop()
+
+
+class _RuntimeProxy:
+    """The web layer's view of the running output (the runtime exists only after start)."""
+
+    def __init__(self, app: App):
+        self._app = app
+
+    def __getattr__(self, name: str) -> Any:
+        if self._app.runtime is None:
+            raise KeyError("not running")
+        return getattr(self._app.runtime, name)
 
 
 def open_port(port: int) -> socket.socket:

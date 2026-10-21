@@ -41,6 +41,21 @@
   li.on { color: var(--ok); font-weight: 600; }
   li .meta { color: var(--muted); font-size: 12px; font-weight: 400; }
   li.error .meta, li.cooling .meta { color: var(--bad); }
+  .now { margin: 12px 0 0; font-size: 15px; }
+  .now b { font-weight: 600; }
+  .now span { color: var(--muted); }
+  .forms { display: grid; gap: 16px; margin-top: 16px; }
+  .forms form { display: grid; gap: 10px; }
+  .forms label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  .forms input, .forms select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  .forms .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .forms .row label { flex: 1 1 180px; }
+  .forms .msg { margin: 0; font-size: 13px; }
+  .forms .msg.ok { color: var(--ok); }
+  .forms .msg.bad { color: var(--bad); }
+  .forms ol { margin: 4px 0 0; }
+  .forms li small { color: var(--muted); }
+  .tvlink { margin-left: auto; align-self: center; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -61,7 +76,10 @@
       <button class="primary" id="next" hidden title="Only for the admin">Next input</button>
       <button id="sound">Sound on</button>
       <button id="reconnect">Reconnect</button>
+      <a class="tvlink" href="/tv" title="Only the stream, full window">TV view</a>
     </div>
+    <p class="now" id="now" hidden></p>
+    <div class="forms" id="forms"></div>
   </div>
   <aside>
     <section>
@@ -153,7 +171,14 @@ async function connect() {
 }
 
 function render(next) {
+  if (status && next.viewer_version !== status.viewer_version) loadForms();
   status = next;
+  const now = status.now || {};
+  const extra = [now.channel, now.submitter && `submitted by ${now.submitter}`].filter(Boolean);
+  $("now").hidden = !now.title;
+  $("now").replaceChildren(
+    make("b", { textContent: now.title || "" }),
+    make("span", { textContent: extra.map((t) => ` · ${t}`).join("") }));
   {
     const ok = status.state === "running";
     $("dot").className = "dot " + (ok ? "ok" : status.state === "failed" ? "bad" : "");
@@ -184,6 +209,87 @@ function render(next) {
       $("sources").appendChild(li);
     }
   }
+}
+
+// --- forms of the inputs (e.g. "Submit a video") and their lists ----------------------
+function make(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+function formField(name, raw, root) {
+  let s = raw.$ref ? root.$defs?.[raw.$ref.split("/").pop()] || {} : raw;
+  if (s.anyOf) s = { ...s, ...(s.anyOf.find((x) => x.type !== "null") || {}) };
+  let input;
+  if (s.enum) input = make("select", {}, ...s.enum.map((v) => make("option", { value: v, textContent: v })));
+  else if (s.type === "boolean") input = make("input", { type: "checkbox" });
+  else if (s.type === "integer" || s.type === "number") input = make("input", { type: "number" });
+  else input = make("input", { type: /link|url/i.test(name) ? "url" : "text" });
+  input.name = name;
+  if (s.default !== undefined && s.type !== "boolean") input.value = s.default;
+  if (s.maxLength) input.maxLength = s.maxLength;
+  if (s.description) input.placeholder = s.description;
+  if ((root.required || []).includes(name)) input.required = true;
+  const isName = /name/i.test(name);
+  if (isName) {
+    try { input.value = localStorage.getItem("lanstreamer-name") || ""; } catch { /* no storage */ }
+  }
+  const read = () => (s.type === "boolean" ? input.checked
+    : s.type === "integer" || s.type === "number" ? Number(input.value) : input.value);
+  return { label: make("label", {}, s.title || name, input), read, input, name, isName };
+}
+async function loadForms() {
+  let forms = [];
+  try { forms = await (await fetch("/api/viewer")).json(); } catch { return; }
+  if (!Array.isArray(forms)) return;
+  // Rebuild the forms only when the set of forms changed; otherwise just refresh the
+  // lists, so typed text and the "Added …" message stay.
+  const shown = [...$("forms").children].map((section) => section.dataset.input).join(",");
+  if (shown !== forms.map((f) => f.input_id).join(",")) $("forms").replaceChildren(...forms.map(renderForm));
+  forms.forEach(renderItems);
+}
+function renderForm(f) {
+  const fields = Object.entries(f.schema.properties || {}).map(([n, p]) => formField(n, p, f.schema));
+  const msg = make("p", { className: "msg" });
+  const submit = make("button", { className: "primary", type: "submit", textContent: "Submit" });
+  const form = make("form", {}, make("div", { className: "row" }, ...fields.map((x) => x.label), submit), msg);
+  form.dataset.input = f.input_id;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    msg.className = "msg";
+    msg.textContent = "Checking …";
+    submit.disabled = true;
+    const body = Object.fromEntries(fields.map((x) => [x.name, x.read()]));
+    for (const x of fields.filter((x) => x.isName)) {
+      try { localStorage.setItem("lanstreamer-name", x.input.value); } catch { /* no storage */ }
+    }
+    try {
+      const res = await fetch(`/api/viewer/${encodeURIComponent(f.input_id)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "That did not work.");
+      msg.className = "msg ok";
+      msg.textContent = data.message || "Thanks!";
+      fields.filter((x) => !x.isName).forEach((x) => { x.input.value = ""; });
+      submit.blur();
+      loadForms();
+    } catch (err) {
+      msg.className = "msg bad";
+      msg.textContent = err.message;
+    } finally { submit.disabled = false; }
+  };
+  const section = make("section", {}, make("h2", { textContent: f.title }), form,
+    make("h2", { textContent: "Up next", style: "margin-top:14px" }), make("ol", { id: `items-${f.input_id}` }));
+  section.dataset.input = f.input_id;
+  return section;
+}
+function renderItems(f) {
+  const list = document.getElementById(`items-${f.input_id}`);
+  if (!list) return;
+  list.replaceChildren(...(f.items.length
+    ? f.items.map((i) => make("li", {}, `${i.text} `, make("small", { textContent: i.detail })))
+    : [make("li", { className: "meta", textContent: "Nothing waiting – be the first!" })]));
 }
 
 // Live status: pushed over a WebSocket on every change; polling as a fallback.
@@ -239,6 +345,7 @@ $("sound").onclick = () => {
 
 pollStatus().then(connect);
 openSocket();
+loadForms();
 setInterval(pollStatus, 2000);
 setInterval(pollStats, 1000);
 </script>
