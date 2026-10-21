@@ -33,8 +33,8 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 ## M3 – Reference inputs
 
-- [ ] Twitch top stream (Helix API for the ranking, streamlink for playback)
-- [ ] TikTok submissions (queue, per-user limit, max length, submit form on the viewer page)
+- [ ] Short-video submissions (built-in plugin): TikTok and every other link yt-dlp supports; queue, max length, limit per device with display name, yt-dlp updates itself on start
+- [ ] Input forms on the viewer page, described by the plugin (F-IN-04, F-WEB-03)
 - [ ] Viewer page shows what is playing
 
 ## M4 – Expansion
@@ -57,3 +57,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [ ] Plugin developer guide + example plugin template
 - [ ] Stable plugin API v1, contract tests in CI
 - [ ] Release for third-party developers
+
+## Later – to be reviewed
+
+- [ ] Twitch top stream (built-in plugin; Helix API for the ranking, streamlink for playback) – moved here 2026-10-21, the owner looks at it again before it is built
