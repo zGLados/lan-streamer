@@ -147,3 +147,35 @@ def test_check_settings_returns_schema_and_validation():
     assert set(ok["schema"]["properties"]) == {"pattern", "tone_hz"}
     bad = asyncio.run(check_settings(BUILTIN / "test_pattern", {"tone_hz": 5}))
     assert bad["errors"][0]["field"] == "tone_hz"
+
+
+def test_playlist_expands_folders_and_shows_images_for_a_while(tmp_path):
+    media = tmp_path / "media"
+    media.mkdir()
+    for name in ("b.mp4", "a.png", "notes.txt"):
+        (media / name).write_bytes(b"")
+
+    async def steps(proc, events):
+        first = await proc.get_source()  # a.png – sorted by name, notes.txt skipped
+        await proc.playback("started")
+        await wait_for(events, "next_source", timeout=5)  # the picture's time is over
+        second = await proc.get_source()
+        return first, second, await proc.can_release()
+
+    first, second, releasable = asyncio.run(
+        run_plugin(BUILTIN / "playlist", tmp_path, {"items": [str(media)], "image_duration_s": 1}, steps)
+    )
+    assert first == {"kind": "image", "path": str((media / "a.png").resolve())}
+    assert second == {"kind": "uri", "uri": (media / "b.mp4").resolve().as_uri()}
+    assert releasable is False  # a new item started
+
+
+def test_standby_shows_the_built_in_slate_or_a_given_picture(tmp_path):
+    async def steps(proc, events):
+        return await proc.get_source()
+
+    source = asyncio.run(run_plugin(BUILTIN / "standby", tmp_path, {}, steps))
+    assert source["kind"] == "image" and source["path"].endswith("standby.png")
+    proc = PluginProcess("x", BUILTIN / "standby", tmp_path, {"image": "/nope.png"}, lambda *_: None)
+    with pytest.raises(PluginError, match="file not found"):
+        asyncio.run(proc.start())

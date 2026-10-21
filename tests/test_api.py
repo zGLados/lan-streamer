@@ -83,14 +83,14 @@ def test_add_change_reorder_and_delete_inputs(setup):
     client, store, applied, _ = setup
     login(client)
     r = client.post("/api/admin/outputs/out1/inputs",
-                    json={"name": "Standby", "plugin": "test-pattern", "settings": {"pattern": "snow"},
+                    json={"name": "Night slate", "plugin": "test-pattern", "settings": {"pattern": "snow"},
                           "priority": 0, "fallback": True})  # fmt: skip
     assert r.status_code == 201
     standby = r.json()
-    assert standby["id"] == "standby" and standby["settings"] == {"pattern": "snow", "tone_hz": 440}
+    assert standby["id"] == "night-slate" and standby["settings"] == {"pattern": "snow", "tone_hz": 440}
     assert applied == ["out1"]
 
-    r = client.patch("/api/admin/inputs/standby", json={"priority": 50, "override": "force"})
+    r = client.patch("/api/admin/inputs/night-slate", json={"priority": 50, "override": "force"})
     assert (r.json()["priority"], r.json()["override"]) == (50, "force")
 
     ids = [i.id for i in store.output("out1").inputs]
@@ -98,8 +98,8 @@ def test_add_change_reorder_and_delete_inputs(setup):
     assert [i.id for i in store.output("out1").inputs] == ids[::-1]
     assert client.put("/api/admin/outputs/out1/order", json={"ids": ids[:1]}).status_code == 422
 
-    assert client.delete("/api/admin/inputs/standby").status_code == 204
-    assert client.delete("/api/admin/inputs/standby").status_code == 404
+    assert client.delete("/api/admin/inputs/night-slate").status_code == 204
+    assert client.delete("/api/admin/inputs/night-slate").status_code == 404
     assert len(applied) == 4
 
 

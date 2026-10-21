@@ -13,10 +13,12 @@ def store(tmp_path):
     s.close()
 
 
-def test_first_start_seeds_one_output_with_two_test_inputs(store):
+def test_first_start_seeds_one_output_with_two_test_inputs_and_standby(store):
     [out] = store.outputs()
     assert (out.id, out.fps) == ("out1", 60)
-    assert [i.name for i in out.inputs] == ["Test input A", "Test input B"]
+    assert [i.name for i in out.inputs] == ["Test input A", "Test input B", "Standby"]
+    standby = out.inputs[2]
+    assert (standby.plugin, standby.fallback, standby.priority) == ("standby", True, 0)
 
 
 def test_schema_version_is_set(tmp_path):
@@ -58,8 +60,8 @@ def test_delete_output_removes_its_inputs(store):
 
 
 def test_reorder_inputs(store):
-    store.reorder_inputs("out1", ["test-b", "test-a"])
-    assert [i.id for i in store.output("out1").inputs] == ["test-b", "test-a"]
+    store.reorder_inputs("out1", ["test-b", "test-a", "standby"])
+    assert [i.id for i in store.output("out1").inputs] == ["test-b", "test-a", "standby"]
 
 
 def test_new_id_is_unique_and_readable():
@@ -76,7 +78,9 @@ def test_upgrade_from_schema_1_keeps_the_data(tmp_path):
     db.commit()
     db.close()
     store = Store(tmp_path / "old.db")
-    assert [i.id for i in store.output("out1").inputs] == ["mine"]  # no reseeding
+    # no reseeding; the upgrade adds the Standby fallback
+    assert [i.id for i in store.output("out1").inputs] == ["mine", "standby-out1"]
+    assert store.output("out1").inputs[1].fallback is True
     store.set_setting("admin_password", "x")
     assert store.get_setting("admin_password") == "x"
     store.close()

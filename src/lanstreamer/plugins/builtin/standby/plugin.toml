@@ -1,0 +1,6 @@
+id = "standby"
+name = "Standby picture"
+version = "1.0.0"
+api_version = 1
+entry = "standby:Plugin"
+description = "A still picture with silence – the usual fallback when no other input is active."

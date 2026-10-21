@@ -43,6 +43,7 @@ class InputRuntime:
     proc: PluginProcess | None = None
     raw_active: bool = False
     reported: bool = False  # sent its first activity report
+    wants_next: bool = False  # the plugin asked for its next item (ctx.next_source())
     debounce: Debounce = field(default_factory=lambda: Debounce(ACTIVITY_HOLD_S))
     releasable: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -217,6 +218,11 @@ class OutputRuntime:
             return  # a switch is in progress
         target = decide(self.states(now), self.on_air, now)
         self.skip_requested = False
+        current = self.inputs.get(self.on_air.id) if self.on_air else None
+        if current is not None and target == current.cfg.id and current.wants_next:
+            current.wants_next = False  # it stays on air: play its next item
+            await self._switch_to(current)
+            return
         if target is None:
             if self.on_air is not None:
                 log.info("No input active – showing the background")
@@ -262,6 +268,7 @@ class OutputRuntime:
             inp.cooldown_until = self.clock() + FAILED_COOLDOWN_S
             self.failed_switches += 1
             return
+        inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
         self.pending = (play_id, inp.cfg.id)
         inp.releasable = False  # until the plugin says otherwise
@@ -315,6 +322,8 @@ class OutputRuntime:
                 inp.debounce = Debounce(ACTIVITY_HOLD_S, initial=inp.raw_active)
         elif kind == "metadata":
             inp.metadata = event.get("value", {})
+        elif kind == "next_source":
+            inp.wants_next = True
         elif kind == "fatal":
             inp.error = event.get("message", "plugin error")
         elif kind == "exited" and not self._stopped:

@@ -45,13 +45,27 @@ class FileSource:
     kind: Literal["file"] = "file"
 
 
-MediaSource = TestSource | UriSource | FileSource
+@dataclass(frozen=True)
+class ImageSource:
+    """A still picture (PNG or JPEG) with silence – e.g. a standby slate.
+
+    It never ends by itself; an input that shows images decides how long
+    (e.g. the playlist's image duration).
+    """
+
+    path: str
+    kind: Literal["image"] = "image"
+
+
+MediaSource = TestSource | UriSource | FileSource | ImageSource
 
 
 def source_to_dict(source: MediaSource) -> dict[str, Any]:
     """The form the core sends to the output worker."""
     if isinstance(source, FileSource):
         return {"kind": "uri", "uri": Path(source.path).resolve().as_uri()}
+    if isinstance(source, ImageSource):
+        return {"kind": "image", "path": str(Path(source.path).resolve())}
     return asdict(source)
 
 
@@ -99,10 +113,19 @@ class PluginContext:
     log: logging.Logger
     store: Store
     _publish_metadata: Callable[[Metadata], None] = field(repr=False)
+    _request_next: Callable[[], None] = field(repr=False, default=lambda: None)
 
     def set_metadata(self, metadata: Metadata) -> None:
         """Publishes what is playing now."""
         self._publish_metadata(metadata)
+
+    def next_source(self) -> None:
+        """Asks for get_source() to be called again while this input stays on air.
+
+        For inputs with several items (a playlist): when an item has ended and
+        no other input takes over, the next item follows without a gap.
+        """
+        self._request_next()
 
 
 # --- The plugin base class ------------------------------------------------------------

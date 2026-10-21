@@ -236,6 +236,14 @@ class Output:
                 f" ! {audio_tail}"
             )
             bin_ = Gst.parse_bin_from_description(desc, False)
+        elif source["kind"] == "image":
+            path = str(source["path"]).replace("\\", "/").replace('"', "")
+            desc = (
+                f'filesrc location="{path}" ! decodebin ! imagefreeze is-live=true'
+                f" ! {video_tail}"
+                f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
+            )
+            bin_ = Gst.parse_bin_from_description(desc, False)
         elif source["kind"] == "uri":
             desc = f"{video_tail} {audio_tail}"
             bin_ = Gst.parse_bin_from_description(desc, False)

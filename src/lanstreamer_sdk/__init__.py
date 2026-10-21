@@ -32,6 +32,7 @@ from lanstreamer_sdk.manifest import Manifest, ManifestError, load_manifest
 from lanstreamer_sdk.plugin import (
     API_VERSION,
     FileSource,
+    ImageSource,
     InputPlugin,
     MediaSource,
     Metadata,
@@ -47,6 +48,7 @@ from lanstreamer_sdk.plugin import (
 __all__ = [
     "API_VERSION",
     "FileSource",
+    "ImageSource",
     "InputPlugin",
     "Manifest",
     "ManifestError",

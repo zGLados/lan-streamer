@@ -1,6 +1,6 @@
 id = "playlist"
 name = "Playlist"
-version = "1.0.0"
+version = "1.1.0"
 api_version = 1
 entry = "playlist:Plugin"
-description = "Plays local files or URLs one after another. Meant as the fallback input."
+description = "Plays files, folders or URLs one after another; pictures are shown for a set time."

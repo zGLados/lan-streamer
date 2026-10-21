@@ -23,10 +23,14 @@ class FakeWorker:
         self.plays: list[str] = []
         self.clears = 0
         self.fail = set(fail)
+        self.sources: list[dict] = []
+        self.last_id = ""
         self.runtime = None
 
     async def play(self, play_id, label, source):
         self.plays.append(play_id.split("#")[0])
+        self.sources.append(source)
+        self.last_id = play_id
         event = "switch_failed" if play_id.split("#")[0] in self.fail else "playing"
         asyncio.get_running_loop().call_later(0.02, self.runtime.on_worker_event, {"event": event, "id": play_id})
 
@@ -164,3 +168,19 @@ def test_instance_data_is_not_in_the_plugin_folder(tmp_path):
     asyncio.run(run(cfg, tmp_path, 0.2))
     assert (tmp_path / "plugin-data" / "a").is_dir()
     assert not (tmp_path / "plugins").exists()
+
+
+def test_a_playlist_on_its_own_plays_its_next_item_after_one_ended(tmp_path):
+    clips = [tmp_path / "1.mp4", tmp_path / "2.mp4"]
+    for clip in clips:
+        clip.write_bytes(b"")
+    cfg = OutputConfig(inputs=[InputConfig("list", "Playlist", "playlist", {"items": [str(c) for c in clips]})])
+
+    async def end_item(runtime, worker):
+        await asyncio.sleep(0.5)
+        runtime.on_worker_event({"event": "ended", "id": worker.last_id})
+        await asyncio.sleep(0.6)
+
+    _, worker = asyncio.run(run(cfg, tmp_path, 0.1, during=end_item))
+    assert worker.plays[:2] == ["list", "list"]
+    assert [s["uri"].rsplit("/", 1)[-1] for s in worker.sources[:2]] == ["1.mp4", "2.mp4"]

@@ -11,6 +11,7 @@ Protocol, one JSON object per line:
     stdout: {"event": "ready", "api_version": 1}
             {"event": "active", "value": true}
             {"event": "metadata", "value": {...}}
+            {"event": "next_source"}   play the input's next item (it stays on air)
             {"event": "fatal", "message": "..."}
             {"id": 7, "result": ...} | {"id": 7, "error": "..."}
     stdin:  {"id": 7, "method": "get_source" | "can_release"}
@@ -165,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         log=logging.getLogger(args.instance),
         store=Store(args.data_dir / "store.json"),
         _publish_metadata=lambda m: send({"event": "metadata", "value": asdict(m)}),
+        _request_next=lambda: send({"event": "next_source"}),
     )
     try:
         asyncio.run(serve(cls(ctx, settings)))

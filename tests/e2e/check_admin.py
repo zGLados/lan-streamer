@@ -43,8 +43,8 @@ def main() -> int:
             page.fill("#auth-password", PASSWORD)
             page.click("#auth-submit")
             expect(page.locator("#app")).to_be_visible(timeout=10_000)
-            expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
-            step("logged in, two inputs listed")
+            expect(page.locator("#inputs tr")).to_have_count(3, timeout=10_000)
+            step("logged in, three inputs listed (Test input A/B, Standby)")
 
             page.click("#add-input")
             page.select_option("#i-plugin", "test-pattern")
@@ -69,7 +69,7 @@ def main() -> int:
             step(f"'Next input' switched from {before} to {page.locator('#s-current').inner_text()}")
 
             row.locator("button.danger").click()
-            expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
+            expect(page.locator("#inputs tr")).to_have_count(3, timeout=10_000)
             step("deleted the input")
 
             page.click("#log-refresh")

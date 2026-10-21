@@ -1,8 +1,9 @@
 """Configuration store: outputs and their inputs in SQLite (data folder, lanstreamer.db).
 
 The schema is versioned with PRAGMA user_version; MIGRATIONS[n] upgrades from
-version n to n+1. On the first start the store is seeded with one output and
-two test inputs, so the stream shows something before anything is configured.
+version n to n+1. On the first start the store is seeded with one output, two
+test inputs and the "Standby" fallback, so the stream shows something before
+anything is configured.
 """
 
 from __future__ import annotations
@@ -51,6 +52,15 @@ MIGRATIONS = [
         value TEXT NOT NULL
     );
     """,
+    # 3: every output gets a fallback "Standby" input if it has none (requirement F-SCH-02)
+    """
+    INSERT INTO inputs (id, output_id, name, plugin, settings, priority, fallback,
+                        min_duration_s, max_duration_s, override, position)
+    SELECT 'standby-' || o.id, o.id, 'Standby', 'standby', '{"image": ""}', 0, 1, 0, NULL, 'none',
+           (SELECT COUNT(*) FROM inputs i WHERE i.output_id = o.id)
+    FROM outputs o
+    WHERE NOT EXISTS (SELECT 1 FROM inputs i WHERE i.output_id = o.id AND i.fallback = 1);
+    """,
 ]
 
 INPUT_FIELDS = ("name", "plugin", "settings", "priority", "fallback", "min_duration_s",
@@ -80,6 +90,7 @@ def seed() -> OutputConfig:
                         {"pattern": "smpte", "tone_hz": 440}, min_duration_s=20),
             InputConfig("test-b", "Test input B", "test-pattern",
                         {"pattern": "ball", "tone_hz": 660}, min_duration_s=20),
+            InputConfig("standby", "Standby", "standby", {"image": ""}, priority=0, fallback=True),
         ],
     )  # fmt: skip
 
