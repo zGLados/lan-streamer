@@ -28,6 +28,7 @@ ACTIVITY_HOLD_S = 1.0  # an activity change must hold this long (Debounce)
 FAILED_COOLDOWN_S = 30.0  # an input whose source failed sits out this long
 RELEASE_POLL_S = 1.0
 RESTART_BACKOFF_S = (2, 5, 15, 60)
+STARTUP_GRACE_S = 5.0  # wait at most this long for every input's first activity report
 
 
 class Worker(Protocol):
@@ -41,6 +42,7 @@ class InputRuntime:
     plugin_dir: Path | None
     proc: PluginProcess | None = None
     raw_active: bool = False
+    reported: bool = False  # sent its first activity report
     debounce: Debounce = field(default_factory=lambda: Debounce(ACTIVITY_HOLD_S))
     releasable: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -89,6 +91,8 @@ class OutputRuntime:
         self.failed_switches = 0
         self.skip_requested = False
         self._last_release_poll = 0.0
+        self._started_at: float | None = None
+        self._settled = False  # every input has reported once (or the grace time is over)
         self._tasks: set[asyncio.Task] = set()
         self._stopped = False
 
@@ -206,6 +210,8 @@ class OutputRuntime:
         now = self.clock()
         for inp in self.inputs.values():
             inp.debounce.update(inp.raw_active, now)
+        if not self._is_settled(now):
+            return
         await self._poll_release(now)
         if self.pending is not None:
             return  # a switch is in progress
@@ -219,6 +225,21 @@ class OutputRuntime:
                 self.on_change()
         elif self.on_air is None or target != self.on_air.id:
             await self._switch_to(self.inputs[target])
+
+    def _is_settled(self, now: float) -> bool:
+        """At start, decide only when every input has said whether it is active.
+
+        Otherwise the input whose plugin process happens to start first would go
+        on air for a moment before a more important one takes over.
+        """
+        if self._settled:
+            return True
+        if self._started_at is None:
+            self._started_at = now
+        running = [i for i in self.inputs.values() if i.proc is not None and i.proc.running]
+        if all(i.reported for i in running) or now - self._started_at >= STARTUP_GRACE_S:
+            self._settled = True
+        return self._settled
 
     async def _poll_release(self, now: float) -> None:
         """Asks the plugin on air whether it may hand over (only matters with peers)."""
@@ -289,6 +310,9 @@ class OutputRuntime:
         kind = event.get("event")
         if kind == "active":
             inp.raw_active = bool(event["value"])
+            if not inp.reported:  # the first report counts at once, later ones are debounced
+                inp.reported = True
+                inp.debounce = Debounce(ACTIVITY_HOLD_S, initial=inp.raw_active)
         elif kind == "metadata":
             inp.metadata = event.get("value", {})
         elif kind == "fatal":

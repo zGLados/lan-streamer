@@ -64,6 +64,13 @@ def test_equal_priority_inputs_take_turns(tmp_path):
     assert worker.plays[:3] == ["a", "b", "a"]
 
 
+def test_start_waits_until_every_input_has_reported(tmp_path):
+    # however the plugin processes happen to start, the low input never goes on air first
+    cfg = OutputConfig(inputs=[pattern("low", 10), pattern("high", 20)])
+    _, worker = asyncio.run(run(cfg, tmp_path, 0.8))
+    assert worker.plays == ["high"]
+
+
 def test_higher_priority_wins_and_stays(tmp_path):
     cfg = OutputConfig(inputs=[pattern("low", 10), pattern("high", 20)])
     runtime, worker = asyncio.run(run(cfg, tmp_path, 0.8))
