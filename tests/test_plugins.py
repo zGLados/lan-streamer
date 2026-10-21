@@ -179,3 +179,21 @@ def test_standby_shows_the_built_in_slate_or_a_given_picture(tmp_path):
     proc = PluginProcess("x", BUILTIN / "standby", tmp_path, {"image": "/nope.png"}, lambda *_: None)
     with pytest.raises(PluginError, match="file not found"):
         asyncio.run(proc.start())
+
+
+def test_a_plugin_that_prints_does_not_break_the_channel(tmp_path):
+    code = (
+        "from lanstreamer_sdk import InputPlugin, TestSource\n"
+        "print('hello from the plugin module')\n"
+        "class Plugin(InputPlugin):\n"
+        "    async def get_source(self):\n"
+        "        print('[download] 50% of 4 KiB', end='\\r')\n"
+        "        return TestSource()\n"
+    )
+    folder = write_plugin(tmp_path / "p", MANIFEST.format(api=1), code)
+
+    async def steps(proc, events):
+        return await proc.get_source(), await proc.get_source()
+
+    first, second = asyncio.run(run_plugin(folder, tmp_path, None, steps))
+    assert first == second == {"kind": "test", "pattern": "smpte", "freq": 440}

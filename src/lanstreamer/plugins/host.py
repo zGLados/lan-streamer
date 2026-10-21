@@ -56,9 +56,16 @@ from lanstreamer_sdk import (
 log = logging.getLogger("lanstreamer.plugins.host")
 
 
+# stdout is the channel to the core. Plugin code that prints (or a library's
+# progress output) would corrupt it, so everything else goes to stderr – the
+# core writes that to its log.
+_channel = sys.stdout
+sys.stdout = sys.stderr
+
+
 def send(message: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(message) + "\n")
-    sys.stdout.flush()
+    _channel.write(json.dumps(message) + "\n")
+    _channel.flush()
 
 
 def load_plugin(folder: Path) -> type[InputPlugin]:

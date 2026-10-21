@@ -5,8 +5,11 @@ URLs, ...). A submitted video is checked (length, per-device limit, already
 queued), downloaded into the instance's data folder and played when this input
 goes on air; afterwards the file is deleted. Active while a video is ready.
 
-yt-dlp updates itself on start (pip into the data folder) because the video
-sites change often; without internet the installed version keeps working.
+yt-dlp updates itself because the video sites change often: on start a newer
+version is downloaded in the background (pip into the data folder) and used
+from the next start on – a running process never swaps the library under its
+feet, and submissions never wait for the download. Offline, the version that
+came with lan-streamer keeps working.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -60,18 +64,30 @@ class SubmitForm(BaseModel):
 
 
 class YtDlp:
-    """yt-dlp in a worker thread; updated into `folder` once at start."""
+    """yt-dlp in a worker thread.
+
+    <folder>/current  the updated yt-dlp in use (if any), else the bundled one
+    <folder>/next     a newer download, moved to current at the next start
+    """
 
     def __init__(self, folder: Path, auto_update: bool, log):
         self.folder = folder
         self.log = log
         self.version = "?"
-        self._updated = asyncio.create_task(self._update()) if auto_update and not FAKE else None
+        current, upcoming = folder / "current", folder / "next"
+        if (upcoming / "yt_dlp").is_dir():  # downloaded during the last run
+            shutil.rmtree(current, ignore_errors=True)
+            upcoming.rename(current)
+        if (current / "yt_dlp").is_dir():
+            sys.path.insert(0, str(current))
+        self._update_task = asyncio.create_task(self._update()) if auto_update and not FAKE else None
 
     async def _update(self) -> None:
+        target = self.folder / "next"
+        shutil.rmtree(target, ignore_errors=True)
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
-            "--upgrade", "--target", str(self.folder), "yt-dlp",
+            "--target", str(target), "yt-dlp",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         )  # fmt: skip
         try:
@@ -81,14 +97,13 @@ class YtDlp:
             self.log.warning("yt-dlp update timed out – using the installed version")
             return
         if proc.returncode != 0:
+            shutil.rmtree(target, ignore_errors=True)
             self.log.warning("yt-dlp update failed (offline?) – using the installed version: %s",
                              out.decode(errors="replace").strip().splitlines()[-1:])  # fmt: skip
+            return
+        self.log.info("downloaded the latest yt-dlp – used from the next start")
 
     async def module(self):
-        if self._updated is not None:
-            await asyncio.shield(self._updated)
-            if (self.folder / "yt_dlp").is_dir() and str(self.folder) not in sys.path:
-                sys.path.insert(0, str(self.folder))
         import yt_dlp
         import yt_dlp.version
 
@@ -103,8 +118,8 @@ class YtDlp:
         yt_dlp = await self.module()
 
         def run() -> dict[str, Any]:
-            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True,
-                                   "skip_download": True}) as ydl:  # fmt: skip
+            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noprogress": True,
+                                   "noplaylist": True, "skip_download": True}) as ydl:  # fmt: skip
                 return ydl.extract_info(link, download=False) or {}
 
         return await asyncio.wait_for(asyncio.to_thread(run), 60)
@@ -117,7 +132,7 @@ class YtDlp:
             return target
         yt_dlp = await self.module()
         options = {
-            "quiet": True, "no_warnings": True, "noplaylist": True,
+            "quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True,
             # one file with picture and sound (no ffmpeg needed to merge), at most 1080p
             "format": "b[ext=mp4][height<=1080]/b[height<=1080]/b",
             "outtmpl": str(folder / f"{name}.%(ext)s"),
