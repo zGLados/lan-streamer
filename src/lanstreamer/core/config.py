@@ -37,6 +37,7 @@ class OutputConfig:
     # "switch" shows it for overlay_s after every switch, "always" keeps it, "off".
     overlay: OverlayMode = "switch"
     overlay_s: float = 8.0
+    restream_url: str = ""  # rtmp(s)://… with the stream key: also send the output there; "" = off
     inputs: list[InputConfig] = field(default_factory=list)
 
 

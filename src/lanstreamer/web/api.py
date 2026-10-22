@@ -135,6 +135,7 @@ class OutputPatch(BaseModel):
     encoder: Literal["auto", "nvidia", "amd", "intel", "cpu"] | None = None
     overlay: Literal["switch", "always", "off"] | None = None
     overlay_s: float | None = Field(None, ge=2, le=60)
+    restream_url: str | None = Field(None, max_length=500, pattern=r"^(rtmps?://\S+)?$")
 
 
 class PluginSwitch(BaseModel):

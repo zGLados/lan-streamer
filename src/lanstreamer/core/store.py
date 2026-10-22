@@ -70,11 +70,16 @@ MIGRATIONS = [
     ALTER TABLE outputs ADD COLUMN overlay TEXT NOT NULL DEFAULT 'switch';
     ALTER TABLE outputs ADD COLUMN overlay_s REAL NOT NULL DEFAULT 8.0;
     """,
+    # 6: restream an output to an RTMP server
+    """
+    ALTER TABLE outputs ADD COLUMN restream_url TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 INPUT_FIELDS = ("name", "plugin", "settings", "priority", "fallback", "min_duration_s",
                 "max_duration_s", "override")  # fmt: skip
-OUTPUT_FIELDS = ("name", "width", "height", "fps", "bitrate_kbps", "encoder", "overlay", "overlay_s")
+OUTPUT_FIELDS = ("name", "width", "height", "fps", "bitrate_kbps", "encoder", "overlay", "overlay_s",
+                 "restream_url")  # fmt: skip
 
 
 class NotFound(KeyError):
@@ -138,7 +143,7 @@ class Store:
         return OutputConfig(
             id=row["id"], name=row["name"], width=row["width"], height=row["height"],
             fps=row["fps"], bitrate_kbps=row["bitrate_kbps"], encoder=row["encoder"],
-            overlay=row["overlay"], overlay_s=row["overlay_s"],
+            overlay=row["overlay"], overlay_s=row["overlay_s"], restream_url=row["restream_url"],
             inputs=[self._input(i) for i in inputs],
         )  # fmt: skip
 
@@ -161,9 +166,9 @@ class Store:
             position = len(taken)
             self._db.execute(
                 "INSERT INTO outputs (id, name, width, height, fps, bitrate_kbps, encoder, position,"
-                " overlay, overlay_s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " overlay, overlay_s, restream_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (cfg.id, cfg.name, cfg.width, cfg.height, cfg.fps, cfg.bitrate_kbps,
-                 cfg.encoder, position, cfg.overlay, cfg.overlay_s),
+                 cfg.encoder, position, cfg.overlay, cfg.overlay_s, cfg.restream_url),
             )  # fmt: skip
         for inp in cfg.inputs:
             self.add_input(cfg.id, inp)

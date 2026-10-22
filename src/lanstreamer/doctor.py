@@ -16,6 +16,8 @@ REQUIRED_ELEMENTS = (
     "videotestsrc", "audiotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
     "audioconvert", "audioresample", "audiomixer", "volume", "textoverlay", "audioloudnorm",
     "imagefreeze", "x264enc", "h264parse", "opusenc", "mpegtsmux", "capssetter", "srtsink",
+    # restream to RTMP
+    "srtsrc", "flvmux", "rtmp2sink", "avenc_aac",
     # inputs: files, HTTP/HLS, RTSP, decoders
     "fallbacksrc", "uridecodebin3", "decodebin3", "qtdemux", "matroskademux", "tsdemux",
     "souphttpsrc", "hlsdemux2", "rtspsrc", "rtph264depay", "rtph265depay", "rtpmp4gdepay",

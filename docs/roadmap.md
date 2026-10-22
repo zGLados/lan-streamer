@@ -44,7 +44,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] RTMP/SRT ingest via MediaMTX
 - [x] Overlays (source, title, submitter)
 - [x] Several outputs, each with its own ranking
-- [ ] Optional: restream via RTMP
+- [x] Optional: restream via RTMP
 
 ## M5 – Installers
 

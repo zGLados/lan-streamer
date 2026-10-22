@@ -139,6 +139,10 @@ def test_output_patch_reports_restart(setup):
     assert r.json()["restart_required"] is False
     assert (r.json()["output"]["overlay"], r.json()["output"]["overlay_s"]) == ("always", 5)
     assert client.patch("/api/admin/outputs/out1", json={"overlay": "sometimes"}).status_code == 422
+    r = client.patch("/api/admin/outputs/out1", json={"restream_url": "rtmp://a.rtmp.youtube.com/live2/abc-123"})
+    assert r.json()["restart_required"] is False and r.json()["output"]["restream_url"].endswith("/abc-123")
+    assert client.patch("/api/admin/outputs/out1", json={"restream_url": "http://x"}).status_code == 422
+    assert client.patch("/api/admin/outputs/out1", json={"restream_url": ""}).json()["output"]["restream_url"] == ""
 
 
 def test_logs(setup):

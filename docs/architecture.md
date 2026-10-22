@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: M1 (prototype), M2 (core), M3 (submissions, viewer forms, TV page) and M4 (overlays, RTMP/SRT ingest, YouTube, several outputs) done; restream via RTMP is still open. Next: M5 (installers: Windows service, firewall rules, Linux). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
+Status: M1 (prototype), M2 (core), M3 (submissions, viewer forms, TV page) and M4 (overlays, RTMP/SRT ingest, YouTube, several outputs, restream via RTMP) done. Next: M5 (installers: Windows service, firewall rules, Linux). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -103,6 +103,8 @@ A plugin resolves *what* to play; the output worker does the decoding. The plugi
 **RTMP/SRT ingest (built-in `ingest`):** MediaMTX receives on `ingest/<stream key>` (RTMP `rtmp://<pc>:1935/ingest` + key, or SRT `srt://<pc>:8890?streamid=publish:ingest/<key>`). The app starts MediaMTX with its API on `127.0.0.1:9997` only (env `MTX_API`, `MTX_APIADDRESS`; the shipped `mediamtx.yml` stays untouched); the plugin polls `/v3/paths/get/ingest/<key>` every 2 s and is active while the path is ready. On equal priority it holds the output while the stream is sent. The admin page shows the addresses and the received tracks. OBS on another PC needs `mediamtx.exe` allowed in the Windows firewall (rules come with M5).
 
 **YouTube (built-in `youtube`):** yt-dlp (shared helper `lanstreamer/plugins/ytdlp.py`, also used by submissions; updates itself per instance) resolves the link right before playing, because the URLs expire. A channel's `/live` page or a live video: active while live (checked every `live_check_s`), holds the output on equal priority. A playlist, channel or single video: always active, plays in order (or shuffled), starts over, may hand over after each video. Format: H.264 + AAC up to `max_height`, picture and sound as separate streams (no ffmpeg needed). Note: yt-dlp warns that YouTube without a JavaScript runtime (Deno, QuickJS, …) is deprecated and formats may go missing – if that happens, a JS runtime has to be bundled.
+
+**Restream (per output, `restream_url`):** a separate process per output (`media/restream.py`, managed by `core/restreamer.py`) reads the finished output back from MediaMTX over SRT, keeps the H.264 as it is, turns Opus into AAC and sends FLV with `rtmp2sink` (rtmp:// and rtmps://). Separate so a refused or dropped connection never touches the output; it restarts after 5/10/30/60 s. The admin page shows the state (off, connecting, live, retrying …); the stream key never appears in the public status. Changing the URL takes effect at once.
 
 ## Scheduler
 

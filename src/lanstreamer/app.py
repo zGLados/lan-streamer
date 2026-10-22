@@ -31,6 +31,7 @@ import uvicorn
 from lanstreamer import BUILD, paths, tray
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import OutputConfig, demo_output
+from lanstreamer.core.restreamer import Restreamer
 from lanstreamer.core.runtime import OutputRuntime
 from lanstreamer.core.simworker import SimulatedWorker
 from lanstreamer.core.store import NotFound, Store
@@ -76,6 +77,7 @@ class Status:
     switches: int = 0
     failed_switches: int = 0
     last_error: str = ""
+    restream: str = "off"  # off, connecting, live, retrying in … s: <error>
     whep_port: int = WEBRTC_PORT
     whep_path: str = "out1"
     started: float = field(default_factory=time.time)
@@ -106,6 +108,7 @@ class Output:
         self.worker: OutputWorker | SimulatedWorker | None = None
         self.runtime: OutputRuntime | None = None
         self.scheduler: asyncio.Task | None = None
+        self.restreamer: Restreamer | None = None
         self.log_file: Any = subprocess.DEVNULL
 
     @property
@@ -129,7 +132,27 @@ class Output:
         await self.runtime.start()
         self.scheduler = asyncio.create_task(self.runtime.run())
         self.status.state = "running"
+        await self._restream(out.restream_url)
         self.refresh_status()
+
+    async def _restream(self, url: str) -> None:
+        """Starts, changes or stops sending this output to an RTMP server."""
+        if self.restreamer is not None and self.restreamer.target == url:
+            return
+        if self.restreamer is not None:
+            await self.restreamer.stop()
+            self.restreamer = None
+        if not url:
+            self.status.restream = "off"
+            return
+        if self.app.args.simulate:
+            self.status.restream = "simulated (not sent)"
+            return
+        self.restreamer = Restreamer(
+            self.cfg.name, f"srt://127.0.0.1:{SRT_PORT}?streamid=read:{self.cfg.id}", url,
+            on_change=self._on_change, stderr=self.log_file,
+        )  # fmt: skip
+        self.restreamer.start()
 
     async def _start_worker(self, out: OutputConfig) -> None:
         spec = await self.app.encoder(out.encoder, out.fps)
@@ -186,14 +209,18 @@ class Output:
         self.status.switches = snapshot["switches"]
         self.status.failed_switches = snapshot["failed_switches"]
         self.status.inputs = snapshot["inputs"]
+        if self.restreamer is not None:
+            self.status.restream = self.restreamer.state
 
     async def apply(self, stored: OutputConfig) -> None:
         """An admin change: take over the stored configuration (format/encoder need a restart)."""
         self.cfg.name, self.status.output_name = stored.name, stored.name
         self.cfg.inputs = stored.inputs
         self.cfg.overlay, self.cfg.overlay_s = stored.overlay, stored.overlay_s
+        self.cfg.restream_url = stored.restream_url
         if self.runtime is not None:
             await self.runtime.apply(self.cfg, self.app.plugins())
+            await self._restream(stored.restream_url)
         self.status.sources = [i.name for i in self.cfg.inputs]
 
     def smoke_ok(self) -> bool:
@@ -207,6 +234,8 @@ class Output:
 
     async def stop(self, state: str = "stopping") -> None:
         self.status.state = state
+        if self.restreamer:
+            await self.restreamer.stop()
         if self.scheduler:
             self.scheduler.cancel()
         if self.runtime:

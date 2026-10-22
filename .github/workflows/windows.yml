@@ -158,14 +158,14 @@ jobs:
           name: testclip
           path: media
 
-      - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page + viewer side + ingest
+      - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page + viewer side + ingest + restream
         shell: pwsh
         run: |
           $dir = "$env:ProgramFiles\lan-streamer\python"
           & "$dir\python.exe" -c "import pydantic, pystray, PIL, fastapi, uvicorn, websockets, yt_dlp; print('dependencies ok')"
           & "$dir\python.exe" -m pip --version
           $p = Start-Process -PassThru -FilePath "$dir\pythonw.exe" `
-            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '240'
+            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '360'
           python tests/e2e/check_api.py http://localhost:8080
           $api = $LASTEXITCODE
           python tests/e2e/check_admin.py http://localhost:8080
@@ -181,12 +181,16 @@ jobs:
           # a live stream sent over SRT (like OBS) with the installed GStreamer
           python tests/e2e/check_ingest.py http://localhost:8080 "$dir\python.exe"
           $ingest = $LASTEXITCODE
+          # the output sent on to an RTMP server (MediaMTX's own RTMP port stands in for YouTube/Twitch)
+          python tests/e2e/check_restream.py http://localhost:8080
+          $restream = $LASTEXITCODE
           $p.WaitForExit()
           Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 15
           if ($api -ne 0) { throw "web API check failed" }
           if ($admin -ne 0) { throw "admin page check failed" }
           if ($viewer -ne 0) { throw "viewer side check failed" }
           if ($ingest -ne 0) { throw "ingest check failed" }
+          if ($restream -ne 0) { throw "restream check failed" }
           if ($split -ne 0) { throw "separate picture/sound check failed" }
           $out = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\output.log"
           $overlay = $out | Select-String 'Overlay shown: .*submitted by CI viewer' | Select-Object -First 1
