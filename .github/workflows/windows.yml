@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "**.md", "LICENSE"]  # no build for documentation-only changes
+    # no build for documentation-only or Linux-only changes
+    paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/linux/**", ".github/workflows/linux.yml"]
   pull_request:
-    paths-ignore: ["docs/**", "**.md", "LICENSE"]
+    paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/linux/**", ".github/workflows/linux.yml"]
 
 env:
   GST_VERSION: "1.28.6"
@@ -173,7 +174,8 @@ jobs:
           & "$dir\python.exe" -c "import pydantic, pystray, PIL, fastapi, uvicorn, websockets, yt_dlp; print('dependencies ok')"
           & "$dir\python.exe" -m pip --version
           $p = Start-Process -PassThru -FilePath "$dir\pythonw.exe" `
-            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '360'
+            -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu', '--smoke-test', '360', `
+              '--smoke-stop-file', "$env:RUNNER_TEMP\checks-done"
           python tests/e2e/check_api.py http://localhost:8080
           $api = $LASTEXITCODE
           python tests/e2e/check_admin.py http://localhost:8080
@@ -192,6 +194,7 @@ jobs:
           # the output sent on to an RTMP server (MediaMTX's own RTMP port stands in for YouTube/Twitch)
           python tests/e2e/check_restream.py http://localhost:8080
           $restream = $LASTEXITCODE
+          New-Item -ItemType File "$env:RUNNER_TEMP\checks-done" | Out-Null  # the app ends now, not after 360 s
           $p.WaitForExit()
           Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 15
           if ($api -ne 0) { throw "web API check failed" }

@@ -389,10 +389,11 @@ class App:
 
     async def run(self, web: asyncio.Task | None = None) -> int:
         deadline = time.monotonic() + self.args.smoke_test if self.args.smoke_test else None
+        stop_file = Path(self.args.smoke_stop_file) if getattr(self.args, "smoke_stop_file", None) else None
         while not self.failed.is_set():
             if self.quit.is_set() or (web is not None and web.done()):
                 return 0  # tray "Quit" or Ctrl+C (the web server stops on it)
-            if deadline and time.monotonic() > deadline:
+            if deadline and (time.monotonic() > deadline or (stop_file and stop_file.exists())):
                 results = [o.smoke_ok() for o in self.outputs.values()]  # each one logs its result
                 return 0 if all(results) else 1
             for output in list(self.outputs.values()):
@@ -430,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--simulate", action="store_true",
                         help="no video pipeline (no GStreamer needed): for local tests")  # fmt: skip
+    parser.add_argument("--smoke-stop-file", metavar="PATH",
+                        help="with --smoke-test: end early once this file exists (CI: checks done)")  # fmt: skip
     parser.add_argument("--smoke-test", type=float, default=0, metavar="SECONDS",
                         help="run this long, then exit 0 if switching worked")  # fmt: skip
     parser.add_argument("--pause-on-error", action="store_true",

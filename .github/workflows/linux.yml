@@ -9,9 +9,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "**.md", "LICENSE"]
+    # no build for documentation-only or Windows-only changes
+    paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/windows/**", ".github/workflows/windows.yml"]
   pull_request:
-    paths-ignore: ["docs/**", "**.md", "LICENSE"]
+    paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/windows/**", ".github/workflows/windows.yml"]
 
 env:
   GST_PLUGINS_RS: "0.13"  # branch of gst-plugins-rs that builds against GStreamer 1.24
