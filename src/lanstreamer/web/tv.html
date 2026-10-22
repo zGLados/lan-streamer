@@ -18,7 +18,7 @@
 // goes full screen (browsers allow both only after a user action). For a display
 // PC without anyone at it, start Edge in kiosk mode – see docs/development.md.
 const video = document.getElementById("video");
-const output = location.pathname.split("/")[2] || "out1";
+const output = decodeURIComponent(location.pathname.split("/")[2] || "");  // empty: the first output
 let pc = null;
 
 async function connect() {
@@ -37,9 +37,13 @@ async function connect() {
       pc.onicegatheringstatechange = () => pc.iceGatheringState === "complete" && resolve();
       setTimeout(resolve, 2000);
     });
-    let port = 8889;
-    try { port = (await (await fetch("/api/status")).json()).whep_port || port; } catch { /* default */ }
-    const res = await fetch(`${location.protocol}//${location.hostname}:${port}/${output}/whep`, {
+    let port = 8889, path = output || "out1";
+    try {
+      const st = await (await fetch(`/api/status${output ? `?output=${encodeURIComponent(output)}` : ""}`)).json();
+      port = st.whep_port || port;
+      path = st.whep_path || path;
+    } catch { /* defaults */ }
+    const res = await fetch(`${location.protocol}//${location.hostname}:${port}/${path}/whep`, {
       method: "POST", headers: { "Content-Type": "application/sdp" }, body: pc.localDescription.sdp,
     });
     if (!res.ok) throw new Error(`WHEP ${res.status}`);

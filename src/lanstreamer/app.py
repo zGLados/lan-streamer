@@ -1,9 +1,10 @@
-"""lan-streamer: one output, its inputs, the scheduler and the player page.
+"""lan-streamer: the outputs, their inputs and schedulers, the web pages.
 
-Starts MediaMTX, picks an encoder, starts the output worker, the input plugins
-and the scheduler (core.runtime), and serves the player page. Until the
-admin area exists (M2 step 4), the configuration is edited in the database;
---source starts a test run with two test patterns plus that file or URL.
+Starts MediaMTX (shared), and per stored output: picks an encoder, starts the
+output worker, the input plugins and the scheduler (core.runtime). Serves the
+player page, the TV view and the admin page. Outputs added or removed on the
+admin page start or stop while running. --source starts a test run with one
+output: two test patterns plus that file or URL.
 
     python -m lanstreamer [--fps 30] [--source <file or URL> ...] [--smoke-test 40]
 """
@@ -22,6 +23,7 @@ import threading
 import time
 import webbrowser
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -31,7 +33,7 @@ from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import OutputConfig, demo_output
 from lanstreamer.core.runtime import OutputRuntime
 from lanstreamer.core.simworker import SimulatedWorker
-from lanstreamer.core.store import Store
+from lanstreamer.core.store import NotFound, Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
 from lanstreamer.plugins import choice
@@ -54,10 +56,12 @@ NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 @dataclass
 class Status:
-    """What the web page shows; written by the app, read by the web server."""
+    """What the web page shows for one output; written by the app, read by the web server."""
 
     version: str = BUILD
     state: str = "starting"
+    output_id: str = "out1"
+    output_name: str = ""
     encoder: str = ""
     stream: str = ""  # negotiated H.264 caps (profile, level)
     ts_table: str = ""  # tracks in the MPEG-TS sent to MediaMTX
@@ -88,60 +92,52 @@ def wait_for_port(port: int, timeout_s: float) -> bool:
     return False
 
 
-class App:
-    def __init__(self, args: argparse.Namespace, output: OutputConfig, store: Store | None = None):
-        self.args = args
-        self.output = output
-        self.store = store  # None: test run (--source), the configuration is not stored
-        self.changes = Changes()
+class Output:
+    """One running output: its worker (GStreamer process), its inputs and scheduler, its status."""
+
+    def __init__(self, app: App, cfg: OutputConfig):
+        self.app = app
+        self.cfg = cfg
         self.status = Status(
-            target_fps=output.fps, resolution=f"{output.width}x{output.height}",
-            whep_path=output.id, sources=[i.name for i in output.inputs],
+            output_id=cfg.id, output_name=cfg.name,
+            target_fps=cfg.fps, resolution=f"{cfg.width}x{cfg.height}",
+            whep_path=cfg.id, sources=[i.name for i in cfg.inputs],
         )  # fmt: skip
-        self.mediamtx: subprocess.Popen | None = None
-        self.mediamtx_log: Any = subprocess.DEVNULL  # replaced by log files in run()
-        self.worker_log: Any = subprocess.DEVNULL
         self.worker: OutputWorker | SimulatedWorker | None = None
         self.runtime: OutputRuntime | None = None
-        self.quit = threading.Event()  # set by the tray menu
-        self.failed = threading.Event()
+        self.scheduler: asyncio.Task | None = None
+        self.log_file: Any = subprocess.DEVNULL
 
-    # --- start ------------------------------------------------------------------
+    @property
+    def log_name(self) -> str:
+        """The first output keeps the old name output.log, the others output-<id>.log."""
+        first = next(iter(self.app.outputs), self.cfg.id) == self.cfg.id
+        return "output.log" if first else f"output-{self.cfg.id}.log"
 
     async def start(self) -> None:
-        out = self.output
-        log.info("lan-streamer %s – %dx%d @ %d fps", BUILD, out.width, out.height, out.fps)
-        if self.args.simulate:
-            log.info("Simulation: no video pipeline, no MediaMTX (local tests)")
+        out = self.cfg
+        log.info("Output %s: %dx%d @ %d fps", out.name, out.width, out.height, out.fps)
+        if self.app.args.simulate:
             self.status.encoder = "simulated"
             self.worker = SimulatedWorker(self._on_worker_event, out.fps)
             await self.worker.start()
         else:
-            await self._start_media(out)
-        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
-        self.runtime = OutputRuntime(
-            out, plugins, paths.data_dir(), self.worker, on_change=self._on_change
-        )
-        log.info("Starting %d inputs", len(out.inputs))
+            await self._start_worker(out)
+        self.runtime = OutputRuntime(out, self.app.plugins(), paths.data_dir(), self.worker,
+                                     on_change=self._on_change)  # fmt: skip
+        log.info("Starting %d inputs of %s", len(out.inputs), out.name)
         await self.runtime.start()
+        self.scheduler = asyncio.create_task(self.runtime.run())
         self.status.state = "running"
-        self._refresh_status()
+        self.refresh_status()
 
-    async def _start_media(self, out: OutputConfig) -> None:
-        log.info("Selecting encoder (preference: %s) ...", out.encoder)
-        spec, tries = await asyncio.to_thread(encoders.select, out.encoder, out.fps)
-        for line in tries:
-            log.info("  %s", line)
-        if spec is None:
-            raise RuntimeError("no working H.264 encoder found")
+    async def _start_worker(self, out: OutputConfig) -> None:
+        spec = await self.app.encoder(out.encoder, out.fps)
         self.status.encoder = f"{spec.element} ({spec.vendor})"
-
-        await asyncio.to_thread(self._start_mediamtx)
-        if not await asyncio.to_thread(wait_for_port, RTSP_PORT, 15):
-            raise RuntimeError(f"MediaMTX did not open port {RTSP_PORT}")
-
         bitrate = out.bitrate_kbps or (8000 if out.fps > 30 else 6000)
-        log.info("Starting output worker (%s, %d kbit/s)", spec.element, bitrate)
+        log.info("Starting output worker for %s (%s, %d kbit/s)", out.name, spec.element, bitrate)
+        if self.app.logs is not None:
+            self.log_file = open(self.app.logs / self.log_name, "w")  # noqa: SIM115, ASYNC230 – closed in stop()
         self.worker = OutputWorker(
             [
                 "--encoder", spec.element,
@@ -149,12 +145,133 @@ class App:
                 "--width", str(out.width), "--height", str(out.height),
                 "--fps", str(out.fps), "--bitrate", str(bitrate),
             ],
-            self._on_worker_event, stderr=self.worker_log,
+            self._on_worker_event, stderr=self.log_file,
         )  # fmt: skip
         try:
             await self.worker.start()
         except WorkerError as exc:
             raise RuntimeError(str(exc)) from exc
+
+    def _on_worker_event(self, event: dict[str, Any]) -> None:
+        kind = event.get("event")
+        if kind == "stream":
+            self.status.stream = event["caps"]
+            log.info("Encoded stream (%s): %s", self.cfg.name, event["caps"])
+        elif kind == "ts_table":
+            if event["sent"]:
+                self.status.ts_table = event["pmt"]
+            log.info("MPEG-TS %s: %s", "sent" if event["sent"] else "held back", event["pmt"])
+        elif kind == "stats":
+            self.status.fps = event["fps"]
+        elif kind == "error":
+            self.status.last_error = event["message"]
+            log.error("Output error (%s): %s", self.cfg.name, event["message"])
+        elif kind == "exited" and self.status.state not in ("stopping", "removed"):
+            self.status.state = "failed"
+            self.app.failed.set()
+        elif self.runtime is not None:
+            self.runtime.on_worker_event(event)
+
+    def _on_change(self) -> None:
+        self.refresh_status()
+        self.app.changes.notify()
+
+    def refresh_status(self) -> None:
+        if self.runtime is None:
+            return
+        snapshot = self.runtime.status()
+        self.status.current = snapshot["current"]
+        self.status.now = snapshot["now"]
+        self.status.viewer_version = snapshot["viewer_version"]
+        self.status.switches = snapshot["switches"]
+        self.status.failed_switches = snapshot["failed_switches"]
+        self.status.inputs = snapshot["inputs"]
+
+    async def apply(self, stored: OutputConfig) -> None:
+        """An admin change: take over the stored configuration (format/encoder need a restart)."""
+        self.cfg.name, self.status.output_name = stored.name, stored.name
+        self.cfg.inputs = stored.inputs
+        self.cfg.overlay, self.cfg.overlay_s = stored.overlay, stored.overlay_s
+        if self.runtime is not None:
+            await self.runtime.apply(self.cfg, self.app.plugins())
+        self.status.sources = [i.name for i in self.cfg.inputs]
+
+    def smoke_ok(self) -> bool:
+        s = self.status
+        ok = s.switches >= 1 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
+        log.info(
+            "Smoke test %s (%s): %d switches, %d failed, %.1f fps (target %d)",
+            "passed" if ok else "FAILED", self.cfg.name, s.switches, s.failed_switches, s.fps, s.target_fps,
+        )  # fmt: skip
+        return ok
+
+    async def stop(self, state: str = "stopping") -> None:
+        self.status.state = state
+        if self.scheduler:
+            self.scheduler.cancel()
+        if self.runtime:
+            await self.runtime.stop()
+        if self.worker:
+            await self.worker.stop()
+        if self.log_file is not subprocess.DEVNULL:
+            self.log_file.close()
+
+
+class App:
+    """MediaMTX (shared) and the outputs; outputs are added and removed while running."""
+
+    def __init__(self, args: argparse.Namespace, outputs: list[OutputConfig], store: Store | None = None):
+        self.args = args
+        self.store = store  # None: test run (--source), the configuration is not stored
+        self.changes = Changes()
+        self.outputs: dict[str, Output] = {}
+        for cfg in outputs:
+            self.outputs[cfg.id] = Output(self, cfg)
+        self.logs: Path | None = None  # set in run(): output workers log there
+        self.mediamtx: subprocess.Popen | None = None
+        self.mediamtx_log: Any = subprocess.DEVNULL  # replaced by a log file in run()
+        self._encoders: dict[tuple[str, int], Any] = {}
+        self.quit = threading.Event()  # set by the tray menu
+        self.failed = threading.Event()
+        self._lock = asyncio.Lock()
+        self._tasks: set[asyncio.Task] = set()
+
+    @property
+    def first(self) -> Output:
+        return next(iter(self.outputs.values()))
+
+    def output(self, output_id: str | None) -> Output:
+        """The output with this id (KeyError if none); None: the first one."""
+        return self.first if not output_id else self.outputs[output_id]
+
+    def plugins(self) -> dict[str, Path]:
+        return {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
+
+    # --- start ------------------------------------------------------------------
+
+    async def start(self) -> None:
+        log.info("lan-streamer %s – %d output(s)", BUILD, len(self.outputs))
+        if self.args.simulate:
+            log.info("Simulation: no video pipeline, no MediaMTX (local tests)")
+        else:
+            await asyncio.to_thread(self._start_mediamtx)
+            if not await asyncio.to_thread(wait_for_port, RTSP_PORT, 15):
+                raise RuntimeError(f"MediaMTX did not open port {RTSP_PORT}")
+        for output in list(self.outputs.values()):
+            await output.start()
+
+    async def encoder(self, preference: str, fps: int) -> Any:
+        """The encoder for an output; probed once per preference and frame rate."""
+        key = (preference, fps)
+        if key not in self._encoders:
+            log.info("Selecting encoder (preference: %s, %d fps) ...", preference, fps)
+            spec, tries = await asyncio.to_thread(encoders.select, preference, fps)
+            for line in tries:
+                log.info("  %s", line)
+            if spec is None:
+                raise RuntimeError("no working H.264 encoder found")
+            self._encoders[key] = spec
+        return self._encoders[key]
 
     def _start_mediamtx(self) -> None:
         exe = paths.mediamtx()
@@ -172,63 +289,57 @@ class App:
             stdout=self.mediamtx_log, stderr=subprocess.STDOUT,
         )  # fmt: skip
 
-    def _on_worker_event(self, event: dict[str, Any]) -> None:
-        kind = event.get("event")
-        if kind == "stream":
-            self.status.stream = event["caps"]
-            log.info("Encoded stream: %s", event["caps"])
-        elif kind == "ts_table":
-            if event["sent"]:
-                self.status.ts_table = event["pmt"]
-            log.info("MPEG-TS %s: %s", "sent" if event["sent"] else "held back", event["pmt"])
-        elif kind == "stats":
-            self.status.fps = event["fps"]
-        elif kind == "error":
-            self.status.last_error = event["message"]
-            log.error("Output error: %s", event["message"])
-        elif kind == "exited" and self.status.state != "stopping":
-            self.status.state = "failed"
-            self.failed.set()
-        elif self.runtime is not None:
-            self.runtime.on_worker_event(event)
-
-    def _on_change(self) -> None:
-        self._refresh_status()
-        self.changes.notify()
-
-    def _refresh_status(self) -> None:
-        if self.runtime is None:
-            return
-        snapshot = self.runtime.status()
-        self.status.current = snapshot["current"]
-        self.status.now = snapshot["now"]
-        self.status.viewer_version = snapshot["viewer_version"]
-        self.status.switches = snapshot["switches"]
-        self.status.failed_switches = snapshot["failed_switches"]
-        self.status.inputs = snapshot["inputs"]
-
     # --- control ----------------------------------------------------------------
 
-    def status_dict(self) -> dict[str, Any]:
-        data = dataclasses.asdict(self.status)
-        data["uptime_s"] = round(time.time() - self.status.started)
+    def status_dict(self, output_id: str | None = None) -> dict[str, Any]:
+        """One output's status (KeyError: no such output) and the list of all outputs."""
+        output = self.output(output_id)
+        data = dataclasses.asdict(output.status)
+        data["uptime_s"] = round(time.time() - output.status.started)
+        data["outputs"] = [{"id": o.cfg.id, "name": o.cfg.name, "current": o.status.current}
+                           for o in self.outputs.values()]  # fmt: skip
         return data
 
-    def skip(self) -> None:
-        """The "Next input" button on the page."""
-        if self.runtime:
-            self.runtime.skip()
+    def skip(self, output_id: str | None = None) -> None:
+        """The "Next input" button."""
+        runtime = self.output(output_id).runtime
+        if runtime:
+            runtime.skip()
 
     async def apply_config(self, output_id: str) -> None:
-        """An admin change: the running output takes over its stored configuration."""
-        if self.store is None or self.runtime is None or output_id != self.output.id:
+        """An admin change: the output takes over its stored configuration, a new
+        output starts, a deleted one stops."""
+        if self.store is None:
             return
-        stored = self.store.output(output_id)
-        self.output.inputs = stored.inputs  # format/encoder changes need a restart
-        self.output.overlay, self.output.overlay_s = stored.overlay, stored.overlay_s
-        plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
-        await self.runtime.apply(self.output, plugins)
-        self.status.sources = [i.name for i in self.output.inputs]
+        async with self._lock:
+            try:
+                stored = self.store.output(output_id)
+            except NotFound:
+                stored = None
+            running = self.outputs.get(output_id)
+            if stored is None and running is not None:
+                log.info("Output removed: %s", running.cfg.name)
+                del self.outputs[output_id]
+                await running.stop("removed")
+            elif stored is not None and running is None:
+                log.info("Output added: %s", stored.name)
+                output = self.outputs[output_id] = Output(self, stored)
+                task = asyncio.create_task(self._start_added(output))  # choosing an encoder takes a while
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
+            elif stored is not None and running is not None:
+                await running.apply(stored)
+        self.changes.notify()
+
+    async def _start_added(self, output: Output) -> None:
+        try:
+            await output.start()
+        except Exception as exc:  # noqa: BLE001 – the other outputs keep running
+            output.status.state, output.status.last_error = "failed", str(exc)
+            log.error("Output %s did not start: %s", output.cfg.name, exc)
+        if self.outputs.get(output.cfg.id) is not output:  # removed while it was starting
+            await output.stop("removed")
+        self.changes.notify()
 
     def backend(self) -> Backend:
         store = self.store or Store(paths.data_dir() / "lanstreamer.db")
@@ -237,47 +348,34 @@ class App:
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
-            viewer=_RuntimeProxy(self),
+            viewer=_Viewers(self),
         )  # fmt: skip
 
     async def plugin_changed(self, plugin_id: str) -> None:
         """A plugin was uploaded or removed: inputs using it restart with the new code."""
-        if self.runtime is not None:
-            plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
-            await self.runtime.reload_plugin(plugin_id, plugins)
+        plugins = self.plugins()
+        for output in list(self.outputs.values()):
+            if output.runtime is not None:
+                await output.runtime.reload_plugin(plugin_id, plugins)
 
     async def run(self, web: asyncio.Task | None = None) -> int:
-        assert self.runtime is not None
-        scheduler = asyncio.create_task(self.runtime.run())
         deadline = time.monotonic() + self.args.smoke_test if self.args.smoke_test else None
-        try:
-            while not self.failed.is_set():
-                if self.quit.is_set() or (web is not None and web.done()):
-                    return 0  # tray "Quit" or Ctrl+C (the web server stops on it)
-                if deadline and time.monotonic() > deadline:
-                    return self._smoke_result()
-                self._refresh_status()
-                await asyncio.sleep(0.2)
-            log.error("Output worker stopped: %s", self.status.last_error or "unknown reason")
-            return 1
-        finally:
-            scheduler.cancel()
-
-    def _smoke_result(self) -> int:
-        s = self.status
-        ok = s.switches >= 1 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
-        log.info(
-            "Smoke test %s: %d switches, %d failed, %.1f fps (target %d)",
-            "passed" if ok else "FAILED", s.switches, s.failed_switches, s.fps, s.target_fps,
-        )
-        return 0 if ok else 1
+        while not self.failed.is_set():
+            if self.quit.is_set() or (web is not None and web.done()):
+                return 0  # tray "Quit" or Ctrl+C (the web server stops on it)
+            if deadline and time.monotonic() > deadline:
+                results = [o.smoke_ok() for o in self.outputs.values()]  # each one logs its result
+                return 0 if all(results) else 1
+            for output in list(self.outputs.values()):
+                output.refresh_status()
+            await asyncio.sleep(0.2)
+        failed = next((o for o in self.outputs.values() if o.status.state == "failed"), self.first)
+        log.error("Output worker of %s stopped: %s", failed.cfg.name, failed.status.last_error or "unknown reason")
+        return 1
 
     async def stop(self) -> None:
-        self.status.state = "stopping"
-        if self.runtime:
-            await self.runtime.stop()
-        if self.worker:
-            await self.worker.stop()
+        for output in list(self.outputs.values()):
+            await output.stop()
         if self.mediamtx and self.mediamtx.poll() is None:
             self.mediamtx.terminate()
             try:
@@ -330,24 +428,23 @@ def run(args: argparse.Namespace) -> int:
     store = Store(paths.data_dir() / "lanstreamer.db")
     choice.on_start(store, paths.setup_file())
     if args.source:  # test run, nothing is stored
-        output = demo_output(60, args.switch_interval, args.source)
+        outputs = [demo_output(60, args.switch_interval, args.source)]
     else:
-        output = store.outputs()[0]  # several outputs: milestone M4
-    for name, value in (("fps", args.fps), ("width", args.width), ("height", args.height),
-                        ("bitrate_kbps", args.bitrate), ("encoder", args.encoder)):  # fmt: skip
-        if value is not None:
-            setattr(output, name, value)
-    app = App(args, output, None if args.source else store)
+        outputs = store.outputs()
+    for output in outputs:  # command line options apply to every output, for this run only
+        for name, value in (("fps", args.fps), ("width", args.width), ("height", args.height),
+                            ("bitrate_kbps", args.bitrate), ("encoder", args.encoder)):  # fmt: skip
+            if value is not None:
+                setattr(output, name, value)
+    app = App(args, outputs, None if args.source else store)
+    app.logs = logs
     url = f"http://localhost:{args.port}"
     icon = None
     if args.tray:
-        icon = tray.Tray(url, logs, lambda: f"On air: {app.status.current or '–'}", app.quit.set)
+        icon = tray.Tray(url, logs, lambda: f"On air: {app.first.status.current or '–'}", app.quit.set)
         icon.start()
-    with (
-        open(logs / "mediamtx.log", "w") as mediamtx_log,
-        open(logs / "output.log", "w") as worker_log,
-    ):
-        app.mediamtx_log, app.worker_log = mediamtx_log, worker_log
+    with open(logs / "mediamtx.log", "w") as mediamtx_log:
+        app.mediamtx_log = mediamtx_log
         try:
             return asyncio.run(_serve(app, args, url, icon))
         except KeyboardInterrupt:
@@ -395,16 +492,39 @@ async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray |
         await app.stop()
 
 
-class _RuntimeProxy:
-    """The web layer's view of the running output (the runtime exists only after start)."""
+class _Viewers:
+    """The web layer's view of the running outputs' viewer forms and queues.
+
+    Input ids are unique across outputs, so a submission finds its output by
+    the input id; the form list is per output.
+    """
 
     def __init__(self, app: App):
         self._app = app
 
-    def __getattr__(self, name: str) -> Any:
-        if self._app.runtime is None:
+    def _runtime(self, output_id: str | None) -> OutputRuntime:
+        runtime = self._app.output(output_id).runtime
+        if runtime is None:
             raise KeyError("not running")
-        return getattr(self._app.runtime, name)
+        return runtime
+
+    def _owner(self, input_id: str) -> OutputRuntime:
+        for output in self._app.outputs.values():
+            if output.runtime is not None and input_id in output.runtime.inputs:
+                return output.runtime
+        raise KeyError(input_id)
+
+    async def viewer_forms(self, output_id: str | None = None) -> list[dict[str, Any]]:
+        return await self._runtime(output_id).viewer_forms()
+
+    async def viewer_submit(self, input_id: str, form: dict[str, Any], device: str, ip: str) -> str:
+        return await self._owner(input_id).viewer_submit(input_id, form, device, ip)
+
+    async def items(self, input_id: str) -> list[dict[str, Any]]:
+        return await self._owner(input_id).items(input_id)
+
+    async def remove_item(self, input_id: str, item_id: str) -> None:
+        await self._owner(input_id).remove_item(input_id, item_id)
 
 
 def open_port(port: int) -> socket.socket:
@@ -424,6 +544,6 @@ def open_port(port: int) -> socket.socket:
 
 
 def _refresh_tray(icon: tray.Tray, app: App) -> None:
-    while not app.quit.is_set() and app.status.state != "stopping":
+    while not app.quit.is_set() and app.first.status.state != "stopping":
         icon.refresh()
         time.sleep(2)

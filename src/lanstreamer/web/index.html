@@ -16,6 +16,9 @@
   header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   header .version { color: var(--muted); font-size: 13px; }
+  header select { margin-left: auto; background: transparent; color: var(--text); border: 1px solid var(--muted);
+                   border-radius: 6px; padding: 2px 6px; font: inherit; font-size: 13px; }
+  header select + .admin { margin-left: 12px; }
   header .admin { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none; }
   header .admin:hover { color: var(--text); }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
@@ -64,6 +67,7 @@
   <h1>lan-streamer</h1>
   <span class="dot" id="dot"></span>
   <span class="version" id="version"></span>
+  <select id="outputs" hidden title="Which output to watch"></select>
   <a class="admin" href="/admin">Admin</a>
 </header>
 <main>
@@ -76,7 +80,7 @@
       <button class="primary" id="next" hidden title="Only for the admin">Next input</button>
       <button id="sound">Sound on</button>
       <button id="reconnect">Reconnect</button>
-      <a class="tvlink" href="/tv" title="Only the stream, full window">TV view</a>
+      <a class="tvlink" id="tvlink" href="/tv" title="Only the stream, full window">TV view</a>
     </div>
     <p class="now" id="now" hidden></p>
     <div class="forms" id="forms"></div>
@@ -125,6 +129,9 @@ const $ = (id) => document.getElementById(id);
 const video = $("video");
 let pc = null;
 let status = null;
+// Several outputs: ?output=<id> picks one (default: the first)
+const OUTPUT = new URLSearchParams(location.search).get("output") || "";
+const Q = OUTPUT ? `?output=${encodeURIComponent(OUTPUT)}` : "";
 
 function pad(n, w = 2) { return String(n).padStart(w, "0"); }
 function tick() {
@@ -173,6 +180,13 @@ async function connect() {
 function render(next) {
   if (status && next.viewer_version !== status.viewer_version) loadForms();
   status = next;
+  const outputs = status.outputs || [];
+  $("outputs").hidden = outputs.length < 2;
+  if (outputs.map((o) => o.id).join() !== [...$("outputs").options].map((o) => o.value).join()) {
+    $("outputs").replaceChildren(...outputs.map((o) => make("option", { value: o.id, textContent: o.name })));
+  }
+  $("outputs").value = status.output_id;
+  $("tvlink").href = `/tv/${encodeURIComponent(status.output_id || "out1")}`;
   const now = status.now || {};
   const extra = [now.channel, now.submitter && `submitted by ${now.submitter}`].filter(Boolean);
   $("now").hidden = !now.title;
@@ -240,7 +254,7 @@ function formField(name, raw, root) {
 }
 async function loadForms() {
   let forms = [];
-  try { forms = await (await fetch("/api/viewer")).json(); } catch { return; }
+  try { forms = await (await fetch(`/api/viewer${Q}`)).json(); } catch { return; }
   if (!Array.isArray(forms)) return;
   // Rebuild the forms only when the set of forms changed; otherwise just refresh the
   // lists, so typed text and the "Added …" message stay.
@@ -295,13 +309,13 @@ function renderItems(f) {
 // Live status: pushed over a WebSocket on every change; polling as a fallback.
 let socketOk = false;
 function openSocket() {
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`);
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws${Q}`);
   ws.onmessage = (e) => { socketOk = true; render(JSON.parse(e.data)); };
   ws.onclose = () => { socketOk = false; setTimeout(openSocket, 2000); };
 }
 async function pollStatus() {
   if (socketOk) return;
-  try { render(await (await fetch("/api/status")).json()); }
+  try { render(await (await fetch(`/api/status${Q}`)).json()); }
   catch { $("dot").className = "dot bad"; }
 }
 
@@ -335,7 +349,8 @@ async function pollStats() {
 }
 
 // "Next input" is for the admin only: shown when logged in (same browser session).
-$("next").onclick = () => fetch("/api/admin/next", { method: "POST" });
+$("next").onclick = () => fetch(`/api/admin/next${Q}`, { method: "POST" });
+$("outputs").onchange = () => { location.search = `?output=${encodeURIComponent($("outputs").value)}`; };
 fetch("/api/admin/session").then((r) => r.json()).then((s) => { $("next").hidden = !s.logged_in; }).catch(() => {});
 $("reconnect").onclick = connect;
 $("sound").onclick = () => {

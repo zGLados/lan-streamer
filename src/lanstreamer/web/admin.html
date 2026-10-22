@@ -99,6 +99,16 @@
 
 <main id="app" hidden>
   <section>
+    <div class="row">
+      <label>Output <select id="o-select"></select></label>
+      <button class="small" id="o-add">Add output</button>
+      <button class="small danger" id="o-remove">Remove this output</button>
+      <a class="muted" id="o-watch" href="/">Watch it</a>
+    </div>
+    <p class="muted" style="margin-bottom:0">Every output is its own stream with its own inputs and ranking. A new output starts with Standby and the first output's format.</p>
+  </section>
+
+  <section>
     <h2>On air</h2>
     <div class="status">
       <div class="item"><span>Now</span><b id="s-current">–</b></div>
@@ -284,16 +294,65 @@ async function start() {
 }
 async function reload() {
   outputs = await api("/api/admin/outputs");
+  if (!outputs.some((o) => o.id === selected)) selected = outputs[0].id;
+  renderOutputs();
   renderOutput();
   renderInputs();
 }
-const output = () => outputs[0];  // several outputs: milestone M4
+
+// --- outputs ------------------------------------------------------------------------
+let selected = new URLSearchParams(location.search).get("output") || "";
+const output = () => outputs.find((o) => o.id === selected) || outputs[0];
+const outputQuery = () => `?output=${encodeURIComponent(output().id)}`;
+function renderOutputs() {
+  $("o-select").replaceChildren(...outputs.map((o) => {
+    const option = document.createElement("option");
+    option.value = o.id;
+    option.textContent = o.name;
+    return option;
+  }));
+  $("o-select").value = output().id;
+  $("o-remove").hidden = outputs.length < 2;
+  $("o-watch").href = `/${outputQuery()}`;
+}
+async function selectOutput(id) {
+  selected = id;
+  history.replaceState(null, "", outputQuery());
+  await reload();
+  openSocket();
+}
+$("o-select").onchange = () => selectOutput($("o-select").value);
+$("o-add").onclick = async () => {
+  const name = prompt("Name of the new output", `Output ${outputs.length + 1}`);
+  if (!name || !name.trim()) return;
+  try {
+    const created = await api("/api/admin/outputs", { method: "POST", body: { name: name.trim() } });
+    toast(`Output "${created.name}" added`);
+    await selectOutput(created.id);
+  } catch (err) { toast(err.message, true); }
+};
+$("o-remove").onclick = async () => {
+  const o = output();
+  if (!confirm(`Remove the output "${o.name}" with all its inputs?`)) return;
+  try {
+    await api(`/api/admin/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
+    toast(`Output "${o.name}" removed`);
+    await selectOutput("");
+  } catch (err) { toast(err.message, true); }
+};
 
 // --- live status --------------------------------------------------------------------
+let socket = null;
 function openSocket() {
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws`);
-  ws.onmessage = (e) => { status = JSON.parse(e.data); renderStatus(); };
-  ws.onclose = () => { $("dot").className = "dot bad"; setTimeout(openSocket, 2000); };
+  const old = socket;
+  const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws${outputQuery()}`);
+  ws.onmessage = (e) => { if (ws === socket) { status = JSON.parse(e.data); renderStatus(); } };
+  ws.onclose = () => {
+    if (ws !== socket) return;  // replaced (another output was selected)
+    $("dot").className = "dot bad";
+    setTimeout(openSocket, 2000);
+  };
+  if (old) old.close();
 }
 function renderStatus() {
   $("dot").className = "dot " + (status.state === "running" ? "ok" : status.state === "failed" ? "bad" : "");
@@ -316,7 +375,7 @@ function renderStatus() {
   }
 }
 $("next").onclick = async () => {
-  try { await api("/api/admin/next", { method: "POST" }); } catch (err) { toast(err.message, true); }
+  try { await api(`/api/admin/next${outputQuery()}`, { method: "POST" }); } catch (err) { toast(err.message, true); }
 };
 
 // --- inputs -------------------------------------------------------------------------

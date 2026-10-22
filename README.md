@@ -8,7 +8,7 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Next: YouTube, OBS ingest, overlays, several outputs. See the [roadmap](docs/roadmap.md).
+> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Next: installers (Windows service, firewall rules, Linux). See the [roadmap](docs/roadmap.md).
 
 ## Try the prototype (Windows)
 
@@ -24,7 +24,7 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 **TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 
-**Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the inputs (add, priority, force/block, order), the output and the logs there.
+**Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the outputs (add more, format, overlay), their inputs (add, priority, force/block, order) and the logs there.
 
 **lan-streamer self-test** shows which video encoders work on your PC.
 

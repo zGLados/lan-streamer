@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: M1 (prototype), M2 (core) and M3 (submissions, viewer forms, TV page) done. Next: M4 (YouTube, RTMP/SRT ingest, overlays, several outputs). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
+Status: M1 (prototype), M2 (core), M3 (submissions, viewer forms, TV page) and M4 (overlays, RTMP/SRT ingest, YouTube, several outputs) done; restream via RTMP is still open. Next: M5 (installers: Windows service, firewall rules, Linux). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -54,6 +54,8 @@ Core talks to plugin hosts and output workers over JSON-RPC on the child's stdin
 ### Outputs and input instances
 
 Every input instance belongs to exactly one output. Two outputs that both show TikTok submissions have two instances, each with its own settings, queue and submit form. This keeps the outputs independent and the scheduler simple.
+
+At runtime `app.App` holds one `Output` per stored output: its own worker process (own encoder session, MediaMTX path = output id, log `output.log` for the first, `output-<id>.log` for the others), its own `OutputRuntime` (plugins + scheduler) and status. MediaMTX is shared. Outputs added or removed on the admin page start (in the background – choosing the encoder takes a while) or stop while the others keep running. The web API takes `?output=<id>` for status, WebSocket, viewer forms and "Next input" (default: the first output); the player page shows an output picker when there are several, `/tv/<id>` shows one output.
 
 ## Media pipeline (per output)
 

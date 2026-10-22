@@ -3,11 +3,11 @@
 Public (LAN):
     GET  /                    player page
     GET  /admin               admin page (logs in through the API below)
-    GET  /api/status          status of the output
-    WS   /api/ws              the same status, pushed on every change
-    GET  /api/viewer          forms of the inputs for viewers (e.g. submit a link) + their items
+    GET  /api/status          status of an output (?output=<id>, default: the first) + all outputs
+    WS   /api/ws              the same status, pushed on every change (?output=<id>)
+    GET  /api/viewer          forms of the inputs for viewers (e.g. submit a link) + their items (?output=)
     POST /api/viewer/{input}  send such a form (a device cookie identifies the viewer)
-    GET  /tv                  only the stream, full window (kiosk / TV)
+    GET  /tv, /tv/{output}    only the stream, full window (kiosk / TV)
 
 Admin login (one password, session cookie):
     GET  /api/admin/session   {"password_set", "logged_in"}
@@ -15,29 +15,32 @@ Admin login (one password, session cookie):
     POST /api/admin/login | /logout | /password
 
 Admin (logged in):
-    POST   /api/admin/next                       "Next input": the input on air hands over
+    POST   /api/admin/next?output=<id>           "Next input": the input on air hands over
     GET    /api/admin/plugins                    installed plugins + settings schema
     PUT    /api/admin/plugins                    upload a plugin (.zip as the request body)
     PATCH  /api/admin/plugins/{id}               turn a plugin on or off ({"enabled": bool})
     DELETE /api/admin/plugins/{id}               remove an uploaded plugin (not in use)
     GET    /api/admin/outputs                    outputs and their inputs
+    POST   /api/admin/outputs                    add an output ({"name"}; starts with a Standby input)
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
+    DELETE /api/admin/outputs/{id}               remove an output and its inputs (not the last one)
     POST   /api/admin/outputs/{id}/inputs        add an input
     PUT    /api/admin/outputs/{id}/order         order of the inputs (ties in priority)
     PATCH  /api/admin/inputs/{id}                change an input (priority, override, settings, ...)
     DELETE /api/admin/inputs/{id}
     GET    /api/admin/inputs/{id}/items          an input's items (e.g. its queue)
     DELETE /api/admin/inputs/{id}/items/{item}   remove one
-    GET    /api/admin/logs/{name}?lines=300      lan-streamer.log, output.log, mediamtx.log
+    GET    /api/admin/logs/{name}?lines=300      lan-streamer.log, output.log (output-<id>.log), mediamtx.log
 
 Every configuration change is saved in SQLite and taken over by the running
-output at once (OutputRuntime.apply).
+output at once (OutputRuntime.apply); added and removed outputs start and stop.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
@@ -58,7 +61,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from lanstreamer.core.auth import Auth
-from lanstreamer.core.config import InputConfig
+from lanstreamer.core.config import InputConfig, OutputConfig
 from lanstreamer.core.store import NotFound, Store
 from lanstreamer.plugins import choice, install
 from lanstreamer.plugins.process import PluginError, PluginRejected, check_settings
@@ -68,6 +71,7 @@ from lanstreamer_sdk import Manifest
 COOKIE = "lanstreamer_session"
 DEVICE_COOKIE = "lanstreamer_device"  # identifies a viewer's browser for per-device limits
 LOG_FILES = ("lan-streamer.log", "output.log", "mediamtx.log")
+OUTPUT_LOG = re.compile(r"^output-[a-z0-9-]+\.log$")  # the workers of further outputs
 RESTART_FIELDS = {"width", "height", "fps", "bitrate_kbps", "encoder"}
 
 PAGES = resources.files("lanstreamer.web")
@@ -97,8 +101,8 @@ class Changes:
 class Backend:
     """What the web layer needs from the app."""
 
-    status: Callable[[], dict[str, Any]]
-    skip: Callable[[], None]
+    status: Callable[[str | None], dict[str, Any]]  # output id (None: the first) → its status
+    skip: Callable[[str | None], None]
     store: Store
     auth: Auth
     plugins: Callable[[], dict[str, Manifest]]
@@ -107,7 +111,7 @@ class Backend:
     changes: Changes
     plugins_dir: Path | None = None  # where uploaded plugins go
     plugins_changed: Callable[[str], Awaitable[None]] | None = None  # plugin id → restart its inputs
-    viewer: Any = None  # the running output (OutputRuntime): viewer_forms, viewer_submit, items, remove_item
+    viewer: Any = None  # the running outputs: viewer_forms(output), viewer_submit, items, remove_item
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -135,6 +139,10 @@ class OutputPatch(BaseModel):
 
 class PluginSwitch(BaseModel):
     enabled: bool
+
+
+class OutputNew(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
 
 
 class InputNew(BaseModel):
@@ -211,9 +219,15 @@ def create_app(backend: Backend) -> FastAPI:
     def favicon() -> Response:
         return Response(ICON.read_bytes(), media_type="image/png")
 
+    def output_status(output: str | None) -> dict[str, Any]:
+        try:
+            return backend.status(output)
+        except KeyError as exc:
+            raise HTTPException(404, f"no output {output!r}") from exc
+
     @app.get("/api/status")
-    def status() -> dict[str, Any]:
-        return backend.status()
+    def status(output: str | None = None) -> dict[str, Any]:
+        return output_status(output)
 
     def viewer() -> Any:
         if backend.viewer is None:
@@ -221,8 +235,11 @@ def create_app(backend: Backend) -> FastAPI:
         return backend.viewer
 
     @app.get("/api/viewer")
-    async def viewer_forms() -> list[dict[str, Any]]:
-        return await viewer().viewer_forms()
+    async def viewer_forms(output: str | None = None) -> list[dict[str, Any]]:
+        try:
+            return await viewer().viewer_forms(output)
+        except KeyError as exc:
+            raise HTTPException(404, f"no output {output!r} running") from exc
 
     @app.post("/api/viewer/{input_id}")
     async def viewer_submit(input_id: str, form: dict[str, Any], request: Request, response: Response) -> dict[str, str]:
@@ -241,11 +258,16 @@ def create_app(backend: Backend) -> FastAPI:
         return {"message": message}
 
     @app.websocket("/api/ws")
-    async def live(ws: WebSocket) -> None:
+    async def live(ws: WebSocket, output: str | None = None) -> None:
         await ws.accept()
         try:
             while True:
-                await ws.send_text(json.dumps(backend.status()))
+                try:
+                    status = backend.status(output)
+                except KeyError:  # removed meanwhile
+                    await ws.close(4404, "no such output")
+                    return
+                await ws.send_text(json.dumps(status))
                 await backend.changes.wait(1.0)  # at least once per second (fps, uptime)
         except (WebSocketDisconnect, RuntimeError):
             pass
@@ -295,8 +317,11 @@ def create_app(backend: Backend) -> FastAPI:
     # --- configuration --------------------------------------------------------------------
 
     @app.post("/api/admin/next", status_code=204, dependencies=[Depends(logged_in)])
-    def next_input() -> None:
-        backend.skip()
+    def next_input(output: str | None = None) -> None:
+        try:
+            backend.skip(output)
+        except KeyError as exc:
+            raise HTTPException(404, f"no output {output!r}") from exc
 
     @app.get("/api/admin/plugins", dependencies=[Depends(logged_in)])
     async def plugins() -> list[dict[str, Any]]:
@@ -374,6 +399,27 @@ def create_app(backend: Backend) -> FastAPI:
     def outputs() -> list[dict[str, Any]]:
         return [asdict(o) for o in backend.store.outputs()]
 
+    @app.post("/api/admin/outputs", status_code=201, dependencies=[Depends(logged_in)])
+    async def add_output(body: OutputNew) -> dict[str, Any]:
+        first = backend.store.outputs()[0]  # a new output starts with the first one's format
+        cfg = backend.store.add_output(OutputConfig(
+            id="", name=body.name, width=first.width, height=first.height, fps=first.fps,
+            bitrate_kbps=first.bitrate_kbps, encoder=first.encoder,
+            inputs=[InputConfig("", "Standby", "standby", {"image": ""}, priority=0, fallback=True)],
+        ))  # fmt: skip
+        await changed(cfg.id)
+        return asdict(cfg)
+
+    @app.delete("/api/admin/outputs/{output_id}", status_code=204, dependencies=[Depends(logged_in)])
+    async def delete_output(output_id: str) -> None:
+        if len(backend.store.outputs()) <= 1:
+            raise HTTPException(409, "the last output cannot be removed")
+        try:
+            backend.store.delete_output(output_id)
+        except NotFound as exc:
+            raise HTTPException(404, f"no output {output_id!r}") from exc
+        await changed(output_id)
+
     @app.patch("/api/admin/outputs/{output_id}", dependencies=[Depends(logged_in)])
     async def patch_output(output_id: str, body: OutputPatch) -> dict[str, Any]:
         changes = body.model_dump(exclude_unset=True)
@@ -449,7 +495,7 @@ def create_app(backend: Backend) -> FastAPI:
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
              dependencies=[Depends(logged_in)])  # fmt: skip
     def logs(name: str, lines: int = 300) -> str:
-        if name not in LOG_FILES:
+        if name not in LOG_FILES and not OUTPUT_LOG.match(name):
             raise HTTPException(404, f"unknown log {name!r}")
         path = backend.logs / name
         if not path.exists():

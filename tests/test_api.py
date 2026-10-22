@@ -21,9 +21,14 @@ def setup(tmp_path):
     async def plugins_changed(plugin_id):
         applied.append(f"plugin:{plugin_id}")
 
+    def status(output=None):
+        if output not in (None, "out1"):
+            raise KeyError(output)
+        return {"state": "running", "current": "Test input A"}
+
     backend = Backend(
-        status=lambda: {"state": "running", "current": "Test input A"},
-        skip=lambda: skipped.append(1),
+        status=status,
+        skip=lambda output=None: skipped.append(output or 1),
         store=store,
         auth=Auth(store),
         plugins=lambda: discover(tmp_path / "plugins"),
@@ -183,7 +188,7 @@ def test_viewer_forms_and_submissions(setup, tmp_path):
     calls = []
 
     class FakeRuntime:
-        async def viewer_forms(self):
+        async def viewer_forms(self, output=None):
             return [{"input_id": "subs", "name": "Submissions", "title": "Submit a video",
                      "schema": {"properties": {"link": {}}}, "items": []}]  # fmt: skip
 
@@ -245,3 +250,30 @@ def test_plugins_can_be_turned_off(setup):
     r = client.post("/api/admin/outputs/out1/inputs", json={"name": "T", "plugin": "test-pattern"})
     assert r.status_code == 422 and "turned off" in r.json()["detail"]
     assert client.patch("/api/admin/plugins/nope", json={"enabled": True}).status_code == 404
+
+
+def test_outputs_are_added_and_removed(setup):
+    client, _, applied, skipped = setup
+    login(client)
+    assert client.get("/api/status?output=out1").json()["current"] == "Test input A"
+    assert client.get("/api/status?output=nope").status_code == 404
+    assert client.post("/api/admin/next?output=nope").status_code == 204 and skipped[-1] == "nope"
+
+    assert client.delete("/api/admin/outputs/out1").status_code == 409  # the last one stays
+    r = client.post("/api/admin/outputs", json={"name": "Hall"})
+    assert r.status_code == 201, r.text
+    hall = r.json()
+    assert hall["id"] == "hall" and applied[-1] == "hall"
+    assert [(i["plugin"], i["fallback"]) for i in hall["inputs"]] == [("standby", True)]
+    assert [o["id"] for o in client.get("/api/admin/outputs").json()] == ["out1", "hall"]
+
+    assert client.delete("/api/admin/outputs/hall").status_code == 204 and applied[-1] == "hall"
+    assert [o["id"] for o in client.get("/api/admin/outputs").json()] == ["out1"]
+    assert client.delete("/api/admin/outputs/hall").status_code == 409  # only one left
+
+
+def test_logs_of_further_outputs(setup):
+    client = setup[0]
+    login(client)
+    assert client.get("/api/admin/logs/output-hall.log").status_code == 200
+    assert client.get("/api/admin/logs/..%2Fsecret.log").status_code == 404

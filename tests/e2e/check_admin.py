@@ -42,7 +42,7 @@ def main() -> int:
         page.on("console", lambda msg: print(f"  [page] {msg.text}") if msg.type == "error" else None)
         errors: list[str] = []
         page.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [page error] {exc}")))
-        page.on("dialog", lambda dialog: dialog.accept())  # confirm() on delete
+        page.on("dialog", lambda dialog: dialog.accept(dialog.default_value))  # confirm(), prompt() as suggested
         try:
             page.goto(f"{base}/admin")
             page.fill("#auth-password", PASSWORD)
@@ -143,6 +143,17 @@ def main() -> int:
             assert (out["overlay"], out["overlay_s"]) == ("always", 5), out
             assert page.locator("#output-note").is_hidden(), "the overlay needs no restart"
             step("overlay set to 'always' on the output, no restart needed")
+
+            page.click("#o-add")  # the prompt is accepted with its suggestion "Output 2"
+            expect(page.locator("#toast")).to_contain_text('Output "Output 2" added', timeout=30_000)
+            expect(page.locator("#o-select")).to_have_value("output-2")
+            # its own worker starts (encoder chosen first): Standby goes on air there
+            expect(page.locator("#s-current")).to_have_text("Standby", timeout=120_000)
+            step("added a second output: it starts with Standby on air")
+            page.click("#o-remove")
+            expect(page.locator("#toast")).to_contain_text('Output "Output 2" removed', timeout=30_000)
+            expect(page.locator("#o-select option")).to_have_count(1)
+            step("removed the second output again")
 
             page.click("#log-refresh")
             expect(page.locator("#log")).to_contain_text("Input removed: UI input", timeout=10_000)

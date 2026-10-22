@@ -11,6 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Several outputs, each with its own inputs and ranking: add and remove them on the admin page while running; the player page picks the output (`/?output=<id>`), the TV view shows `/tv/<id>`.
 - YouTube (built-in input): a channel's live stream while it is live, or the videos of a playlist, channel or a single video one after another (in order or shuffled), in up to 1080p.
 - Plugin SDK: `UriSource(audio_uri=…)` takes picture and sound from two separate URLs.
 - RTMP/SRT ingest (built-in input): send from OBS, a camera or another PC; on air while the stream comes in, the admin page shows the addresses and the stream key.
