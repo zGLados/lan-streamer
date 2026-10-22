@@ -22,6 +22,6 @@ install -m 644 "$ROOT/share/lan-streamer.service" /etc/systemd/system/lan-stream
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
     systemctl enable lan-streamer.service >/dev/null 2>&1
-    systemctl restart lan-streamer.service
+    systemctl restart --no-block lan-streamer.service
     echo "lan-streamer is running: http://$(hostname -I 2>/dev/null | cut -d' ' -f1 || echo localhost):8080"
 fi

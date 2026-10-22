@@ -21,6 +21,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 40  # the first gst-plugins-rs build takes ~15 min
     steps:
       - uses: actions/checkout@v4
 
@@ -61,15 +62,17 @@ jobs:
         with:
           name: lan-streamer-linux-${{ env.VERSION }}
           path: |
-            build/linux/*.deb
-            build/linux/*.tar.gz
+            build/linux/lan-streamer_*.deb
+            build/linux/lan-streamer-*.tar.gz
           compression-level: 0
 
   test-deb:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       LANSTREAMER_BROWSER: chrome  # the e2e checks use Edge on Windows
+      DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@v4  # only for tests/e2e
 
@@ -79,13 +82,16 @@ jobs:
           path: dist
 
       - name: Install the .deb (apt resolves GStreamer & co.; the service starts)
+        timeout-minutes: 10
         run: |
+          set -x
           sudo apt-get update -q
-          sudo apt-get install -y -q ./dist/*.deb gstreamer1.0-tools
+          sudo -E apt-get install -y -q ./dist/lan-streamer_*.deb gstreamer1.0-tools
+          sleep 5
           systemctl is-active lan-streamer
           systemctl show lan-streamer -p User -p MainPID
           id lanstreamer
-          lan-streamer selftest
+          timeout 300 lan-streamer selftest
 
       - name: Test clip (H.264 + AAC in MP4) for the input tests
         run: |
@@ -178,6 +184,9 @@ jobs:
   test-tarball:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -186,8 +195,8 @@ jobs:
 
       - name: install.sh (apt-get, /opt, systemd service)
         run: |
-          tar -xzf dist/*.tar.gz
-          sudo ./lan-streamer-*/install.sh
+          tar -xzf dist/lan-streamer-*.tar.gz
+          sudo -E ./lan-streamer-*/install.sh
           systemctl is-active lan-streamer
           for i in $(seq 1 120); do  # the service picks its encoder first
             curl -fs http://localhost:8080/api/status | grep -q '"state":"running"' && break

@@ -43,10 +43,11 @@ done
 ls "$ROOT/wheels"
 
 step "MediaMTX $MEDIAMTX_VERSION"
-archive="mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
-curl -fsSL -o "$OUT/$archive" "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX_VERSION/$archive"
-echo "$MEDIAMTX_SHA256  $OUT/$archive" | sha256sum -c --quiet -
-tar -xzf "$OUT/$archive" -C "$ROOT/mediamtx" mediamtx mediamtx.yml LICENSE
+archive="$OUT/download/mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+mkdir -p "$OUT/download"
+curl -fsSL -o "$archive" "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX_VERSION/$(basename "$archive")"
+echo "$MEDIAMTX_SHA256  $archive" | sha256sum -c --quiet -
+tar -xzf "$archive" -C "$ROOT/mediamtx" mediamtx mediamtx.yml LICENSE
 
 step "GStreamer plugins from gst-plugins-rs"
 cp "$RSPLUGINS"/libgstfallbackswitch.so "$RSPLUGINS"/libgstrsaudiofx.so "$ROOT/gstreamer/"

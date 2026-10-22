@@ -24,7 +24,9 @@ def main() -> int:
         " ! video/x-h264,profile=constrained-baseline ! h264parse config-interval=-1 ! queue ! mux."
         " audiotestsrc is-live=true freq=550 volume=0.1 ! audioconvert ! audioresample"
         " ! opusenc ! queue ! mux."
-        f' mpegtsmux name=mux alignment=7 ! srtsink uri="{uri}" wait-for-connection=false'
+        # latency: the muxer waits for both tracks before its first stream table – MediaMTX
+        # keeps the first one it sees, and audio alone would make the input audio-only
+        f' mpegtsmux name=mux alignment=7 latency=1000000000 ! srtsink uri="{uri}" wait-for-connection=false'
     )
     loop = GLib.MainLoop()
     result = {"code": 0}
