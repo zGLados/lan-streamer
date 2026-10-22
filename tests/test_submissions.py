@@ -2,12 +2,13 @@
 
 import asyncio
 import http.server
+import os
 import threading
 from functools import partial
 
 import pytest
 
-from lanstreamer.plugins.process import PluginProcess, PluginRejected
+from lanstreamer.plugins.process import PluginError, PluginProcess, PluginRejected
 from lanstreamer.plugins.registry import BUILTIN
 
 PLUGIN = BUILTIN / "submissions"
@@ -142,3 +143,34 @@ def test_a_downloaded_yt_dlp_update_is_used_from_the_next_start(tmp_path, monkey
     asyncio.run(start())
     assert (folder / "current" / "yt_dlp").is_dir() and not (folder / "next").exists()
     assert sys.path[0] == str(folder / "current")
+
+
+@pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="locks the file with folder permissions")
+def test_a_video_still_in_use_is_deleted_later(tmp_path, monkeypatch):
+    # On Windows the output holds the file open for a moment after "ended";
+    # a read-only folder makes the delete fail the same way here.
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+    videos = tmp_path / "data" / "videos"
+
+    async def steps(proc, events):
+        for n in (1, 2):
+            await proc.viewer_submit({"link": f"https://example.com/v{n}"}, f"d{n}", "ip")
+        await wait_until(lambda: asyncio.sleep(0, len(list(videos.iterdir())) == 2))
+        await proc.get_source()
+        videos.chmod(0o555)
+        try:
+            await proc.playback("ended")
+            await asyncio.sleep(0.3)
+            assert [e for e in events if e.get("event") == "next_source"]  # Video 2 still follows
+            assert [i["text"] for i in await proc.viewer_items()] == ["Video v2"]
+            assert await proc.can_release() is True
+            await proc.get_source()  # Video 2 plays; nothing left after it
+            await proc.playback("ended")
+            await asyncio.sleep(0.3)
+            with pytest.raises(PluginError, match="no video is ready"):
+                await proc.get_source()
+        finally:
+            videos.chmod(0o755)
+        await wait_until(lambda: asyncio.sleep(0, not list(videos.iterdir())), timeout=5)
+
+    asyncio.run(with_plugin(tmp_path, {}, steps))

@@ -134,6 +134,12 @@ async def serve(plugin: InputPlugin) -> None:
             log.exception("%s failed", method)
             send({"id": request_id, "error": f"{exc.__class__.__name__}: {exc}"})
 
+    async def playback(params: dict[str, Any]) -> None:
+        try:
+            await plugin.on_playback(PlaybackEvent(**params))
+        except Exception:
+            log.exception("on_playback(%s) failed", params.get("kind"))
+
     await plugin.start()
     send({"event": "ready", "api_version": API_VERSION})
     watcher = asyncio.create_task(watch())
@@ -144,7 +150,7 @@ async def serve(plugin: InputPlugin) -> None:
             if method == "stop":
                 break
             if method == "playback":
-                task = asyncio.create_task(plugin.on_playback(PlaybackEvent(**command["params"])))
+                task = asyncio.create_task(playback(command["params"]))
             else:
                 task = asyncio.create_task(call(command["id"], method, command.get("params") or {}))
             tasks.add(task)

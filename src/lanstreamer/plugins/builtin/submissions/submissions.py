@@ -5,6 +5,9 @@ URLs, ...). A submitted video is checked (length, per-device limit, already
 queued), downloaded into the instance's data folder and played when this input
 goes on air; afterwards the file is deleted. Active while a video is ready.
 
+On Windows the output may still hold a file open for a moment after it ended
+or failed; such a file is deleted a little later (or on the next start).
+
 yt-dlp updates itself because the video sites change often: on start a newer
 version is downloaded in the background (pip into the data folder) and used
 from the next start on – a running process never swaps the library under its
@@ -152,6 +155,7 @@ class Plugin(InputPlugin[Settings]):
     ViewerForm = SubmitForm
     viewer_title = "Submit a video"
     poll_interval_s = 1.0
+    delete_retry_s = 2.0
 
     async def start(self) -> None:
         self.videos = self.ctx.data_dir / "videos"
@@ -161,6 +165,7 @@ class Plugin(InputPlugin[Settings]):
         self.playing: str | None = None
         self.released = True
         self.tasks: set[asyncio.Task] = set()
+        self.trash: set[Path] = set()  # files that could not be deleted yet
         for entry in self.ctx.store.get("queue", []):
             if entry["state"] == "ready" and Path(entry["file"]).is_file():
                 self.queue.append(entry)
@@ -170,7 +175,7 @@ class Plugin(InputPlugin[Settings]):
         known = {e.get("file") for e in self.queue}
         for file in self.videos.iterdir():
             if str(file) not in known:
-                file.unlink(missing_ok=True)  # left over from a crash
+                self._delete(file)  # left over from a crash or still locked last time
         self._save()
         self._spawn(self._announce_version())
 
@@ -242,7 +247,9 @@ class Plugin(InputPlugin[Settings]):
         return any(e["state"] == "ready" for e in self.queue)
 
     async def get_source(self):
-        entry = next(e for e in self.queue if e["state"] == "ready")
+        entry = next((e for e in self.queue if e["state"] == "ready"), None)
+        if entry is None:  # removed after the core saw this input active
+            raise RuntimeError("no video is ready")
         self.playing, self.released = entry["id"], False
         self.ctx.set_metadata(Metadata(title=entry["title"], channel=entry["channel"], submitter=entry["name"]))
         self.ctx.changed()
@@ -274,14 +281,33 @@ class Plugin(InputPlugin[Settings]):
             entry["state"], entry["file"] = "ready", str(file)
             self._save()
         else:
-            file.unlink(missing_ok=True)  # removed while it was loading
+            self._delete(file)  # removed while it was loading
 
     def _drop(self, item_id: str | None) -> None:
         for entry in [e for e in self.queue if e["id"] == item_id]:
             self.queue.remove(entry)
             if entry["file"]:
-                Path(entry["file"]).unlink(missing_ok=True)
+                self._delete(Path(entry["file"]))
         self._save()
+
+    def _delete(self, file: Path) -> None:
+        """Deletes a video; a file still in use is retried until it is gone."""
+        try:
+            file.unlink(missing_ok=True)
+        except OSError:
+            if not self.trash:
+                self._spawn(self._empty_trash())
+            self.trash.add(file)
+
+    async def _empty_trash(self) -> None:
+        while self.trash:
+            await asyncio.sleep(self.delete_retry_s)
+            for file in list(self.trash):
+                try:
+                    file.unlink(missing_ok=True)
+                except OSError:
+                    continue
+                self.trash.discard(file)
 
     def _save(self) -> None:
         self.ctx.store.set("queue", self.queue)
