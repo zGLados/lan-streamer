@@ -155,7 +155,7 @@ class InputPlugin[S: BaseModel]:
     def routes(self) -> APIRouter | None: ...                   # own UI (F-IN-04) – planned
 ```
 
-Sources: `TestSource`, `UriSource`, `FileSource`, `ImageSource` (PNG/JPEG with silence). `ctx.next_source()` asks for `get_source()` again while the input stays on air (a playlist's next item).
+Sources: `TestSource`, `UriSource`, `FileSource` (`cut=True`: switched to without crossfade), `ImageSource` (PNG/JPEG with silence), `CardSource` (dark card with heading, title and subtitle – e.g. "Up next"). `ctx.next_source()` asks for `get_source()` again while the input stays on air (a playlist's next item).
 
 Viewer forms (F-IN-04, F-WEB-03): a plugin can declare a `ViewerForm` (Pydantic model) and a `viewer_title`; the player page builds the form from its JSON Schema and sends it to `on_viewer_submit(form, viewer)`, which returns a message or raises `Rejected("…")` (shown to the viewer as it is). `viewer_items()` lists lines under the form (e.g. the queue), `remove_item()` lets the admin delete one, `ctx.changed()` tells the pages to reload them, and `ctx.set_info("…")` sets the status line in the admin. A viewer is identified per device: a long-lived browser cookie plus the LAN address. Custom HTML pages for plugins (`routes()`) are not needed for now.
 

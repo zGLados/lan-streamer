@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - A fresh setup has only Standby and Short-video submissions; the two test inputs are gone (also from existing installs). The name is optional when submitting a video.
+- Short-video submissions: when the input goes on air, an "Up next" card (title, who submitted it) shows first; once it is on screen the first video starts after a moment (setting `card_s`, default 2 s), cut in without crossfade so its start is not lost. The next videos in the queue follow directly.
 
 ### Added
 
@@ -34,6 +35,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- Short-video submissions on Windows: a finished video that the output still held open could not be deleted, which broke the hand-over to the next video; such files are now deleted a little later.
 - A reconfigured input could leave its old plugin process running (it was restarted as if it had crashed).
 - At start, a less important input could go on air for a moment before the right one.
 

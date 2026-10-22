@@ -14,6 +14,8 @@ the current one keeps playing.
 Protocol, one JSON object per line ("id" identifies one play command):
     stdin:  {"cmd": "play", "id": "7", "label": "...", "source": {"kind": "test", "pattern": "smpte"}}
             {"cmd": "play", "id": "8", "label": "...", "source": {"kind": "uri", "uri": "https://..."}}
+            {"cmd": "play", "id": "9", "label": "...", "source": {"kind": "card", "heading": "...", "title": "...", "subtitle": "..."}}
+            a source with "cut": true replaces the current one at its first frame, without fading
             {"cmd": "clear"}   fade out to the background
             {"cmd": "stop"}
     stdout: {"event": "ready"} {"event": "playing", "id": "7", "label": "..."}
@@ -43,6 +45,7 @@ FADE_S = 1.0
 START_TIMEOUT_S = 15.0
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
+CARD_COLOR = 0xFF111217  # the standby picture's background
 
 
 def emit(event: str, **data) -> None:
@@ -63,6 +66,7 @@ class Slot:
     audio_pad: object = None
     ready: bool = False
     failed: bool = False
+    cut: bool = False
     started: float = field(default_factory=time.monotonic)
 
 
@@ -244,6 +248,18 @@ class Output:
                 f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
             )
             bin_ = Gst.parse_bin_from_description(desc, False)
+        elif source["kind"] == "card":
+            desc = (
+                f"videotestsrc is-live=true pattern=solid-color foreground-color={CARD_COLOR}"
+                f" ! textoverlay name=heading {CARD_TEXT} ypos=0.36 font-desc=\"Sans 36\" color=0xFF9AA0B4"
+                f" ! textoverlay name=title {CARD_TEXT} ypos=0.5 font-desc=\"Sans Bold 64\" color=0xFFFFFFFF"
+                f" ! textoverlay name=subtitle {CARD_TEXT} ypos=0.64 font-desc=\"Sans 40\" color=0xFFC8CCD8"
+                f" ! {video_tail}"
+                f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
+            )
+            bin_ = Gst.parse_bin_from_description(desc, False)
+            for name in ("heading", "title", "subtitle"):
+                bin_.get_by_name(name).set_property("text", _plain(source.get(name, "")))
         elif source["kind"] == "uri":
             desc = f"{video_tail} {audio_tail}"
             bin_ = Gst.parse_bin_from_description(desc, False)
@@ -279,7 +295,7 @@ class Output:
             emit("switch_failed", id=id_, label=label, reason=str(exc))
             return
 
-        slot = Slot(id_, label, bin_)
+        slot = Slot(id_, label, bin_, cut=bool(source.get("cut")))
         self.pipeline.add(bin_)
         vmix, amix = self.pipeline.get_by_name("vmix"), self.pipeline.get_by_name("amix")
         slot.video_pad = vmix.request_pad_simple("sink_%u")
@@ -316,9 +332,10 @@ class Output:
         slot.ready = True
         old, self.current, self.pending = self.current, slot, None
         started = time.monotonic()
+        duration = 0.0 if slot.cut else FADE_S
 
         def fade() -> bool:
-            t = min(1.0, (time.monotonic() - started) / FADE_S)
+            t = min(1.0, (time.monotonic() - started) / duration) if duration else 1.0
             slot.video_pad.set_property("alpha", t)
             slot.audio_pad.set_property("volume", t)
             if old is not None:
@@ -330,7 +347,8 @@ class Output:
             emit("playing", id=slot.id, label=slot.label)
             return False
 
-        self.GLib.timeout_add(20, fade)
+        if fade():
+            self.GLib.timeout_add(20, fade)
         return False
 
     def _on_start_timeout(self, slot: Slot) -> bool:
@@ -462,6 +480,14 @@ class Output:
             pass
         self.pipeline.set_state(self.Gst.State.NULL)
         return 0
+
+
+CARD_TEXT = "halignment=center valignment=position xpos=0.5 shaded-background=false draw-shadow=false"
+
+
+def _plain(text: str) -> str:
+    """textoverlay reads Pango markup: keep its special characters out."""
+    return str(text).translate(str.maketrans({"&": "+", "<": "‹", ">": "›"}))
 
 
 def _link_by_kind(pad, heads: dict) -> None:

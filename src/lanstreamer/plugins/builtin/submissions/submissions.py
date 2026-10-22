@@ -5,6 +5,10 @@ URLs, ...). A submitted video is checked (length, per-device limit, already
 queued), downloaded into the instance's data folder and played when this input
 goes on air; afterwards the file is deleted. Active while a video is ready.
 
+When the input goes on air, an "Up next" card shows first; once it is on screen
+the first video starts after a moment, cut in without crossfade so nothing of
+its start is lost. Further videos in the queue follow directly.
+
 On Windows the output may still hold a file open for a moment after it ended
 or failed; such a file is deleted a little later (or on the next start).
 
@@ -28,6 +32,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from lanstreamer_sdk import (
+    CardSource,
     FileSource,
     InputPlugin,
     Metadata,
@@ -45,6 +50,8 @@ class Settings(BaseModel):
     per_device: int = Field(3, ge=1, le=50, description="Videos one device may have waiting at once")
     max_queue: int = Field(50, ge=1, le=500, description="Videos waiting at most")
     auto_update: bool = Field(True, description="Update yt-dlp on start (needs internet)")
+    card_s: float = Field(2.0, ge=0, le=10, description="How long the \"Up next\" card shows "
+                          "before the first video (0: no card)")  # fmt: skip
 
 
 class SubmitForm(BaseModel):
@@ -162,7 +169,9 @@ class Plugin(InputPlugin[Settings]):
         self.videos.mkdir(parents=True, exist_ok=True)
         self.ytdlp = YtDlp(self.ctx.data_dir / "yt-dlp", self.settings.auto_update, self.ctx.log)
         self.queue: list[dict[str, Any]] = []
-        self.playing: str | None = None
+        self.playing: str | None = None  # the video on air
+        self.card: str | None = None  # the video its "Up next" card announces
+        self.follow = False  # we asked for the next source: no card before it
         self.released = True
         self.tasks: set[asyncio.Task] = set()
         self.trash: set[Path] = set()  # files that could not be deleted yet
@@ -228,7 +237,7 @@ class Plugin(InputPlugin[Settings]):
         items = []
         for entry in self.queue:
             parts = [f"by {entry['name']}"] if entry["name"] else []
-            if entry["id"] == self.playing:
+            if entry["id"] in (self.playing, self.card):
                 parts.append("on air")
             elif entry["state"] == "loading":
                 parts.append("loading")
@@ -250,22 +259,43 @@ class Plugin(InputPlugin[Settings]):
         entry = next((e for e in self.queue if e["state"] == "ready"), None)
         if entry is None:  # removed after the core saw this input active
             raise RuntimeError("no video is ready")
-        self.playing, self.released = entry["id"], False
+        follow, self.follow, self.released = self.follow, False, False
         self.ctx.set_metadata(Metadata(title=entry["title"], channel=entry["channel"], submitter=entry["name"]))
         self.ctx.changed()
-        return FileSource(entry["file"])
+        if not follow and self.settings.card_s > 0:  # just switched to this input
+            self.card, self.playing = entry["id"], None
+            return CardSource(entry["title"], heading="Up next",
+                              subtitle=f"submitted by {entry['name']}" if entry["name"] else "")  # fmt: skip
+        self.card, self.playing = None, entry["id"]
+        return FileSource(entry["file"], cut=self.settings.card_s > 0)
 
     async def can_release(self) -> bool:
         return self.released
 
     async def on_playback(self, event: PlaybackEvent) -> None:
-        if event.kind in ("ended", "failed") and self.playing:
+        if event.kind == "started" and self.card:
+            self._spawn(self._after_card(self.card))
+        elif event.kind == "failed" and self.card:
+            self.card, self.released = None, True
+        elif event.kind in ("ended", "failed") and self.playing:
             self._finished()
+
+    async def _after_card(self, card: str) -> None:
+        await asyncio.sleep(self.settings.card_s)
+        if self.card != card:  # off air meanwhile
+            return
+        self.card = None
+        if any(e["state"] == "ready" for e in self.queue):
+            self.follow = True  # stays unreleased: the video follows, not another input
+            self.ctx.next_source()
+        else:  # removed while its card was shown
+            self.released = True
 
     def _finished(self) -> None:
         self._drop(self.playing)
         self.playing, self.released = None, True
         if any(e["state"] == "ready" for e in self.queue):
+            self.follow = True
             self.ctx.next_source()
 
     # --- queue ----------------------------------------------------------------------

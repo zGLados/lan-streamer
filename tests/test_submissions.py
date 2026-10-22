@@ -68,7 +68,7 @@ def test_queue_limits_and_playback(tmp_path, monkeypatch):
         info = [e for e in events if e.get("event") == "info"][-1]["value"]
         assert info.startswith("0 waiting · yt-dlp")
 
-    asyncio.run(with_plugin(tmp_path, {"per_device": 2}, steps))
+    asyncio.run(with_plugin(tmp_path, {"per_device": 2, "card_s": 0}, steps))
 
 
 def test_too_long_videos_are_refused(tmp_path, monkeypatch):
@@ -118,7 +118,7 @@ def test_real_yt_dlp_downloads_a_plain_video_url(tmp_path):
         return source
 
     try:
-        source = asyncio.run(with_plugin(tmp_path, {"auto_update": False}, steps))
+        source = asyncio.run(with_plugin(tmp_path, {"auto_update": False, "card_s": 0}, steps))
     finally:
         server.shutdown()
     assert source["uri"].startswith("file:") and source["uri"].endswith(".mp4")
@@ -173,4 +173,40 @@ def test_a_video_still_in_use_is_deleted_later(tmp_path, monkeypatch):
             videos.chmod(0o755)
         await wait_until(lambda: asyncio.sleep(0, not list(videos.iterdir())), timeout=5)
 
-    asyncio.run(with_plugin(tmp_path, {}, steps))
+    asyncio.run(with_plugin(tmp_path, {"card_s": 0}, steps))
+
+
+def test_an_up_next_card_comes_before_the_first_video(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+
+    def next_requests(events):
+        return len([e for e in events if e.get("event") == "next_source"])
+
+    async def steps(proc, events):
+        await proc.viewer_submit({"link": "https://example.com/v1", "name": "Anna"}, "d1", "ip")
+        await proc.viewer_submit({"link": "https://example.com/v2"}, "d2", "ip")
+        async def downloaded():
+            return all("loading" not in i["detail"] for i in await proc.viewer_items())
+
+        await wait_until(downloaded)
+
+        card = await proc.get_source()  # the input went on air
+        assert card == {"kind": "card", "heading": "Up next", "title": "Video v1", "subtitle": "submitted by Anna"}
+        assert "on air" in (await proc.viewer_items())[0]["detail"]
+        await asyncio.sleep(0.4)
+        assert next_requests(events) == 0  # the card waits until it is on screen
+        await proc.playback("started")
+        await asyncio.sleep(0.1)
+        assert next_requests(events) == 0  # ... and then a moment longer
+        await wait_until(lambda: asyncio.sleep(0, next_requests(events) == 1), timeout=2)
+        assert await proc.can_release() is False  # the video follows, not another input
+
+        video = await proc.get_source()
+        assert video["kind"] == "uri" and video["cut"] is True
+        await proc.playback("started")
+        await proc.playback("ended")
+        await wait_until(lambda: asyncio.sleep(0, next_requests(events) == 2), timeout=2)
+        second = await proc.get_source()  # the queue goes on without a card
+        assert second["kind"] == "uri" and second["cut"] is True
+
+    asyncio.run(with_plugin(tmp_path, {"card_s": 0.5}, steps))

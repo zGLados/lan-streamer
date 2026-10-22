@@ -31,6 +31,7 @@ Every plugin instance runs in its own process (see docs/architecture.md).
 from lanstreamer_sdk.manifest import Manifest, ManifestError, load_manifest
 from lanstreamer_sdk.plugin import (
     API_VERSION,
+    CardSource,
     FileSource,
     ImageSource,
     InputPlugin,
@@ -50,6 +51,7 @@ from lanstreamer_sdk.plugin import (
 
 __all__ = [
     "API_VERSION",
+    "CardSource",
     "FileSource",
     "ImageSource",
     "InputPlugin",
