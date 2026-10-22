@@ -38,3 +38,4 @@ build/
 # Screenshots of the e2e checks
 /*.png
 examples/*.zip
+src/lanstreamer/BUILD

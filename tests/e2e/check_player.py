@@ -9,6 +9,7 @@ browser has decoded enough full-HD video frames and received audio.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -36,7 +37,7 @@ def main() -> int:
     parser.add_argument("url")
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--timeout", type=float, default=60)
-    parser.add_argument("--channel", default="msedge")
+    parser.add_argument("--channel", default=os.environ.get("LANSTREAMER_BROWSER", "msedge"))
     args = parser.parse_args()
 
     with sync_playwright() as p:

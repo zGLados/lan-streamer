@@ -1,0 +1,24 @@
+[Unit]
+Description=lan-streamer – LAN streaming platform (player page on port 8080)
+Documentation=https://github.com/zGLados/lan-streamer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=lanstreamer
+Group=lanstreamer
+# data (database, logs, plugins) in /var/lib/lan-streamer, GStreamer's cache in /var/cache
+StateDirectory=lan-streamer
+CacheDirectory=lan-streamer
+Environment=XDG_DATA_HOME=/var/lib
+Environment=XDG_CACHE_HOME=/var/cache/lan-streamer
+Environment=HOME=/var/lib/lan-streamer
+ExecStart=/opt/lan-streamer/bin/lan-streamer
+Restart=on-failure
+RestartSec=5
+# MediaMTX and the output workers end with the service
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

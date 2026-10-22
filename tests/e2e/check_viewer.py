@@ -14,6 +14,7 @@ without a name, and opens /tv.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -48,7 +49,7 @@ def main() -> int:
     input_id = next(i["id"] for i in inputs if i["plugin"] == "submissions")
     with sync_playwright() as p:
         browser = p.chromium.connect_over_cdp(args.cdp) if args.cdp else p.chromium.launch(
-            channel="msedge", args=["--autoplay-policy=no-user-gesture-required"])
+            channel=os.environ.get("LANSTREAMER_BROWSER", "msedge"), args=["--autoplay-policy=no-user-gesture-required"])
         page = browser.new_context(viewport={"width": 1280, "height": 1000}).new_page()
         errors: list[str] = []
         page.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [page error] {exc}")))

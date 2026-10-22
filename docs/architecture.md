@@ -2,7 +2,7 @@
 
 lan-streamer pulls media from pluggable **inputs**, lets a **scheduler** pick the most important active one, and plays it on one or more **outputs**: re-encoded 1080p live streams that a browser on the local network watches with sub-second latency.
 
-Status: M1 (prototype), M2 (core), M3 (submissions, viewer forms, TV page) and M4 (overlays, RTMP/SRT ingest, YouTube, several outputs, restream via RTMP) done. Next: M5 (installers: Windows service, firewall rules, Linux). The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
+Status: M1 (prototype), M2 (core), M3 (submissions, viewer forms, TV page) and M4 (overlays, RTMP/SRT ingest, YouTube, several outputs, restream via RTMP) done. M5 in progress: Windows firewall rules and the Linux packages are done; next: optional Windows service, Docker. The Twitch top stream is parked at the end of the roadmap. Details in [roadmap.md](roadmap.md).
 
 ## At a glance
 
@@ -193,12 +193,12 @@ Built-in plugins (`src/lanstreamer/plugins/builtin/`):
 
 ## Installation and packaging
 
-lan-streamer is meant to run natively on Windows and Linux. **Windows is the primary platform:** new features are built and tested there first, Linux follows. Today GitHub Actions builds the Windows installer on every push; the Linux packages follow in M5. Each installer brings everything with it: a standalone Python runtime, the app and its dependencies, GStreamer and MediaMTX.
+lan-streamer is meant to run natively on Windows and Linux. **Windows is the primary platform:** new features are built and tested there first, Linux follows. GitHub Actions builds and install-tests the Windows installer and the Linux packages on every push. The Windows installer brings everything with it (Python runtime, GStreamer, MediaMTX). The Linux packages use the distribution's Python 3.12+ and GStreamer 1.24+ (Ubuntu 24.04 / Debian 13 or newer) and bring the app in its own venv (all Python packages as wheels, no internet needed), MediaMTX and the two gst-plugins-rs plugins the distributions do not package (fallbacksrc, audioloudnorm – built in CI against Ubuntu's GStreamer).
 
 | System | Format | Runs as |
 | --- | --- | --- |
 | Windows 10/11 x64 | Setup `.exe` (Inno Setup) with the official GStreamer MSVC runtime | Today: start menu entry → runs windowless with a tray icon; firewall rules for the LAN (MediaMTX, python/pythonw; private + domain networks, all-users install only, removed on uninstall). Planned: optional Windows service |
-| Linux x64 | `.deb` (Debian/Ubuntu) and a `.tar.gz` with `install.sh` for other distributions | systemd service |
+| Linux x64 | `.deb` (Debian/Ubuntu, `apt install ./lan-streamer_….deb`) and a `.tar.gz` with `install.sh` (apt-get for the dependencies) | systemd service `lan-streamer` as user `lanstreamer` (groups video/render for GPU encoding), program in `/opt/lan-streamer`, data in `/var/lib/lan-streamer`; `lan-streamer selftest` checks GStreamer and the encoders |
 | Linux server (optional) | Docker Compose with GPU passthrough | Container |
 
 After starting, the player page opens at `http://<host>:8080`. The admin page `http://<host>:8080/admin` asks for the admin password on its first visit.

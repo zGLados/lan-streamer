@@ -15,6 +15,7 @@ instead of launching Edge through Playwright (CI).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 import zipfile
@@ -37,7 +38,7 @@ def main() -> int:
     args = parser.parse_args()
     base = args.url.rstrip("/")
     with sync_playwright() as p:
-        browser = p.chromium.connect_over_cdp(args.cdp) if args.cdp else p.chromium.launch(channel="msedge")
+        browser = p.chromium.connect_over_cdp(args.cdp) if args.cdp else p.chromium.launch(channel=os.environ.get("LANSTREAMER_BROWSER", "msedge"))
         page = browser.new_context(viewport={"width": 1280, "height": 1000}).new_page()
         page.on("console", lambda msg: print(f"  [page] {msg.text}") if msg.type == "error" else None)
         errors: list[str] = []

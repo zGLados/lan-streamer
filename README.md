@@ -16,6 +16,8 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 2. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
 3. It shows the standby picture until a viewer submits a video. The installer asks which built-in inputs to turn on (short-video submissions and playlist by default; the test pattern is for tests); this can be changed later on the admin page. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
 
+**Linux (Ubuntu 24.04 / Debian 13 or newer):** download `lan-streamer-linux-…` from [Actions → Linux](https://github.com/zGLados/lan-streamer/actions/workflows/linux.yml), then `sudo apt install ./lan-streamer_….deb` – or unpack the `.tar.gz` and run `sudo ./install.sh`. It runs as the systemd service `lan-streamer` (player page on port 8080); `lan-streamer selftest` shows which encoders work. Remove it with `sudo apt purge lan-streamer` (or `sudo ./install.sh --uninstall --purge`).
+
 **Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name.
 
 **Restream:** on the admin page enter an RTMP URL with your stream key (YouTube, Twitch, …) under "Restream to" – the output is sent there as well.

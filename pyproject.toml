@@ -29,6 +29,7 @@ dev = ["pytest>=8", "ruff>=0.6", "httpx>=0.27"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lanstreamer", "src/lanstreamer_sdk"]
+artifacts = ["src/lanstreamer/BUILD"]  # build version from packaging/linux/build.sh (git-ignored)
 
 [tool.ruff]
 line-length = 100

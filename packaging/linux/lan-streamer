@@ -1,0 +1,14 @@
+#!/bin/sh
+# lan-streamer from /opt/lan-streamer: its own Python environment, the bundled
+# MediaMTX and the GStreamer plugins the distribution does not package
+# (fallbacksrc, audioloudnorm from gst-plugins-rs).
+#   lan-streamer [--fps 30] [--port 8080] ...   the app (the systemd service runs this)
+#   lan-streamer selftest                        GStreamer, elements, encoders
+ROOT=/opt/lan-streamer
+export GST_PLUGIN_PATH="$ROOT/gstreamer${GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}"
+export LANSTREAMER_MEDIAMTX="$ROOT/mediamtx/mediamtx"
+if [ "$1" = selftest ]; then
+    shift
+    exec "$ROOT/venv/bin/python" -m lanstreamer.doctor "$@"
+fi
+exec "$ROOT/venv/bin/python" -m lanstreamer --no-browser "$@"

@@ -1,0 +1,201 @@
+# Linux CI: builds the .deb and the .tar.gz on Ubuntu 24.04 and installs them on
+# clean runners (systemd service), with the same end-to-end checks as Windows.
+#
+# GStreamer comes from Ubuntu; only fallbacksrc and audioloudnorm (gst-plugins-rs,
+# not packaged by Ubuntu 24.04) are built here against Ubuntu's GStreamer.
+name: Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**.md", "LICENSE"]
+  pull_request:
+    paths-ignore: ["docs/**", "**.md", "LICENSE"]
+
+env:
+  GST_PLUGINS_RS: "0.13"  # branch of gst-plugins-rs that builds against GStreamer 1.24
+  VERSION: 0.0.1-test.${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests (Python 3.12 of Ubuntu)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet -e ".[dev]"
+          .venv/bin/ruff check .
+          .venv/bin/pytest -q
+
+      # The plugins only change with the gst-plugins-rs branch: cached.
+      - uses: actions/cache@v4
+        id: rs-cache
+        with:
+          path: rsplugins
+          key: gst-plugins-rs-${{ env.GST_PLUGINS_RS }}-ubuntu-24.04-v1
+
+      - name: Build fallbacksrc and audioloudnorm (gst-plugins-rs)
+        if: steps.rs-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          git clone --quiet --depth 1 --branch "$GST_PLUGINS_RS" https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs.git
+          cd gst-plugins-rs
+          cargo build --release --quiet -p gst-plugin-fallbackswitch -p gst-plugin-audiofx
+          mkdir -p ../rsplugins
+          cp target/release/libgstfallbackswitch.so target/release/libgstrsaudiofx.so ../rsplugins/
+          ls -la ../rsplugins
+
+      - name: Build packages
+        run: |
+          python3 -m venv .buildvenv
+          PATH="$PWD/.buildvenv/bin:$PATH" packaging/linux/build.sh "$VERSION" rsplugins build/linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lan-streamer-linux-${{ env.VERSION }}
+          path: |
+            build/linux/*.deb
+            build/linux/*.tar.gz
+          compression-level: 0
+
+  test-deb:
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      LANSTREAMER_BROWSER: chrome  # the e2e checks use Edge on Windows
+    steps:
+      - uses: actions/checkout@v4  # only for tests/e2e
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-linux-${{ env.VERSION }}
+          path: dist
+
+      - name: Install the .deb (apt resolves GStreamer & co.; the service starts)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ./dist/*.deb gstreamer1.0-tools
+          systemctl is-active lan-streamer
+          systemctl show lan-streamer -p User -p MainPID
+          id lanstreamer
+          lan-streamer selftest
+
+      - name: Test clip (H.264 + AAC in MP4) for the input tests
+        run: |
+          mkdir -p media
+          gst-launch-1.0 -q videotestsrc num-buffers=300 pattern=ball \
+            ! video/x-raw,width=1280,height=720,framerate=30/1 ! x264enc ! h264parse ! mp4mux name=m \
+            ! filesink location=media/clip.mp4 \
+            audiotestsrc num-buffers=430 freq=330 ! avenc_aac ! aacparse ! m.
+          ls -la media
+
+      - name: Service (stored configuration) – web API, admin page, viewer side, split source, ingest, restream
+        run: |
+          python3 -m venv .e2e
+          .e2e/bin/pip install --quiet playwright httpx websockets
+          export PATH="$PWD/.e2e/bin:$PATH"
+          python -m http.server 8000 --directory media > /dev/null 2>&1 &
+          web=$!
+          status=0
+          python tests/e2e/check_api.py http://localhost:8080 || status=1
+          python tests/e2e/check_admin.py http://localhost:8080 || status=1
+          python tests/e2e/check_viewer.py http://localhost:8080 --link http://127.0.0.1:8000/clip.mp4 --webrtc || status=1
+          python tests/e2e/check_split_source.py http://localhost:8080 http://127.0.0.1:8000/clip.mp4 || status=1
+          python tests/e2e/check_ingest.py http://localhost:8080 /opt/lan-streamer/venv/bin/python || status=1
+          python tests/e2e/check_restream.py http://localhost:8080 || status=1
+          kill $web
+          out=/var/lib/lan-streamer/logs/output.log
+          grep -m1 'Overlay shown: .*submitted by CI viewer' "$out" || { tail -20 "$out"; status=1; }
+          if grep -q 'Overlay failed' "$out"; then status=1; fi
+          systemctl is-active lan-streamer || status=1  # still running after all that
+          exit $status
+
+      - name: Smoke test – stream with switching + playback in Chrome (1080p60, CPU encoder)
+        run: |
+          sudo systemctl stop lan-streamer  # frees the ports for a test run as this user
+          export PATH="$PWD/.e2e/bin:$PATH"
+          cp media/clip.mp4 media/clip-http.mp4
+          python -m http.server 8000 --directory media > /dev/null 2>&1 &
+          web=$!
+          lan-streamer --encoder cpu --smoke-test 45 --switch-interval 6 \
+            --source "$PWD/media/clip.mp4" --source http://127.0.0.1:8000/clip-http.mp4 &
+          app=$!
+          player=0
+          python tests/e2e/check_player.py http://localhost:8080 --frames 300 --timeout 40 || player=1
+          wait $app || { echo "app smoke test failed"; exit 1; }
+          kill $web
+          logs="$HOME/.local/share/lan-streamer/logs"
+          sent=$(grep -m1 'MPEG-TS sent:' "$logs/lan-streamer.log" || true)
+          echo "First stream table sent to MediaMTX: $sent"
+          echo "$sent" | grep -q 'H.264' && echo "$sent" | grep -q 'Opus' || { echo 'stream table lacks H.264 or Opus'; exit 1; }
+          for name in 'Test input A' 'Test input B' 'clip.mp4' 'clip-http.mp4'; do
+            grep -q "On air: $name" "$logs/lan-streamer.log" || { tail -20 "$logs/lan-streamer.log"; echo "input $name never went on air"; exit 1; }
+          done
+          tail -15 "$logs/mediamtx.log"
+          grep -q 'online, 2 tracks' "$logs/mediamtx.log" || { echo 'MediaMTX did not get 2 tracks'; exit 1; }
+          if grep -q 'decode errors' "$logs/mediamtx.log"; then echo 'MediaMTX reported decode errors'; exit 1; fi
+          exit $player
+
+      - name: Logs
+        if: always()
+        run: |
+          sudo journalctl -u lan-streamer --no-pager | tail -50
+          mkdir -p logs/service logs/smoke
+          sudo cp -r /var/lib/lan-streamer/logs/. logs/service/ 2>/dev/null || true
+          cp -r "$HOME/.local/share/lan-streamer/logs/." logs/smoke/ 2>/dev/null || true
+          sudo chown -R "$USER" logs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-linux-${{ env.VERSION }}
+          path: logs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-linux-${{ env.VERSION }}
+          path: "*.png"
+          if-no-files-found: ignore
+
+      - name: Purge (service, user, program and data gone)
+        run: |
+          sudo apt-get purge -y -q lan-streamer
+          if systemctl list-unit-files lan-streamer.service | grep -q lan-streamer; then echo 'service left behind'; exit 1; fi
+          if id lanstreamer 2>/dev/null; then echo 'user left behind'; exit 1; fi
+          for dir in /opt/lan-streamer /var/lib/lan-streamer /var/cache/lan-streamer; do
+            if [ -e "$dir" ]; then find "$dir" | head -20; echo "purge left $dir behind"; exit 1; fi
+          done
+          if [ -e /usr/bin/lan-streamer ]; then echo 'command left behind'; exit 1; fi
+
+  test-tarball:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-linux-${{ env.VERSION }}
+          path: dist
+
+      - name: install.sh (apt-get, /opt, systemd service)
+        run: |
+          tar -xzf dist/*.tar.gz
+          sudo ./lan-streamer-*/install.sh
+          systemctl is-active lan-streamer
+          for i in $(seq 1 120); do  # the service picks its encoder first
+            curl -fs http://localhost:8080/api/status | grep -q '"state":"running"' && break
+            sleep 1
+          done
+          curl -fs http://localhost:8080/api/status | python3 -c "import json, sys; s = json.load(sys.stdin); print(s['version'], s['state'], s['encoder'], s['current']); assert s['state'] == 'running'"
+
+      - name: install.sh --uninstall --purge
+        run: |
+          sudo ./lan-streamer-*/install.sh --uninstall --purge
+          for path in /opt/lan-streamer /var/lib/lan-streamer /usr/local/bin/lan-streamer /etc/systemd/system/lan-streamer.service; do
+            if [ -e "$path" ]; then echo "uninstall left $path behind"; exit 1; fi
+          done
+          if id lanstreamer 2>/dev/null; then echo 'user left behind'; exit 1; fi

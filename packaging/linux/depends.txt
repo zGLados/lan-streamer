@@ -1,0 +1,12 @@
+# Debian/Ubuntu packages lan-streamer needs (the .deb's Depends, install.sh's apt-get).
+# Ubuntu 24.04 / Debian 13 or newer: Python 3.12+, GStreamer 1.24+.
+python3 (>= 3.12)
+python3-venv
+python3-gi
+gir1.2-gstreamer-1.0
+gir1.2-gst-plugins-base-1.0
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+gstreamer1.0-plugins-bad
+gstreamer1.0-plugins-ugly
+gstreamer1.0-libav
