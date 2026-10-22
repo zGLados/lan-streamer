@@ -1,0 +1,6 @@
+id = "ingest"
+name = "RTMP/SRT ingest"
+version = "1.0.0"
+api_version = 1
+entry = "ingest:Plugin"
+description = "Receives a stream from OBS, a camera or another PC over RTMP or SRT; on air while something is sent."

@@ -18,6 +18,8 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 **Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name.
 
+**Send from OBS:** add an input "RTMP/SRT ingest" on the admin page; it shows the server address and stream key to enter in OBS (RTMP or SRT). If OBS runs on another PC, allow `mediamtx.exe` through the Windows firewall.
+
 **TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 
 **Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the inputs (add, priority, force/block, order), the output and the logs there.

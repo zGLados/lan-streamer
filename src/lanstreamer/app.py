@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import dataclasses
 import logging
+import os
 import socket
 import subprocess
 import sys
@@ -40,6 +41,9 @@ from lanstreamer.web.api import Backend, Changes, create_app
 RTSP_PORT = 8554  # only used to see that MediaMTX is up
 SRT_PORT = 8890
 WEBRTC_PORT = 8889
+# MediaMTX's control API, only on this machine: the ingest input asks it whether
+# someone publishes (the shipped default config has it off, env vars override it).
+MEDIAMTX_API = "127.0.0.1:9997"
 
 log = logging.getLogger("lanstreamer")
 
@@ -161,9 +165,10 @@ class App:
         # next to itself, and C:\Program Files is read-only for users.
         workdir = paths.data_dir() / "mediamtx"
         workdir.mkdir(exist_ok=True)
+        env = {**os.environ, "MTX_API": "yes", "MTX_APIADDRESS": MEDIAMTX_API}
         self.mediamtx = subprocess.Popen(
             [str(exe), str(exe.with_name("mediamtx.yml"))],
-            cwd=workdir, creationflags=NO_WINDOW,
+            cwd=workdir, creationflags=NO_WINDOW, env=env,
             stdout=self.mediamtx_log, stderr=subprocess.STDOUT,
         )  # fmt: skip
 
