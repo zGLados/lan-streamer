@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- YouTube (built-in input): a channel's live stream while it is live, or the videos of a playlist, channel or a single video one after another (in order or shuffled), in up to 1080p.
+- Plugin SDK: `UriSource(audio_uri=…)` takes picture and sound from two separate URLs.
 - RTMP/SRT ingest (built-in input): send from OBS, a camera or another PC; on air while the stream comes in, the admin page shows the addresses and the stream key.
 - Overlay: a lower third with the title, the input, the channel and who submitted it – after each switch for a few seconds, always, or off (per output on the admin page, no restart needed).
 - The installer asks which built-in inputs to turn on (short-video submissions, playlist, test pattern); plugins can be turned on and off on the admin page; Standby is always on.

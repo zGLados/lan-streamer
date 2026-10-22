@@ -1,0 +1,6 @@
+id = "youtube"
+name = "YouTube"
+version = "1.0.0"
+api_version = 1
+entry = "youtube:Plugin"
+description = "A YouTube live stream while it is live, or the videos of a playlist, channel or a single video one after another."

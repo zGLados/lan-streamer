@@ -125,13 +125,11 @@ def test_real_yt_dlp_downloads_a_plain_video_url(tmp_path):
 
 
 def test_a_downloaded_yt_dlp_update_is_used_from_the_next_start(tmp_path, monkeypatch):
-    import importlib.util
     import logging
     import sys
 
-    spec = importlib.util.spec_from_file_location("submissions_plugin", PLUGIN / "submissions.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    from lanstreamer.plugins import ytdlp as module
+
     monkeypatch.setattr(sys, "path", list(sys.path))
     folder = tmp_path / "yt-dlp"
     (folder / "next" / "yt_dlp").mkdir(parents=True)  # downloaded during the last run

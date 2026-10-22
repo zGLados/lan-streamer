@@ -40,7 +40,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 ## M4 – Expansion
 
-- [ ] YouTube (live and playlist)
+- [x] YouTube (live and playlist)
 - [x] RTMP/SRT ingest via MediaMTX
 - [x] Overlays (source, title, submitter)
 - [ ] Several outputs, each with its own ranking

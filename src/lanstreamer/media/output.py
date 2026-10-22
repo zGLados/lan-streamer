@@ -271,16 +271,23 @@ class Output:
         elif source["kind"] == "uri":
             desc = f"{video_tail} {audio_tail}"
             bin_ = Gst.parse_bin_from_description(desc, False)
-            src = Gst.ElementFactory.make("fallbacksrc", None)
-            src.set_property("uri", source["uri"])
-            bin_.add(src)
             heads = {
                 "video": bin_.get_by_name("vin").get_static_pad("sink"),
                 "audio": bin_.get_by_name("ain").get_static_pad("sink"),
             }
-            src.connect("pad-added", lambda _src, pad: _link_by_kind(pad, heads))
-            for pad in src.srcpads:
-                _link_by_kind(pad, heads)
+            if source.get("audio_uri"):  # picture and sound from separate URIs
+                parts = [(source["uri"], {"video": heads["video"]}), (source["audio_uri"], {"audio": heads["audio"]})]
+            else:
+                parts = [(source["uri"], heads)]
+            for uri, wanted in parts:
+                src = Gst.ElementFactory.make("fallbacksrc", None)
+                src.set_property("uri", uri)
+                src.set_property("enable-video", "video" in wanted)
+                src.set_property("enable-audio", "audio" in wanted)
+                bin_.add(src)
+                src.connect("pad-added", lambda _src, pad, wanted=wanted: _link_by_kind(pad, wanted))
+                for pad in src.srcpads:
+                    _link_by_kind(pad, wanted)
         else:
             raise ValueError(f"unknown source kind {source['kind']!r}")
 
@@ -553,8 +560,9 @@ def _link_by_kind(pad, heads: dict) -> None:
     caps = pad.get_current_caps() or pad.query_caps(None)
     name = caps.get_structure(0).get_name() if caps and caps.get_size() else pad.get_name()
     kind = "video" if name.startswith("video") else "audio" if name.startswith("audio") else None
-    if kind and not heads[kind].is_linked():
-        pad.link(heads[kind])
+    head = heads.get(kind) if kind else None  # a source may give only one kind
+    if head is not None and not head.is_linked():
+        pad.link(head)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -93,12 +93,14 @@ A plugin resolves *what* to play; the output worker does the decoding. The plugi
 
 | Source | Example | Played via |
 | --- | --- | --- |
-| `UriSource(url, headers)` | Direct HLS/MP4 URL from yt-dlp | `fallbacksrc` |
+| `UriSource(url, audio_uri="")` | Direct HLS/MP4 URL from yt-dlp; YouTube HD with picture and sound as two URLs | `fallbacksrc` (two of them – video only / audio only – when `audio_uri` is set) |
 | `PipeSource(argv)` | `streamlink --stdout twitch.tv/x best` (handles token refresh and ads) | Process stdout → `fdsrc` |
 | `FileSource(path)` | Fallback playlist, downloaded TikTok clip | `filesrc` |
 | `UriSource("rtspt://127.0.0.1:8554/ingest/<key>")` | OBS stream arriving at MediaMTX (built-in `ingest`) | RTSP over TCP from MediaMTX |
 
 **RTMP/SRT ingest (built-in `ingest`):** MediaMTX receives on `ingest/<stream key>` (RTMP `rtmp://<pc>:1935/ingest` + key, or SRT `srt://<pc>:8890?streamid=publish:ingest/<key>`). The app starts MediaMTX with its API on `127.0.0.1:9997` only (env `MTX_API`, `MTX_APIADDRESS`; the shipped `mediamtx.yml` stays untouched); the plugin polls `/v3/paths/get/ingest/<key>` every 2 s and is active while the path is ready. On equal priority it holds the output while the stream is sent. The admin page shows the addresses and the received tracks. OBS on another PC needs `mediamtx.exe` allowed in the Windows firewall (rules come with M5).
+
+**YouTube (built-in `youtube`):** yt-dlp (shared helper `lanstreamer/plugins/ytdlp.py`, also used by submissions; updates itself per instance) resolves the link right before playing, because the URLs expire. A channel's `/live` page or a live video: active while live (checked every `live_check_s`), holds the output on equal priority. A playlist, channel or single video: always active, plays in order (or shuffled), starts over, may hand over after each video. Format: H.264 + AAC up to `max_height`, picture and sound as separate streams (no ffmpeg needed). Note: yt-dlp warns that YouTube without a JavaScript runtime (Deno, QuickJS, …) is deprecated and formats may go missing – if that happens, a JS runtime has to be bundled.
 
 ## Scheduler
 

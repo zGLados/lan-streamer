@@ -31,9 +31,14 @@ class TestSource:
 
 @dataclass(frozen=True)
 class UriSource:
-    """Anything GStreamer can open by URI: http(s) HLS/MP4, rtsp, srt, file."""
+    """Anything GStreamer can open by URI: http(s) HLS/MP4, rtsp, srt, file.
+
+    audio_uri: the sound from a second URI, when picture and sound come
+    separately (YouTube in HD); uri then gives only the picture.
+    """
 
     uri: str
+    audio_uri: str = ""
     kind: Literal["uri"] = "uri"
 
 
@@ -85,6 +90,9 @@ def source_to_dict(source: MediaSource) -> dict[str, Any]:
         return {**uri, "cut": True} if source.cut else uri
     if isinstance(source, ImageSource):
         return {"kind": "image", "path": str(Path(source.path).resolve())}
+    if isinstance(source, UriSource):
+        uri = {"kind": "uri", "uri": source.uri}
+        return {**uri, "audio_uri": source.audio_uri} if source.audio_uri else uri
     return asdict(source)
 
 
