@@ -11,6 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Overlay: a lower third with the title, the input, the channel and who submitted it – after each switch for a few seconds, always, or off (per output on the admin page, no restart needed).
 - The installer asks which built-in inputs to turn on (short-video submissions, playlist, test pattern); plugins can be turned on and off on the admin page; Standby is always on.
 - Architecture concept and roadmap.
 - Windows installer (Inno Setup, built and install-tested in CI): all users to `C:\Program Files\lan-streamer` or only for the current user, listed under Settings → Apps, complete uninstall; bundles Python 3.13, an own PyGObject build, the GStreamer runtime (whitelisted plugins only, 74 MB installer) and MediaMTX.

@@ -130,6 +130,10 @@ def test_output_patch_reports_restart(setup):
     r = client.patch("/api/admin/outputs/out1", json={"fps": 30})
     assert r.json()["restart_required"] is True and r.json()["output"]["fps"] == 30
     assert client.patch("/api/admin/outputs/out1", json={"fps": 25}).status_code == 422
+    r = client.patch("/api/admin/outputs/out1", json={"overlay": "always", "overlay_s": 5})
+    assert r.json()["restart_required"] is False
+    assert (r.json()["output"]["overlay"], r.json()["output"]["overlay_s"]) == ("always", 5)
+    assert client.patch("/api/admin/outputs/out1", json={"overlay": "sometimes"}).status_code == 422
 
 
 def test_logs(setup):

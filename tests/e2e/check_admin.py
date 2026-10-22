@@ -135,6 +135,15 @@ def main() -> int:
             expect(page.locator('#plugins tr[data-plugin="hello"]')).to_have_count(0, timeout=10_000)
             step("deleted the input and removed the plugin")
 
+            page.select_option("#o-overlay", "always")
+            page.fill("#o-overlay-s", "5")
+            page.click("#output-form button[type=submit]")
+            expect(page.locator("#toast")).to_contain_text("Output saved", timeout=10_000)
+            out = page.evaluate("fetch('/api/admin/outputs').then(r => r.json())")[0]
+            assert (out["overlay"], out["overlay_s"]) == ("always", 5), out
+            assert page.locator("#output-note").is_hidden(), "the overlay needs no restart"
+            step("overlay set to 'always' on the output, no restart needed")
+
             page.click("#log-refresh")
             expect(page.locator("#log")).to_contain_text("Input removed: UI input", timeout=10_000)
             step("log shown")

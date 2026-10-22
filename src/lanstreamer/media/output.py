@@ -17,6 +17,8 @@ Protocol, one JSON object per line ("id" identifies one play command):
             {"cmd": "play", "id": "9", "label": "...", "source": {"kind": "card", "heading": "...", "title": "...", "subtitle": "..."}}
             a source with "cut": true replaces the current one at its first frame, without fading
             {"cmd": "clear"}   fade out to the background
+            {"cmd": "overlay", "title": "...", "subtitle": "...", "duration_s": 8}
+                the lower third; duration 0 keeps it, an empty title hides it
             {"cmd": "stop"}
     stdout: {"event": "ready"} {"event": "playing", "id": "7", "label": "..."}
             {"event": "switch_failed", "id": "8", "label": "...", "reason": "..."}
@@ -42,6 +44,8 @@ from lanstreamer.media import encoders, gst
 from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
+OVERLAY_FADE_S = 0.3
+OVERLAY_SHADING = 110  # textoverlay's shaded background at full opacity
 START_TIMEOUT_S = 15.0
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
@@ -84,6 +88,7 @@ class Output:
         self.current: Slot | None = None
         self.pending: Slot | None = None
         self.next_zorder = 1
+        self.overlay_gen = 0  # counts overlay commands; older fades and timers stop
         self.frames = 0
         self.muxed: set[str] = set()  # mux inputs that have delivered data
         self.muxed_all_at: float | None = None  # when the last one did
@@ -101,6 +106,9 @@ class Output:
             f" ! {self.raw_caps}"
             f" ! textoverlay name=info halignment=right valignment=top"
             f'   font-desc="Sans 16" shaded-background=true'
+            # the lower third; font sizes are relative to 640 px width (auto-resize)
+            f" ! textoverlay name=ovtitle {OVERLAY_TEXT} ypad=118 font-desc=\"Sans Bold 14\""
+            f" ! textoverlay name=ovsub {OVERLAY_TEXT} ypad=64 font-desc=\"Sans 10\""
             f" ! videoconvert name=vconv n-threads=4"
             f" ! queue name=encq leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0"
             f" h264parse name=hparse config-interval=-1 ! queue ! mux."
@@ -251,9 +259,9 @@ class Output:
         elif source["kind"] == "card":
             desc = (
                 f"videotestsrc is-live=true pattern=solid-color foreground-color={CARD_COLOR}"
-                f" ! textoverlay name=heading {CARD_TEXT} ypos=0.36 font-desc=\"Sans 36\" color=0xFF9AA0B4"
-                f" ! textoverlay name=title {CARD_TEXT} ypos=0.5 font-desc=\"Sans Bold 64\" color=0xFFFFFFFF"
-                f" ! textoverlay name=subtitle {CARD_TEXT} ypos=0.64 font-desc=\"Sans 40\" color=0xFFC8CCD8"
+                f" ! textoverlay name=heading {CARD_TEXT} ypos=0.36 font-desc=\"Sans 12\" color=0xFF9AA0B4"
+                f" ! textoverlay name=title {CARD_TEXT} ypos=0.5 font-desc=\"Sans Bold 22\" color=0xFFFFFFFF"
+                f" ! textoverlay name=subtitle {CARD_TEXT} ypos=0.64 font-desc=\"Sans 14\" color=0xFFC8CCD8"
                 f" ! {video_tail}"
                 f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
             )
@@ -398,6 +406,50 @@ class Output:
             mixer.release_request_pad(pad)
         self.pipeline.remove(slot.bin)
 
+    # --- lower third ------------------------------------------------------------
+
+    def overlay(self, title: str, subtitle: str, duration_s: float) -> None:
+        """Shows title + subtitle (fading in), for duration_s or until replaced."""
+        self.overlay_gen += 1
+        gen = self.overlay_gen
+        try:
+            if not title:
+                self._fade_overlay(gen, 1.0, 0.0)
+                return
+            for name, text in (("ovtitle", title), ("ovsub", subtitle)):
+                self.pipeline.get_by_name(name).set_property("text", _plain(text))
+            self.pipeline.get_by_name("ovsub").set_property("silent", not subtitle)
+            self.pipeline.get_by_name("ovtitle").set_property("silent", False)
+            self._fade_overlay(gen, 0.0, 1.0)
+            if duration_s > 0:
+                self.GLib.timeout_add(int(duration_s * 1000), self._fade_overlay, gen, 1.0, 0.0)
+            log(f"Overlay shown: {title} | {subtitle}")
+        except Exception as exc:  # noqa: BLE001 – the stream goes on without it
+            log(f"Overlay failed: {exc}")
+
+    def _fade_overlay(self, gen: int, start: float, end: float) -> bool:
+        began = time.monotonic()
+
+        def step() -> bool:
+            if gen != self.overlay_gen:
+                return False  # a newer overlay command took over
+            t = min(1.0, (time.monotonic() - began) / OVERLAY_FADE_S)
+            self._overlay_opacity(start + (end - start) * t)
+            return t < 1.0
+
+        if step():
+            self.GLib.timeout_add(20, step)
+        return False
+
+    def _overlay_opacity(self, opacity: float) -> None:
+        alpha = int(255 * opacity) << 24
+        for name, rgb in (("ovtitle", 0xFFFFFF), ("ovsub", 0xD0D4E0)):
+            element = self.pipeline.get_by_name(name)
+            element.set_property("color", alpha | rgb)
+            element.set_property("shading-value", max(1, int(OVERLAY_SHADING * opacity)))
+            if opacity == 0.0:
+                element.set_property("silent", True)
+
     # --- bus, overlay, stats --------------------------------------------------
 
     def _slot_of(self, element) -> Slot | None:
@@ -460,6 +512,9 @@ class Output:
             self.play(str(command.get("id", "")), command.get("label", "Input"), command["source"])
         elif command.get("cmd") == "clear":
             self.clear()
+        elif command.get("cmd") == "overlay":
+            self.overlay(str(command.get("title", "")), str(command.get("subtitle", "")),
+                         float(command.get("duration_s", 0)))  # fmt: skip
         elif command.get("cmd") == "stop":
             self.loop.quit()
         return False
@@ -482,6 +537,10 @@ class Output:
         return 0
 
 
+OVERLAY_TEXT = (
+    "silent=true halignment=left valignment=bottom xpad=64 shaded-background=true"
+    " draw-outline=false draw-shadow=false"
+)
 CARD_TEXT = "halignment=center valignment=position xpos=0.5 shaded-background=false draw-shadow=false"
 
 

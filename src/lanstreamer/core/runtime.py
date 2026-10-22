@@ -29,11 +29,14 @@ FAILED_COOLDOWN_S = 30.0  # an input whose source failed sits out this long
 RELEASE_POLL_S = 1.0
 RESTART_BACKOFF_S = (2, 5, 15, 60)
 STARTUP_GRACE_S = 5.0  # wait at most this long for every input's first activity report
+OVERLAY_TITLE_MAX = 70
+NO_OVERLAY = ("", "")
 
 
 class Worker(Protocol):
     async def play(self, play_id: str, label: str, source: dict[str, Any]) -> None: ...
     async def clear(self) -> None: ...
+    async def overlay(self, title: str, subtitle: str, duration_s: float) -> None: ...
 
 
 @dataclass
@@ -91,6 +94,9 @@ class OutputRuntime:
         self.inputs = {i.id: InputRuntime(i, plugins.get(i.plugin)) for i in cfg.inputs}
         self.on_air: OnAir | None = None
         self.pending: tuple[str, str] | None = None  # (play id, input id)
+        self.pending_kind = ""  # source kind of the pending play ("uri", "card", ...)
+        self.on_air_kind = ""
+        self.overlay_text: tuple[str, str] | None = NO_OVERLAY  # last sent; None: send anyway
         self.play_ids = count(1)
         self.switches = 0
         self.failed_switches = 0
@@ -150,7 +156,11 @@ class OutputRuntime:
                 inp.cfg = icfg
             updated[icfg.id] = inp  # keeps the configured order (rotation, ties)
         self.inputs = updated
+        overlay_changed = (cfg.overlay, cfg.overlay_s) != (self.cfg.overlay, self.cfg.overlay_s)
         self.cfg = cfg
+        if overlay_changed:
+            self.overlay_text = None  # mode or duration changed: send it with the new ones
+            self._refresh_overlay(again=True)
         self.on_change()
 
     async def reload_plugin(self, plugin_id: str, plugins: dict[str, Path]) -> None:
@@ -253,6 +263,7 @@ class OutputRuntime:
             if self.on_air is not None:
                 log.info("No input active – showing the background")
                 self.on_air = None
+                self._send_overlay(NO_OVERLAY, again=False)
                 await self.worker.clear()
                 self.on_change()
         elif self.on_air is None or target != self.on_air.id:
@@ -303,9 +314,40 @@ class OutputRuntime:
             return
         inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
-        self.pending = (play_id, inp.cfg.id)
+        self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
         inp.releasable = False  # until the plugin says otherwise
         await self.worker.play(play_id, inp.cfg.name, source)
+
+    # --- overlay (lower third) ----------------------------------------------------
+
+    def _overlay_for(self, inp: InputRuntime) -> tuple[str, str]:
+        """Title and the line below it for the input on air; nothing for the
+        fallback (Standby) and for announcement cards, which show it themselves."""
+        if self.cfg.overlay == "off" or inp.cfg.fallback or self.on_air_kind == "card":
+            return NO_OVERLAY
+        meta = inp.metadata
+        title = str(meta.get("title") or "")
+        below = [inp.cfg.name] if title else []
+        if meta.get("channel"):
+            below.append(str(meta["channel"]))
+        if meta.get("submitter"):
+            below.append(f"submitted by {meta['submitter']}")
+        title = title or inp.cfg.name
+        if len(title) > OVERLAY_TITLE_MAX:
+            title = title[: OVERLAY_TITLE_MAX - 1].rstrip() + "…"
+        return title, " · ".join(below)
+
+    def _refresh_overlay(self, again: bool) -> None:
+        inp = self.inputs.get(self.on_air.id) if self.on_air else None
+        self._send_overlay(self._overlay_for(inp) if inp else NO_OVERLAY, again)
+
+    def _send_overlay(self, text: tuple[str, str], again: bool) -> None:
+        """again: show it once more even if unchanged (a new switch)."""
+        if text == self.overlay_text and (not again or text == NO_OVERLAY or self.cfg.overlay == "always"):
+            return
+        self.overlay_text = text
+        duration = 0.0 if self.cfg.overlay == "always" else self.cfg.overlay_s
+        self._spawn(self.worker.overlay(text[0], text[1], duration))
 
     # --- events -------------------------------------------------------------------
 
@@ -321,6 +363,8 @@ class OutputRuntime:
             self.switches += 1
             log.info("On air: %s", inp.cfg.name)
             self._playback(inp, "started")
+            self.on_air_kind = self.pending_kind
+            self._refresh_overlay(again=True)
         elif kind == "switch_failed" and inp:
             if self.pending and self.pending[0] == play_id:
                 self.pending = None
@@ -354,6 +398,8 @@ class OutputRuntime:
                 inp.debounce = Debounce(ACTIVITY_HOLD_S, initial=inp.raw_active)
         elif kind == "metadata":
             inp.metadata = event.get("value", {})
+            if self.on_air is not None and self.on_air.id == inp.cfg.id:
+                self._refresh_overlay(again=False)  # e.g. a live stream's new title
         elif kind == "next_source":
             inp.wants_next = True
         elif kind == "info":

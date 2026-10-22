@@ -220,6 +220,7 @@ class App:
             return
         stored = self.store.output(output_id)
         self.output.inputs = stored.inputs  # format/encoder changes need a restart
+        self.output.overlay, self.output.overlay_s = stored.overlay, stored.overlay_s
         plugins = {pid: m.path for pid, m in discover(paths.plugins_dir()).items()}
         await self.runtime.apply(self.output, plugins)
         self.status.sources = [i.name for i in self.output.inputs]

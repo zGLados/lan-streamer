@@ -129,6 +129,8 @@ class OutputPatch(BaseModel):
     fps: Literal[30, 60] | None = None
     bitrate_kbps: int | None = Field(None, ge=0, le=50000)
     encoder: Literal["auto", "nvidia", "amd", "intel", "cpu"] | None = None
+    overlay: Literal["switch", "always", "off"] | None = None
+    overlay_s: float | None = Field(None, ge=2, le=60)
 
 
 class PluginSwitch(BaseModel):

@@ -144,6 +144,10 @@
       <label>Encoder <select id="o-encoder">
         <option value="auto">Automatic</option><option value="nvidia">NVIDIA</option><option value="amd">AMD</option>
         <option value="intel">Intel</option><option value="cpu">CPU</option></select></label>
+      <label>Overlay <select id="o-overlay">
+        <option value="switch">After each switch</option><option value="always">Always</option>
+        <option value="off">Off</option></select><span class="hint">title, channel, who submitted it</span></label>
+      <label>Overlay seconds <input type="number" id="o-overlay-s" min="2" max="60" step="1"></label>
       <button class="primary" type="submit">Save</button>
     </form>
     <p class="note" id="output-note" hidden>Saved. Format, bitrate and encoder take effect after restarting lan-streamer.</p>
@@ -580,6 +584,7 @@ function renderOutput() {
   const o = output();
   $("o-name").value = o.name; $("o-fps").value = o.fps; $("o-width").value = o.width;
   $("o-height").value = o.height; $("o-bitrate").value = o.bitrate_kbps; $("o-encoder").value = o.encoder;
+  $("o-overlay").value = o.overlay; $("o-overlay-s").value = o.overlay_s;
 }
 $("output-form").onsubmit = async (e) => {
   e.preventDefault();
@@ -587,6 +592,7 @@ $("output-form").onsubmit = async (e) => {
   const wanted = {
     name: $("o-name").value.trim(), fps: Number($("o-fps").value), width: Number($("o-width").value),
     height: Number($("o-height").value), bitrate_kbps: Number($("o-bitrate").value), encoder: $("o-encoder").value,
+    overlay: $("o-overlay").value, overlay_s: Number($("o-overlay-s").value),
   };
   const changes = Object.fromEntries(Object.entries(wanted).filter(([k, v]) => v !== o[k]));
   if (!Object.keys(changes).length) return toast("Nothing changed");

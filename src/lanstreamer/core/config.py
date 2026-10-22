@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from lanstreamer.scheduler import Override
+
+OverlayMode = Literal["switch", "always", "off"]
 
 
 @dataclass
@@ -31,6 +33,10 @@ class OutputConfig:
     fps: int = 60
     bitrate_kbps: int = 0  # 0 = automatic (8000 at 60 fps, 6000 at 30 fps)
     encoder: str = "auto"
+    # Lower third with what is on air (input, title, channel, submitter), F-OUT-04:
+    # "switch" shows it for overlay_s after every switch, "always" keeps it, "off".
+    overlay: OverlayMode = "switch"
+    overlay_s: float = 8.0
     inputs: list[InputConfig] = field(default_factory=list)
 
 

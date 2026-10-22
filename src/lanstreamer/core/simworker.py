@@ -23,6 +23,7 @@ class SimulatedWorker:
         self.running = False
         self._tasks: set[asyncio.Task] = set()
         self._current: str | None = None
+        self.overlay_text = ("", "")
 
     async def start(self) -> None:
         self.running = True
@@ -45,6 +46,9 @@ class SimulatedWorker:
     async def clear(self) -> None:
         self._current = None
         self.on_event({"event": "cleared"})
+
+    async def overlay(self, title: str, subtitle: str, duration_s: float) -> None:
+        self.overlay_text = (title, subtitle)
 
     async def stop(self) -> None:
         self.running = False

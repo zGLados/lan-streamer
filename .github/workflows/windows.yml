@@ -180,6 +180,11 @@ jobs:
           if ($api -ne 0) { throw "web API check failed" }
           if ($admin -ne 0) { throw "admin page check failed" }
           if ($viewer -ne 0) { throw "viewer side check failed" }
+          $out = Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\output.log"
+          $overlay = $out | Select-String 'Overlay shown: .*submitted by CI viewer' | Select-Object -First 1
+          Write-Host "Lower third: $overlay"
+          if (-not $overlay) { $out | Select-Object -Last 20; throw "the submitted video got no lower third" }
+          if ($out | Select-String 'Overlay failed') { throw "drawing the lower third failed" }
           if ($p.ExitCode -ne 0) { throw "windowless run failed ($($p.ExitCode))" }
 
       - name: Smoke test – stream with switching + playback in Edge (1080p60, CPU encoder)

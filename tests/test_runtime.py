@@ -24,6 +24,7 @@ class FakeWorker:
         self.clears = 0
         self.fail = set(fail)
         self.sources: list[dict] = []
+        self.overlays: list[tuple] = []
         self.last_id = ""
         self.runtime = None
 
@@ -36,6 +37,9 @@ class FakeWorker:
 
     async def clear(self):
         self.clears += 1
+
+    async def overlay(self, title, subtitle, duration_s):
+        self.overlays.append((title, subtitle, duration_s))
 
 
 def plugins():
@@ -205,3 +209,42 @@ def test_a_replaced_input_leaves_no_process_behind(tmp_path):
         assert runtime.inputs["a"].restarts == 0 and not runtime.inputs["a"].error
 
     asyncio.run(run(cfg, tmp_path, 0.1, during=change))
+
+
+def test_the_lower_third_shows_what_is_on_air(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a", 20), pattern("std", 0, fallback=True)])
+
+    async def steps(runtime, worker):
+        await asyncio.sleep(0.5)
+        assert worker.overlays == [("Test pattern (smpte)", "A", 8.0)]  # its title, the input below
+        inp = runtime.inputs["a"]
+        meta = {"title": "Cat video", "channel": "@cats", "submitter": "Anna"}
+        runtime._on_plugin_event(inp, {"event": "metadata", "value": meta})
+        await asyncio.sleep(0.05)
+        assert worker.overlays[-1] == ("Cat video", "A · @cats · submitted by Anna", 8.0)
+        runtime._on_plugin_event(inp, {"event": "metadata", "value": meta})  # unchanged: not again
+        await asyncio.sleep(0.05)
+        assert len(worker.overlays) == 2
+
+        await runtime.apply(OutputConfig(inputs=cfg.inputs, overlay="always"))
+        await asyncio.sleep(0.05)
+        assert worker.overlays[-1] == ("Cat video", "A · @cats · submitted by Anna", 0.0)
+        runtime.on_air_kind = "card"  # an announcement card shows the title itself
+        runtime._refresh_overlay(again=True)
+        await asyncio.sleep(0.05)
+        assert worker.overlays[-1][0] == ""
+        runtime.on_air_kind = "uri"
+
+        await runtime.apply(OutputConfig(inputs=cfg.inputs, overlay="off"))
+        await asyncio.sleep(0.05)
+        assert worker.overlays[-1][0] == ""
+        await runtime.apply(OutputConfig(inputs=cfg.inputs, overlay="switch"))
+        await asyncio.sleep(0.05)
+        assert worker.overlays[-1] == ("Cat video", "A · @cats · submitted by Anna", 8.0)
+        count = len(worker.overlays)
+        await runtime.apply(OutputConfig(inputs=[pattern("a", 20, override="block"), cfg.inputs[1]]))
+        await asyncio.sleep(0.6)  # Standby (the fallback) takes over: no lower third
+        assert worker.plays[-1] == "std"
+        assert worker.overlays[count:] == [("", "", 8.0)]
+
+    asyncio.run(run(cfg, tmp_path, 0.1, during=steps))

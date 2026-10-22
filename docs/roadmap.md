@@ -42,7 +42,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 - [ ] YouTube (live and playlist)
 - [ ] RTMP/SRT ingest via MediaMTX
-- [ ] Overlays (source, title, submitter)
+- [x] Overlays (source, title, submitter)
 - [ ] Several outputs, each with its own ranking
 - [ ] Optional: restream via RTMP
 

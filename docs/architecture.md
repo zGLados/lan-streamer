@@ -72,7 +72,7 @@ input slot B: (next input, prerolling)                                   ─┘ 
 - **Encoder:** H.264, no B-frames, one keyframe per second, tuned for low latency, profile constrained-baseline/baseline/main (what every browser decodes over WebRTC); see [Encoder selection](#encoder-selection).
 - **Output → MediaMTX via SRT** (MPEG-TS, 20 ms latency on localhost). `rtspclientsink` over TCP broke after some seconds on Windows. MediaMTX only reads the first stream table (PMT), so the muxer output is held back until video and audio both have data.
 - **Audio is Opus**, because browsers only accept Opus over WebRTC; MediaMTX also serves Opus over fMP4 LL-HLS. A restream to Twitch/YouTube (F-OUT-03) adds an AAC branch only while it is enabled.
-- **Overlays (F-OUT-04):** first version draws source, title and submitter with GStreamer text/Cairo overlays. HTML overlays are a later option.
+- **Overlays (F-OUT-04):** a lower third (bottom left) with the title and below it input · channel · "submitted by …", drawn by GStreamer `textoverlay` in the output worker. Per output: after each switch for `overlay_s` seconds (default 8), always, or off – changed live on the admin page. Not shown for the fallback (Standby) and for announcement cards; shown again when the title of what is on air changes. HTML overlays are a later option.
 
 ### Encoder selection
 

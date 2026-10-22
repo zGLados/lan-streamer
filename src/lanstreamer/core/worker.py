@@ -55,6 +55,9 @@ class OutputWorker:
     async def clear(self) -> None:
         await self._send({"cmd": "clear"})
 
+    async def overlay(self, title: str, subtitle: str, duration_s: float) -> None:
+        await self._send({"cmd": "overlay", "title": title, "subtitle": subtitle, "duration_s": duration_s})
+
     async def stop(self, timeout_s: float = 5.0) -> None:
         if not self.running:
             return
