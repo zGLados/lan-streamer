@@ -85,8 +85,13 @@ def test_a_key_is_made_up_and_kept(tmp_path):
                              lambda _i, e: events.append(e))  # fmt: skip
         await proc.start()
         try:
-            await asyncio.sleep(0.5)
-            return [e for e in events if e.get("event") == "info"][-1]["value"]
+            # a refused connection takes ~2 s on Windows (it retries), so wait for the answer
+            for _ in range(100):
+                info = [e for e in events if e.get("event") == "info"][-1]["value"]
+                if info.startswith("MediaMTX not reachable"):
+                    return info
+                await asyncio.sleep(0.1)
+            return info
         finally:
             await proc.stop()
 
