@@ -48,7 +48,8 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 ## M5 – Installers
 
-- [ ] Windows: Inno Setup `.exe` with Python runtime, GStreamer, MediaMTX, Windows service and firewall rules
+- [x] Windows: Inno Setup `.exe` with Python runtime, GStreamer, MediaMTX and firewall rules
+- [ ] Windows: optional Windows service
 - [ ] Linux: `.deb` and `.tar.gz` + `install.sh`, systemd service
 - [ ] Both built and smoke-tested in GitHub Actions on every release
 - [ ] Optional: Docker Compose for Linux servers

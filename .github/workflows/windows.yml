@@ -140,6 +140,14 @@ jobs:
           $ini = Get-Content "$env:ProgramFiles\lan-streamer\setup.ini" -Raw
           Write-Host "setup.ini:`n$ini"
           foreach ($want in 'submissions=on', 'playlist=on', 'test-pattern=off') { if ($ini -notmatch [regex]::Escape($want)) { throw "setup.ini lacks $want" } }
+          # Firewall rules for the LAN (private/domain networks)
+          foreach ($rule in 'lan-streamer (MediaMTX)', 'lan-streamer (web page)', 'lan-streamer (web page, console)') {
+            $shown = netsh advfirewall firewall show rule name="$rule" verbose
+            if ($LASTEXITCODE -ne 0) { throw "firewall rule '$rule' missing" }
+            $program = ($shown | Select-String 'Program:').ToString().Trim()
+            Write-Host "Firewall: $rule -> $program"
+            if ($program -notlike '*lan-streamer*') { throw "firewall rule '$rule' points elsewhere: $program" }
+          }
 
       - name: Self-test of the installed app
         shell: pwsh
@@ -255,6 +263,11 @@ jobs:
           $p = Start-Process -Wait -PassThru -FilePath "$env:ProgramFiles\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           Start-Sleep 3
           if (Test-Path $key) { throw 'uninstall entry still registered' }
+          foreach ($rule in 'lan-streamer (MediaMTX)', 'lan-streamer (web page)', 'lan-streamer (web page, console)') {
+            netsh advfirewall firewall show rule name="$rule" | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw "firewall rule '$rule' left behind" }
+          }
+          $global:LASTEXITCODE = 0
           foreach ($dir in "$env:ProgramFiles\lan-streamer", "$env:LOCALAPPDATA\lan-streamer") {
             if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "uninstall left $dir behind" }
           }

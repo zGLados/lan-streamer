@@ -88,6 +88,22 @@ Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\pythonw.exe"; Pa
 Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer with 30 fps"
 Name: "{group}\lan-streamer self-test"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Check GStreamer and the video encoders"
 
+[Run]
+; Firewall: viewers, OBS (ingest) and other PCs in the LAN reach the web page and
+; MediaMTX (WebRTC, RTMP, SRT). Only for an all-users install (needs admin rights), only
+; on private and domain networks. Delete first, so a reinstall leaves no duplicates.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (MediaMTX)"""; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (MediaMTX)"" dir=in action=allow program=""{app}\mediamtx\mediamtx.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page)"""; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page)"" dir=in action=allow program=""{app}\python\pythonw.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page, console)"""; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page, console)"" dir=in action=allow program=""{app}\python\python.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (MediaMTX)"""; Flags: runhidden; RunOnceId: "fw-media"; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page)"""; Flags: runhidden; RunOnceId: "fw-webw"; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page, console)"""; Flags: runhidden; RunOnceId: "fw-web"; Check: IsAdminInstallMode
+
 [UninstallDelete]
 ; Everything the app wrote at runtime: Python caches and MediaMTX certificates in
 ; the program folder, plugin registry, logs and plugin data in the user data folder.

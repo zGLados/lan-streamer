@@ -22,7 +22,7 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 **YouTube:** add an input "YouTube" with a link: a channel's `/live` page (on air while it is live), a playlist, a channel or a single video (played one after another).
 
-**Send from OBS:** add an input "RTMP/SRT ingest" on the admin page; it shows the server address and stream key to enter in OBS (RTMP or SRT). If OBS runs on another PC, allow `mediamtx.exe` through the Windows firewall.
+**Send from OBS:** add an input "RTMP/SRT ingest" on the admin page; it shows the server address and stream key to enter in OBS (RTMP or SRT). The installer (all users) allows lan-streamer through the Windows firewall on private and domain networks – if other PCs cannot connect, set the network to "Private" in the Windows settings.
 
 **TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 

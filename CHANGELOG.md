@@ -11,6 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Windows firewall rules for the LAN (private and domain networks), added by the installer for all users and removed on uninstall – OBS and viewers on other PCs no longer depend on the Windows prompt.
 - Restream: send an output to an RTMP(S) server (YouTube, Twitch, …) as well – per output on the admin page, restarts by itself if the connection drops.
 - Several outputs, each with its own inputs and ranking: add and remove them on the admin page while running; the player page picks the output (`/?output=<id>`), the TV view shows `/tv/<id>`.
 - YouTube (built-in input): a channel's live stream while it is live, or the videos of a playlist, channel or a single video one after another (in order or shuffled), in up to 1080p.
