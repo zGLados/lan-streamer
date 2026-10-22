@@ -1,7 +1,7 @@
 """End-to-end check of the restream to RTMP against a running lan-streamer.
 
 Sets the first output's restream URL to MediaMTX's own RTMP port (path
-"restream-ci"), checks the restream goes live and that MediaMTX receives
+"restream/ci"), checks the restream goes live and that MediaMTX receives
 H.264 + AAC there, then turns it off again.
 
     python tests/e2e/check_restream.py http://localhost:8080
@@ -14,8 +14,8 @@ import sys
 import httpx
 from check_api import PASSWORD, wait_for
 
-TARGET = "rtmp://127.0.0.1:1935/restream-ci"
-MEDIAMTX_PATH = "http://127.0.0.1:9997/v3/paths/get/restream-ci"
+TARGET = "rtmp://127.0.0.1:1935/restream/ci"  # app "restream", stream key "ci" (rtmp2sink needs both)
+MEDIAMTX_PATH = "http://127.0.0.1:9997/v3/paths/get/restream/ci"
 
 
 def main() -> int:

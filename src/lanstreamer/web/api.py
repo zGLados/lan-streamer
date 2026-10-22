@@ -58,7 +58,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig, OutputConfig
@@ -71,6 +71,7 @@ from lanstreamer_sdk import Manifest
 COOKIE = "lanstreamer_session"
 DEVICE_COOKIE = "lanstreamer_device"  # identifies a viewer's browser for per-device limits
 LOG_FILES = ("lan-streamer.log", "output.log", "mediamtx.log")
+RTMP_URL = re.compile(r"^rtmps?://[^/\s]+/[^/\s]+/\S+$")
 OUTPUT_LOG = re.compile(r"^output-[a-z0-9-]+\.log$")  # the workers of further outputs
 RESTART_FIELDS = {"width", "height", "fps", "bitrate_kbps", "encoder"}
 
@@ -135,7 +136,15 @@ class OutputPatch(BaseModel):
     encoder: Literal["auto", "nvidia", "amd", "intel", "cpu"] | None = None
     overlay: Literal["switch", "always", "off"] | None = None
     overlay_s: float | None = Field(None, ge=2, le=60)
-    restream_url: str | None = Field(None, max_length=500, pattern=r"^(rtmps?://\S+)?$")
+    restream_url: str | None = Field(None, max_length=500)
+
+    @field_validator("restream_url")
+    @classmethod
+    def rtmp_url(cls, value: str | None) -> str | None:
+        # rtmp(s)://host[:port]/app/stream-key – the RTMP sender needs both parts
+        if value and not RTMP_URL.match(value):
+            raise ValueError("must look like rtmp://server/app/stream-key (or rtmps://)")
+        return value
 
 
 class PluginSwitch(BaseModel):

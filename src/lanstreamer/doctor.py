@@ -22,8 +22,11 @@ REQUIRED_ELEMENTS = (
     "fallbacksrc", "uridecodebin3", "decodebin3", "qtdemux", "matroskademux", "tsdemux",
     "souphttpsrc", "hlsdemux2", "rtspsrc", "rtph264depay", "rtph265depay", "rtpmp4gdepay",
     "rtpopusdepay", "aacparse", "avdec_h264", "avdec_h265", "avdec_aac",
-    "dav1ddec", "vp9dec", "opusdec", "jpegdec", "pngdec",
+    "vp9dec", "opusdec", "jpegdec", "pngdec",
 )  # fmt: skip
+# One of each is enough (decodebin picks whichever is there): Ubuntu 24.04 has no
+# dav1ddec, but av1dec (libaom) in plugins-bad – slower, AV1 is rare for us anyway.
+REQUIRED_ANY = (("dav1ddec", "av1dec"),)
 
 # Windows plugins for GPU encoding; they must load even without the hardware.
 WINDOWS_PLUGINS = ("d3d11", "d3d12", "nvcodec", "amfcodec", "qsv")
@@ -54,6 +57,8 @@ def check(args: argparse.Namespace) -> int:
     print(f"GStreamer  {Gst.version_string()}" + (f" ({location})" if location else ""))
 
     missing = [name for name in REQUIRED_ELEMENTS if Gst.ElementFactory.find(name) is None]
+    missing += [" or ".join(names) for names in REQUIRED_ANY
+                if not any(Gst.ElementFactory.find(name) for name in names)]  # fmt: skip
     print("Elements   " + ("all present" if not missing else "MISSING: " + ", ".join(missing)))
 
     # A plugin that cannot be loaded (missing DLL) is absent from the registry. A

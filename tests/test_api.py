@@ -142,6 +142,7 @@ def test_output_patch_reports_restart(setup):
     r = client.patch("/api/admin/outputs/out1", json={"restream_url": "rtmp://a.rtmp.youtube.com/live2/abc-123"})
     assert r.json()["restart_required"] is False and r.json()["output"]["restream_url"].endswith("/abc-123")
     assert client.patch("/api/admin/outputs/out1", json={"restream_url": "http://x"}).status_code == 422
+    assert client.patch("/api/admin/outputs/out1", json={"restream_url": "rtmp://host/only-key"}).status_code == 422
     assert client.patch("/api/admin/outputs/out1", json={"restream_url": ""}).json()["output"]["restream_url"] == ""
 
 
