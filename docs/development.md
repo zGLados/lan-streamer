@@ -11,7 +11,7 @@
 
 **The CI runs only when started on purpose**, not on every push to `main`:
 
-- **Full test run** (unit tests, build, install, every end-to-end check, on Windows and Linux): push the commit to the branch `ci` – `git push -f origin HEAD:ci` – or Actions → Windows / Linux → "Run workflow". A newer push to `ci` cancels a run still going.
+- **Full test run** (unit tests, build, install, every end-to-end check, on Windows and Linux): push the commit to the branch `ci` – `git push origin HEAD:ci` – or Actions → Windows / Linux → "Run workflow". A newer push to `ci` cancels a run still going.
 - Windows extras: the real update (`check_update.py`, installs a second time) when `updater.py`, `packaging/windows/`, the test or the workflow changed since the last push to `ci` (always on "Run workflow" and for releases); the doc screenshots (`doc_screenshots.py`) only with "Run workflow" and "screenshots" ticked.
 - **Release tag:** builds, installs, runs the self-test (Windows also the update test) and attaches the files. The unit tests and the other end-to-end checks run only if this commit has no green full run yet – so run the full test before tagging.
 
@@ -28,7 +28,7 @@ Versions follow [Semantic Versioning](https://semver.org/); `lanstreamer.__versi
 A release:
 
 0. Optionally refresh the screenshots: run the Windows workflow by hand with "screenshots" ticked; it uploads `docs-images-<version>` (`tests/e2e/doc_screenshots.py`); copy the pictures to `docs/images/`.
-1. Set the version in `pyproject.toml`, `src/lanstreamer/__init__.py` and the two workflows (`tests/test_version.py` checks they agree); in `CHANGELOG.md` turn "Unreleased" into `## [x.y.z] – <date>`. Commit, push, and run the full test on that commit (`git push -f origin HEAD:ci`) until it is green.
+1. Set the version in `pyproject.toml`, `src/lanstreamer/__init__.py` and the two workflows (`tests/test_version.py` checks they agree); in `CHANGELOG.md` turn "Unreleased" into `## [x.y.z] – <date>`. Commit, push, and run the full test on that commit (`git push origin HEAD:ci`) until it is green.
 2. `gh release create x.y.z --draft --title "lan-streamer x.y.z" --notes-file <the changelog section>` – a draft, so nobody sees it without its files.
 3. `git tag x.y.z && git push origin x.y.z` – both workflows build and test that version and attach the Windows installer, the example plugins (upload-ready zips) and the Linux packages to the release.
 4. When all files are there: `gh release edit x.y.z --draft=false`.

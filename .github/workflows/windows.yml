@@ -5,7 +5,7 @@
 name: Windows
 
 # Runs only when started on purpose (owner 2026-10-26), not on every push to main:
-#   - a full test run: push the commit to the branch "ci" (git push -f origin HEAD:ci)
+#   - a full test run: push the commit to the branch "ci" (git push origin HEAD:ci)
 #     or Actions → Windows → "Run workflow" (optionally with the doc screenshots)
 #   - a release tag: build, install, self-test, update test and attach the files; the
 #     rest only if this commit has no green full run yet (see the job "scope")
