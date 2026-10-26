@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.2] – 2026-10-26
+
+No functional changes: the first release to update to from the admin page (0.1.1 → 0.1.2), to try the updater on a real installation.
+
 ## [0.1.1] – 2026-10-26
 
 Updates from the admin page. Coming from 0.1.0: install 0.1.1 once by hand (it has no updater yet); from 0.1.1 on, "Install update" on the admin page does it.
@@ -77,6 +81,7 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.1...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.2...HEAD
+[0.1.2]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.2
 [0.1.1]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.1
 [0.1.0]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.0
