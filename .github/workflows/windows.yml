@@ -45,9 +45,9 @@ jobs:
     permissions:
       actions: read
     outputs:
-      full: ${{ needs.scope.outputs.full }}
-      update: ${{ needs.scope.outputs.update }}
-      screenshots: ${{ needs.scope.outputs.screenshots }}
+      full: ${{ steps.scope.outputs.full }}
+      update: ${{ steps.scope.outputs.update }}
+      screenshots: ${{ steps.scope.outputs.screenshots }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,7 +126,7 @@ jobs:
             --config-settings=setup-args=-Dpycairo=disabled -w wheels
 
       - name: Unit tests
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         shell: pwsh
         run: |
           python -m pip install -e ".[dev]"
@@ -146,7 +146,7 @@ jobs:
             -Version $env:VERSION -NumVersion $env:NUM_VERSION -Compression $env:COMPRESSION
 
       - name: Test clip (H.264 + AAC in MP4) for the input tests
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         shell: pwsh
         run: |
           gst-launch-1.0 -q videotestsrc num-buffers=300 pattern=ball `
@@ -156,7 +156,7 @@ jobs:
           Get-Item build/clip.mp4 | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         with:
           name: testclip
           path: build/clip.mp4
@@ -247,13 +247,13 @@ jobs:
         run: python -m pip install --quiet playwright httpx websockets
 
       - uses: actions/download-artifact@v4
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         with:
           name: testclip
           path: media
 
       - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page + viewer side + ingest + restream
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         # a start error opens a message box in tray mode, which would wait for ever
         timeout-minutes: 12
         shell: pwsh
@@ -299,7 +299,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "windowless run failed ($($p.ExitCode))" }
 
       - name: Smoke test – stream with switching + playback in Edge (1080p60, CPU encoder)
-        if: needs.scope.outputs.full == 'true'
+        if: needs.scope.outputs.full != 'false'
         shell: pwsh
         run: |
           $py = "$env:ProgramFiles\lan-streamer\python\python.exe"
@@ -388,7 +388,7 @@ jobs:
       # The updater for real: the installer just built is offered as version 99.0.0;
       # check, install (download, SHA-256, silent installer), restart by the installer.
       - name: Update through the admin API (installer offered as 99.0.0)
-        if: needs.scope.outputs.update == 'true'
+        if: needs.scope.outputs.update != 'false'
         timeout-minutes: 12
         shell: pwsh
         run: |
@@ -416,7 +416,7 @@ jobs:
           if ($code -ne 0) { throw "update check failed" }
 
       - name: Upload update logs
-        if: always() && needs.scope.outputs.update == 'true'
+        if: always() && needs.scope.outputs.update != 'false'
         uses: actions/upload-artifact@v4
         with:
           name: logs-update-${{ env.VERSION }}
