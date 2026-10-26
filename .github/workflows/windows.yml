@@ -362,6 +362,7 @@ jobs:
         shell: pwsh
         run: |
           $env:LANSTREAMER_UPDATE_FEED = 'http://127.0.0.1:8001/latest.json'
+          $env:PYTHONIOENCODING = 'utf-8'  # the console's code page cannot print every character
           New-Item -ItemType Directory -Force update | Out-Null
           $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8001', '--directory', 'update'
           Start-Process -FilePath "$env:ProgramFiles\lan-streamer\python\pythonw.exe" -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu' | Out-Null

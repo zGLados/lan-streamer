@@ -71,7 +71,7 @@ def main() -> int:
     assert api.post("/api/admin/login", json={"password": PASSWORD}).status_code == 204
     state = api.post("/api/admin/update/check").json()
     assert state["latest"] == VERSION and state["available"] and state["installable"], state
-    step(f"the update is found: {state['current']} → {state['latest']}")
+    step(f"the update is found: {state['current']} -> {state['latest']}")
 
     response = api.post("/api/admin/update/install")
     assert response.status_code == 202, response.text
