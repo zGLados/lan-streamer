@@ -27,7 +27,7 @@ Put that in the PC's autostart (`shell:startup`). Alt+F4 ends the kiosk mode.
 
 ## Writing a plugin
 
-Start from `examples/hello-plugin/` (`plugin.toml` + one Python file). Zip the folder and upload it in the admin page. The API is described in `docs/architecture.md` (Plugin system) and in `src/lanstreamer_sdk/`.
+See the [plugin guide](plugin-guide.md). In short: copy `examples/stream-queue/` (or the smaller `examples/hello-plugin/`), then `python -m lanstreamer_sdk check <folder>`, `pytest <folder>`, `python -m lanstreamer_sdk pack <folder>` and upload the zip in the admin page. The examples' tests run with the normal `pytest`; `tests/test_plugin_contract.py` pins the plugin API v1.
 
 ## Simulation mode
 

@@ -1,0 +1,20 @@
+# Template for a full input plugin – copy this folder, rename the id, the module
+# and the class, then check and pack it:
+#   python -m lanstreamer_sdk check examples/stream-queue
+#   python -m lanstreamer_sdk pack examples/stream-queue
+# and upload the zip in the admin page (Plugins → Upload).
+# Guide: docs/plugin-guide.md
+
+# Unique, 2–49 characters: a-z, 0-9 and "-". Built-in ids cannot be used.
+id = "stream-queue"
+# Shown in the admin page.
+name = "Stream queue (example)"
+# Your plugin's own version; uploading a newer zip replaces the old one.
+version = "1.0.0"
+# The plugin API this plugin is written for. lan-streamer refuses other versions.
+api_version = 1
+# "module:Class" – the module is a .py file in this folder.
+entry = "stream_queue:Plugin"
+description = "Example plugin: viewers queue links to videos or streams (MP4, HLS, RTSP, SRT); they play one after another."
+# Python packages from PyPI, installed with pip into the plugin's own folder at upload.
+requirements = []

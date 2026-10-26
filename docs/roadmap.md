@@ -56,8 +56,8 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 
 ## M6 – Opening up
 
-- [ ] Plugin developer guide + example plugin template
-- [ ] Stable plugin API v1, contract tests in CI
+- [x] Plugin developer guide (`docs/plugin-guide.md`) + example plugin template (`examples/stream-queue`, with tests), `python -m lanstreamer_sdk check|pack`, test context `lanstreamer_sdk.testing`
+- [x] Stable plugin API v1, contract tests in CI (`tests/test_plugin_contract.py`)
 - [ ] Release for third-party developers
 
 ## Later – to be reviewed

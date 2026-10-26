@@ -8,7 +8,7 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Next: installers (Windows service, firewall rules, Linux). See the [roadmap](docs/roadmap.md).
+> **Status:** early development. Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Installers for Windows and Linux, and a guide for plugin authors. Next: opening up for third-party plugins. See the [roadmap](docs/roadmap.md).
 
 ## Try the prototype (Windows)
 
@@ -39,7 +39,7 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 - **Outputs** are permanently running encoders. They switch between inputs without the stream ever dropping, and [MediaMTX](https://github.com/bluenviron/mediamtx) serves them via WebRTC and LL-HLS.
 - **Everything is configured in the web UI**, including installing new input plugins as `.zip` uploads.
 
-Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: start from [examples/hello-plugin](examples/hello-plugin).
+Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: [docs/plugin-guide.md](docs/plugin-guide.md).
 
 ## Stack
 

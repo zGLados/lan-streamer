@@ -1,5 +1,6 @@
-# Example input plugin – a template for your own. Zip this folder and upload it
-# in the admin page (Plugins → Upload).
+# Example input plugin – a template for your own. Pack it with
+# `python -m lanstreamer_sdk pack examples/hello-plugin` and upload the zip in the
+# admin page (Plugins → Upload). Guide: docs/plugin-guide.md
 id = "hello"
 name = "Hello (example)"
 version = "1.0.0"

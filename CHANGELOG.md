@@ -11,6 +11,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Guide for plugin authors (`docs/plugin-guide.md`) and a full example plugin to copy (`examples/stream-queue`: a link queue for viewers, with its own tests).
+- Plugin SDK: `python -m lanstreamer_sdk check <folder>` (load a plugin as lan-streamer does, show its forms) and `pack <folder>` (zip for the upload); `lanstreamer_sdk.testing.make_context()` to test a plugin without lan-streamer running.
+- Plugin API v1 is pinned by contract tests in CI: within API 1 only additions.
 - Linux packages: `.deb` and `.tar.gz` with `install.sh` (Ubuntu 24.04 / Debian 13+), systemd service, built and install-tested in GitHub Actions with the same end-to-end checks as Windows.
 - Windows firewall rules for the LAN (private and domain networks), added by the installer for all users and removed on uninstall – OBS and viewers on other PCs no longer depend on the Windows prompt.
 - Restream: send an output to an RTMP(S) server (YouTube, Twitch, …) as well – per output on the admin page, restarts by itself if the connection drops.
