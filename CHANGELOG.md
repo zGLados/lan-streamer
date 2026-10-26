@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.1] – 2026-10-26
+
+Updates from the admin page. Coming from 0.1.0: install 0.1.1 once by hand (it has no updater yet); from 0.1.1 on, "Install update" on the admin page does it.
+
 ### Added
 
 - Updates of lan-streamer itself: the admin page shows the installed and the latest release (checked on start and twice a day, can be turned off) and installs a new version on Windows with one click – the installer is checked by its SHA-256, runs silently and starts lan-streamer again. Linux: the new version is shown with its link.
@@ -11,6 +15,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - The clock in the top right of the picture (input name and time in ms, for measuring the delay) is off by default; it is a debug option per output now (admin page → Output → Debug clock, no restart needed). The player page shows its local clock only while it is on.
+
+### Fixed
+
+- Quitting lan-streamer (tray "Quit", the end of a smoke test) could hang on Windows when a browser connection had been reset: the web server now gets 5 s to close its connections, then it is stopped anyway.
+- Windows: a hanging output worker is ended instead of left running when it does not start; its start is logged in `output.log`.
 
 ## [0.1.0] – 2026-10-26
 
@@ -68,5 +77,6 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.1...HEAD
+[0.1.1]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.1
 [0.1.0]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.0
