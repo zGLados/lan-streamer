@@ -212,7 +212,7 @@ After starting, the player page opens at `http://<host>:8080`. The admin page `h
 
 - installs to `C:\Program Files\lan-streamer` for all users (Windows asks for admin rights), or with "only for me" to `%LOCALAPPDATA%\Programs\lan-streamer` without admin rights. It needs no internet and is listed under Settings → Apps; its uninstaller also removes `%LOCALAPPDATA%\lan-streamer`;
 - ships an embeddable CPython 3.13 with lan-streamer and the PyGObject build, a private copy of the GStreamer runtime (`gstreamer\`, with its own plugin registry so other GStreamer installs do not interfere) and MediaMTX;
-- adds start menu entries "lan-streamer (1080p60)", "lan-streamer (1080p30)" and "lan-streamer self-test". The first two run `pythonw.exe -m lanstreamer --tray`: no console window, a tray icon next to the clock (open player, what is on air, open log / log folder, quit). The self-test runs `python -m lanstreamer.doctor` in a console;
+- adds one start menu entry "lan-streamer": `pythonw.exe -m lanstreamer --tray` – no console window, a tray icon next to the clock (open player, what is on air, open log / log folder, self-test, quit). The self-test (`python -m lanstreamer.doctor`) opens in a console from the tray menu; the frame rate is set per output on the admin page;
 - uses one icon everywhere (start menu, Apps list, setup, tray, browser tab), drawn by `packaging/windows/make_icon.py`.
 
 The installer ships only the GStreamer plugins listed in `packaging/windows/gstreamer-plugins.txt` and the DLLs they import (found with dumpbin). **Every new input plugin or feature adds the plugins it needs there and its elements to the self-test** (`REQUIRED_ELEMENTS` in `doctor.py`); CI plays a real MP4 file and the same file over HTTP to cover the decoder path.

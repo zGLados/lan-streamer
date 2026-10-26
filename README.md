@@ -29,7 +29,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Windows:** download `lan-streamer-setup-<version>.exe` from the [releases](https://github.com/zGLados/lan-streamer/releases) and run it (test builds of every change: [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml), artifact `lan-streamer-setup-…`). It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps. Then:
 
-1. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
+1. Start **lan-streamer** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
 2. It shows the standby picture until a viewer submits a video. The installer asks which built-in inputs to turn on (short-video submissions and playlist by default; the test pattern is for tests); this can be changed later on the admin page. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
 
 **Linux (Ubuntu 24.04 / Debian 13 or newer):** download the `.deb` or `.tar.gz` from the [releases](https://github.com/zGLados/lan-streamer/releases) (test builds: [Actions → Linux](https://github.com/zGLados/lan-streamer/actions/workflows/linux.yml)), then `sudo apt install ./lan-streamer_….deb` – or unpack the `.tar.gz` and run `sudo ./install.sh`. It runs as the systemd service `lan-streamer` (player page on port 8080); `lan-streamer selftest` shows which encoders work. Remove it with `sudo apt purge lan-streamer` (or `sudo ./install.sh --uninstall --purge`).
@@ -48,7 +48,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Updates:** the admin page shows when a new release is out; on Windows "Install update" installs it and lan-streamer restarts by itself (an install for all users asks for permission on the server's screen).
 
-**lan-streamer self-test** shows which video encoders work on your PC.
+**Self-test** (tray menu → "Self-test") shows which video encoders work on your PC.
 
 ## How it works
 

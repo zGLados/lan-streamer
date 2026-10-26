@@ -69,6 +69,8 @@ class Tray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open log", self._open_log),
             pystray.MenuItem("Open log folder", self._open_log_folder),
+            pystray.MenuItem("Self-test (encoders, GStreamer)", self._self_test),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit lan-streamer", self._quit),
         )
         try:
@@ -99,8 +101,14 @@ class Tray:
     def _open_log_folder(self) -> None:
         self._run(["explorer.exe", str(self.logs)])
 
-    def _run(self, cmd: list[str]) -> None:
+    def _self_test(self) -> None:
+        """The doctor in its own console window (python.exe next to our pythonw.exe)."""
+        python = Path(sys.executable).with_name("python.exe")
+        self._run([str(python), "-m", "lanstreamer.doctor", "--pause"],
+                  creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))  # fmt: skip
+
+    def _run(self, cmd: list[str], creationflags: int = 0) -> None:
         try:
-            subprocess.Popen(cmd)
+            subprocess.Popen(cmd, creationflags=creationflags)
         except OSError as exc:
             message_box("lan-streamer", f"Could not open {cmd[-1]}:\n{exc}")

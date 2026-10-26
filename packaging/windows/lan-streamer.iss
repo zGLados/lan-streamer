@@ -83,10 +83,15 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs c
 [Icons]
 ; Shortcuts point to python.exe, not to the .cmd files: the Windows start menu
 ; hides shortcuts whose target is not a program.
-; The start entries run windowless (pythonw.exe) with a tray icon next to the clock.
-Name: "{group}\lan-streamer (1080p60)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer and open the player page"
-Name: "{group}\lan-streamer (1080p30)"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer with 30 fps"
-Name: "{group}\lan-streamer self-test"; Filename: "{app}\python\python.exe"; Parameters: "-m lanstreamer.doctor --pause"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; Comment: "Check GStreamer and the video encoders"
+; One entry: it runs windowless (pythonw.exe) with a tray icon next to the clock. The
+; frame rate is set per output on the admin page; the self-test is in the tray menu.
+Name: "{group}\lan-streamer"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; WorkingDir: "{app}"; IconFilename: "{app}\lan-streamer.ico"; AppUserModelID: "zGLados.lan-streamer"; Comment: "Start lan-streamer and open the player page"
+
+[InstallDelete]
+; the entries of 0.1.2 and older (an update keeps shortcuts the script no longer has)
+Type: files; Name: "{group}\lan-streamer (1080p60).lnk"
+Type: files; Name: "{group}\lan-streamer (1080p30).lnk"
+Type: files; Name: "{group}\lan-streamer self-test.lnk"
 
 [Run]
 ; Firewall: viewers, OBS (ingest) and other PCs in the LAN reach the web page and

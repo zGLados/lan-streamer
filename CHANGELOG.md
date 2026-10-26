@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- One start menu entry "lan-streamer" instead of "lan-streamer (1080p60)", "(1080p30)" and "self-test": the frame rate is set per output on the admin page, the self-test is in the tray menu now. An update removes the old entries.
+
 ## [0.1.2] – 2026-10-26
 
 No functional changes: the first release to update to from the admin page (0.1.1 → 0.1.2), to try the updater on a real installation.
