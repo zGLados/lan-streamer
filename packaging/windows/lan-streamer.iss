@@ -98,6 +98,11 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page)"" dir=in action=allow program=""{app}\python\pythonw.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page, console)"""; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page, console)"" dir=in action=allow program=""{app}\python\python.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
+; Update from the admin page (updater.py): the installer runs silently with /LAUNCH=1
+; and starts lan-streamer again afterwards – as the user who started the update, not
+; as admin – with the frame rate it ran with (/LAUNCHFPS=30, default 60).
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('60')
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('30')
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (MediaMTX)"""; Flags: runhidden; RunOnceId: "fw-media"; Check: IsAdminInstallMode
@@ -109,3 +114,9 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 ; the program folder, plugin registry, logs and plugin data in the user data folder.
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\lan-streamer"
+
+[Code]
+function LaunchAfterUpdate(Fps: String): Boolean;
+begin
+  Result := (ExpandConstant('{param:LAUNCH|0}') = '1') and (ExpandConstant('{param:LAUNCHFPS|60}') = Fps);
+end;

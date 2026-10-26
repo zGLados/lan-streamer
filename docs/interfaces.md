@@ -142,6 +142,10 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `DELETE /api/admin/inputs/<id>` | → 204 |
 | `GET /api/admin/inputs/<id>/items` | → the input's `viewer_items()` |
 | `DELETE /api/admin/inputs/<id>/items/<item>` | the plugin's `remove_item()` → 204 |
+| `GET /api/admin/update` | → `{"current", "latest", "available", "installable", "how", "notes_url", "checked_at", "state" (idle, checking, downloading, installing), "progress", "error", "auto_check"}` |
+| `PATCH /api/admin/update` | `{"auto_check": bool}` – look for new releases on start and twice a day |
+| `POST /api/admin/update/check` | look now → the state above |
+| `POST /api/admin/update/install` | → 202; downloads the release's Windows installer, checks its SHA-256, starts it silently and ends lan-streamer; the installer starts it again. 409 when there is nothing to install (or not on Windows) |
 | `GET /api/admin/logs/<name>?lines=300` | plain text, the last lines (max. 5000) of `lan-streamer.log`, `output.log`, `output-<id>.log` or `mediamtx.log` |
 
 An output from `GET /api/admin/outputs`:
@@ -274,3 +278,8 @@ MediaMTX runs next to lan-streamer with its default ports. The Windows installer
 - `lanstreamer.db` (SQLite, versioned schema) holds outputs, inputs, settings and the admin password hash. Back it up with the app stopped.
 - `plugins/<id>/` – uploaded plugins (with their `.deps`); `plugin-data/<input id>/` – each input's `ctx.data_dir` and `store.json`.
 - `logs/` – `lan-streamer.log` (core, plugins), `output.log` / `output-<id>.log` (GStreamer per output), `mediamtx.log`.
+- `updates/` – the last downloaded installer (replaced by the next update).
+
+### Updates
+
+The updater asks GitHub for the latest release (`https://api.github.com/repos/zGLados/lan-streamer/releases/latest`; another address with `LANSTREAMER_UPDATE_FEED`, for tests). It needs internet only for that; without, the admin page says it could not check. Installing runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LAUNCH=1 [/LAUNCHFPS=30]`; `/LAUNCH=1` makes it start lan-streamer again afterwards (as the user, in tray mode).

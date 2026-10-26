@@ -31,6 +31,10 @@ Admin (logged in):
     GET    /api/admin/inputs/{id}/items          an input's items (e.g. its queue)
     DELETE /api/admin/inputs/{id}/items/{item}   remove one
     GET    /api/admin/logs/{name}?lines=300      lan-streamer.log, output.log (output-<id>.log), mediamtx.log
+    GET    /api/admin/update                     installed and latest version (updater.py)
+    PATCH  /api/admin/update                     {"auto_check": bool}
+    POST   /api/admin/update/check               look for a new release now
+    POST   /api/admin/update/install             download + start the installer; lan-streamer restarts
 
 Every configuration change is saved in SQLite and taken over by the running
 output at once (OutputRuntime.apply); added and removed outputs start and stop.
@@ -113,6 +117,7 @@ class Backend:
     plugins_dir: Path | None = None  # where uploaded plugins go
     plugins_changed: Callable[[str], Awaitable[None]] | None = None  # plugin id → restart its inputs
     viewer: Any = None  # the running outputs: viewer_forms(output), viewer_submit, items, remove_item
+    updater: Any = None  # lanstreamer.updater.Updater
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -180,6 +185,10 @@ class Order(BaseModel):
     ids: list[str]
 
 
+class UpdateSettings(BaseModel):
+    auto_check: bool
+
+
 # --- app --------------------------------------------------------------------------------
 
 
@@ -187,6 +196,7 @@ def create_app(backend: Backend) -> FastAPI:
     app = FastAPI(title="lan-streamer", docs_url="/api/docs", redoc_url=None)
     app.state.backend = backend  # for tests and tools
     schema_cache: dict[tuple[str, str], dict[str, Any]] = {}
+    background: set[asyncio.Task] = set()
 
     def logged_in(request: Request) -> None:
         if not backend.auth.valid(request.cookies.get(COOKIE)):
@@ -502,6 +512,38 @@ def create_app(backend: Backend) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(404, f"input {input_id!r} has no items") from exc
         backend.changes.notify()
+
+    # --- updates of lan-streamer itself ---------------------------------------------------
+
+    def updater() -> Any:
+        if backend.updater is None:
+            raise HTTPException(501, "updates are not available")
+        return backend.updater
+
+    @app.get("/api/admin/update", dependencies=[Depends(logged_in)])
+    def update_state() -> dict[str, Any]:
+        return updater().state()
+
+    @app.patch("/api/admin/update", dependencies=[Depends(logged_in)])
+    def update_settings(body: UpdateSettings) -> dict[str, Any]:
+        updater().set_auto_check(body.auto_check)
+        return updater().state()
+
+    @app.post("/api/admin/update/check", dependencies=[Depends(logged_in)])
+    async def update_check() -> dict[str, Any]:
+        return await updater().check()
+
+    @app.post("/api/admin/update/install", status_code=202, dependencies=[Depends(logged_in)])
+    async def update_install() -> dict[str, Any]:
+        u = updater()
+        if u.status.state != "idle":
+            raise HTTPException(409, f"busy ({u.status.state})")
+        if not (u.status.available and u.status.installable):
+            raise HTTPException(409, u.status.how or "no update to install – check first")
+        task = asyncio.create_task(u.install())  # download, check, start the installer, quit
+        background.add(task)
+        task.add_done_callback(background.discard)
+        return u.state()
 
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
              dependencies=[Depends(logged_in)])  # fmt: skip

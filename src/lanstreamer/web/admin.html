@@ -181,6 +181,18 @@
   </section>
 
   <section>
+    <h2>Updates</h2>
+    <div class="status">
+      <div class="item"><span>Installed</span><b id="u-current">–</b></div>
+      <div class="item"><span>Latest release</span><b id="u-latest">–</b></div>
+      <button id="u-check">Check now</button>
+      <button class="primary" id="u-install" hidden>Install update</button>
+    </div>
+    <p class="muted" id="u-info"></p>
+    <label style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="u-auto"> Check for updates automatically (twice a day, needs internet)</label>
+  </section>
+
+  <section>
     <h2>Admin password</h2>
     <form id="pw-form" class="row">
       <label>Current <input type="password" id="pw-current" autocomplete="current-password" required></label>
@@ -295,6 +307,7 @@ async function start() {
   $("auth").hidden = true; $("app").hidden = false; $("logout").hidden = false;
   await loadPlugins();
   await reload();
+  loadUpdate();
   openSocket();
   refreshLog();
 }
@@ -673,6 +686,63 @@ $("output-form").onsubmit = async (e) => {
     toast("Output saved");
     await reload();
   } catch (err) { toast(err.message, true); }
+};
+
+// --- updates of lan-streamer itself ---------------------------------------------------
+function renderUpdate(u) {
+  $("u-current").textContent = u.current;
+  $("u-latest").textContent = u.latest || "–";
+  $("u-auto").checked = u.auto_check;
+  $("u-install").hidden = !(u.available && u.installable && u.state === "idle");
+  $("u-check").disabled = u.state !== "idle";
+  const info = $("u-info");
+  info.replaceChildren();
+  let text = "";
+  if (u.state === "checking") text = "Checking …";
+  else if (u.state === "downloading") text = `Downloading the update … ${u.progress} %`;
+  else if (u.state === "installing") text = "Installing – lan-streamer restarts in a moment.";
+  else if (u.error) text = u.error;
+  else if (u.available) text = `Version ${u.latest} is available. ` + (u.installable ? "" : u.how);
+  else if (u.checked_at) text = "lan-streamer is up to date.";
+  info.className = u.error && u.state === "idle" ? "error" : "muted";
+  info.append(text);
+  if (u.available && u.notes_url) {
+    info.append(" ", el("a", { href: u.notes_url, target: "_blank", rel: "noopener", textContent: "What is new" }));
+  }
+}
+async function loadUpdate() {
+  try { renderUpdate(await api("/api/admin/update")); } catch { /* updates not available */ }
+}
+$("u-check").onclick = async () => {
+  $("u-check").disabled = true;
+  try { renderUpdate(await api("/api/admin/update/check", { method: "POST" })); }
+  catch (err) { toast(err.message, true); await loadUpdate(); }
+};
+$("u-auto").onchange = async () => {
+  try { renderUpdate(await api("/api/admin/update", { method: "PATCH", body: { auto_check: $("u-auto").checked } })); }
+  catch (err) { toast(err.message, true); await loadUpdate(); }
+};
+$("u-install").onclick = async () => {
+  const latest = $("u-latest").textContent;
+  if (!confirm(`Install lan-streamer ${latest} now?\n\nThe streams stop until it has restarted (about a minute). ` +
+               "An install for all users asks for permission on the server's screen.")) return;
+  try { renderUpdate(await api("/api/admin/update/install", { method: "POST" })); }
+  catch (err) { toast(err.message, true); return; }
+  // follow it: download, installer, the old lan-streamer ends, the new one answers
+  // (sessions are not kept over a restart: the page then asks for the password again)
+  const wait = () => new Promise((r) => setTimeout(r, 1000));
+  for (;;) {
+    await wait();
+    let u;
+    try { u = await (await fetch("/api/admin/update")).json(); } catch { break; }  // it has ended
+    renderUpdate(u);
+    if (u.state === "idle" && u.error) return;  // failed, the message is shown
+  }
+  $("u-info").textContent = "Installing – waiting for lan-streamer to restart …";
+  for (let i = 0; i < 600; i++) {
+    await wait();
+    try { if ((await fetch("/api/status")).ok) { location.reload(); return; } } catch { /* not yet */ }
+  }
 };
 
 // --- logs and password ----------------------------------------------------------------

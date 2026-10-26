@@ -39,6 +39,7 @@ from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.media import encoders
 from lanstreamer.plugins import choice
 from lanstreamer.plugins.registry import discover
+from lanstreamer.updater import Updater
 from lanstreamer.web.api import Backend, Changes, create_app
 
 RTSP_PORT = 8554  # only used to see that MediaMTX is up
@@ -274,6 +275,7 @@ class App:
         self.failed = threading.Event()
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
+        self.updater: Updater | None = None  # made with the web backend
 
     @property
     def first(self) -> Output:
@@ -382,12 +384,13 @@ class App:
 
     def backend(self) -> Backend:
         store = self.store or Store(paths.data_dir() / "lanstreamer.db")
+        self.updater = Updater(BUILD, store, paths.data_dir(), self.quit.set, fps=self.args.fps)
         return Backend(
             status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
-            viewer=_Viewers(self),
+            viewer=_Viewers(self), updater=self.updater,
         )  # fmt: skip
 
     async def plugin_changed(self, plugin_id: str) -> None:
@@ -524,6 +527,8 @@ async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray |
             webbrowser.open(url)
         if icon:
             threading.Thread(target=_refresh_tray, args=(icon, app), daemon=True).start()
+        if app.updater is not None and not args.smoke_test and not args.source:
+            app._tasks.add(asyncio.create_task(app.updater.run()))  # cancelled when the loop ends
         return await app.run(web)
     finally:
         server.should_exit = True

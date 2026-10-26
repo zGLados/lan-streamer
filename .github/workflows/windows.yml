@@ -136,7 +136,7 @@ jobs:
   test-install:
     needs: build
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40  # incl. a real update (installer twice)
     steps:
       - uses: actions/checkout@v4  # only for tests/e2e
 
@@ -320,6 +320,34 @@ jobs:
         with:
           name: logs-${{ env.VERSION }}
           path: ~/AppData/Local/lan-streamer/logs
+
+      # The updater for real: the installer just built is offered as version 99.0.0;
+      # check, install (download, SHA-256, silent installer), restart by the installer.
+      - name: Update through the admin API (installer offered as 99.0.0)
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          $env:LANSTREAMER_UPDATE_FEED = 'http://127.0.0.1:8001/latest.json'
+          New-Item -ItemType Directory -Force update | Out-Null
+          $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8001', '--directory', 'update'
+          Start-Process -FilePath "$env:ProgramFiles\lan-streamer\python\pythonw.exe" -ArgumentList '-m', 'lanstreamer', '--tray', '--no-browser', '--encoder', 'cpu' | Out-Null
+          python tests/e2e/check_update.py http://localhost:8080 --installer (Get-ChildItem setup\*.exe).FullName `
+            --dir update --feed-url http://127.0.0.1:8001
+          $code = $LASTEXITCODE
+          Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 25
+          # the restarted lan-streamer must go before the uninstall
+          Get-Process pythonw, python, mediamtx -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -like "$env:ProgramFiles\lan-streamer\*" } | Stop-Process -Force
+          if ($code -ne 0) { throw "update check failed" }
+
+      - name: Upload update logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-update-${{ env.VERSION }}
+          path: ~/AppData/Local/lan-streamer/logs
+          if-no-files-found: ignore
 
       - name: Uninstall
         shell: pwsh

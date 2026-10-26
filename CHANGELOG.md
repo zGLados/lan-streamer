@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Updates of lan-streamer itself: the admin page shows the installed and the latest release (checked on start and twice a day, can be turned off) and installs a new version on Windows with one click – the installer is checked by its SHA-256, runs silently and starts lan-streamer again. Linux: the new version is shown with its link.
+
 ### Changed
 
 - The clock in the top right of the picture (input name and time in ms, for measuring the delay) is off by default; it is a debug option per output now (admin page → Output → Debug clock, no restart needed). The player page shows its local clock only while it is on.

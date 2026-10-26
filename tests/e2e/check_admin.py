@@ -159,6 +159,9 @@ def main() -> int:
             page.wait_for_timeout(1000)  # let the save's reload finish before the next action
             step("debug clock: off by default, turned on and off again")
 
+            expect(page.locator("#u-current")).not_to_have_text("–", timeout=10_000)
+            step(f"updates section shows the installed version {page.locator('#u-current').text_content()}")
+
             page.click("#o-add")  # the prompt is accepted with its suggestion "Output 2"
             expect(page.locator("#toast")).to_contain_text('Output "Output 2" added', timeout=30_000)
             expect(page.locator("#o-select")).to_have_value("output-2")
