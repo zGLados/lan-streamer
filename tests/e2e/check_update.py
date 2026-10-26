@@ -68,6 +68,8 @@ def main() -> int:
     wait("lan-streamer answers", lambda: status(base) is not None, 120)
     before = status(base)
     api = httpx.Client(base_url=base, timeout=60)
+    if not api.get("/api/admin/session").json()["password_set"]:  # a release run skips check_api.py
+        assert api.post("/api/admin/setup", json={"password": PASSWORD}).status_code == 204
     assert api.post("/api/admin/login", json={"password": PASSWORD}).status_code == 204
     state = api.post("/api/admin/update/check").json()
     assert state["latest"] == VERSION and state["available"] and state["installable"], state
