@@ -408,6 +408,8 @@ jobs:
           Write-Host "--- update task result and installer log"
           Get-Content "$env:ProgramFiles\lan-streamer\updates\result.json" -ErrorAction SilentlyContinue
           Get-Content "$env:ProgramFiles\lan-streamer\updates\install.log" -Tail 60 -ErrorAction SilentlyContinue
+          Write-Host "--- relauncher"
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\relaunch.log" -ErrorAction SilentlyContinue
           Remove-Item -Path 'HKLM:\Software\lan-streamer' -Recurse -ErrorAction SilentlyContinue
           Get-Process | Where-Object { $_.Name -like 'lan-streamer-setup*' -or $_.Name -like '*.tmp' } | Format-Table Id, Name, Path
           # the restarted lan-streamer must go before the uninstall

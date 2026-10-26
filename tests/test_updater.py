@@ -61,7 +61,7 @@ def make(tmp_path, answer, current="0.1.1", installed=True, task=False):
                    feed="http://feed", fetch=lambda url: answer() if callable(answer) else answer,
                    launch=lambda path, args, elevate: launched.append((path, args)),
                    has_task=lambda: task,
-                   start_task=lambda root, relaunch: launched.append(("task", relaunch)))  # fmt: skip
+                   start_task=lambda root, relaunch, log: launched.append(("task", relaunch)))  # fmt: skip
     u.root = tmp_path / "program" if installed else None
     return u, launched, quits
 

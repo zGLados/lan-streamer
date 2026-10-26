@@ -119,11 +119,12 @@ def task_exists() -> bool:
     return result.returncode == 0
 
 
-def run_task(root: Path, relaunch: list[str]) -> None:
+def run_task(root: Path, relaunch: list[str], log_file: Path | None = None) -> None:
     """Windows: starts the update task (SYSTEM) and a relauncher in this session.
 
     The relauncher waits for the task's result file (a newer one than now), then
     starts lan-streamer again – also after a failed update, so it does not stay off.
+    It writes what it does to log_file (logs/relaunch.log).
     """
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     result = subprocess.run(["schtasks.exe", "/Run", "/TN", TASK], check=False, capture_output=True, text=True,
@@ -132,17 +133,23 @@ def run_task(root: Path, relaunch: list[str]) -> None:
         raise OSError(f"the update task could not be started: {(result.stdout + result.stderr).strip()}")
     marker = root / "updates" / "result.json"
     args = ", ".join("'" + a.replace("'", "''") + "'" for a in relaunch[1:])
+    out = str(log_file or os.devnull).replace("'", "''")
     script = (
+        f"$log = '{out}'; function Say($t) {{ Add-Content -Path $log -Value \"$(Get-Date -Format o) $t\" }}; "
+        "Say 'waiting for the update task'; "
         f"$start = (Get-Date).ToUniversalTime(); $file = '{marker}'; "
         "for ($i = 0; $i -lt 1200; $i++) { Start-Sleep 1; "
         "if ((Test-Path $file) -and (Get-Item $file).LastWriteTimeUtc -gt $start) { break } }; "
-        f"Start-Sleep 2; Start-Process -FilePath '{relaunch[0]}' -ArgumentList @({args})"
+        "Say \"task finished: $(if (Test-Path $file) { Get-Content $file -Raw } else { 'no result after 20 min' })\"; "
+        f"Start-Sleep 2; try {{ Start-Process -FilePath '{relaunch[0]}' -ArgumentList @({args}); "
+        "Say 'lan-streamer started' } catch { Say \"start failed: $_\" }"
     )
+    powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    # no DETACHED_PROCESS: PowerShell started without any console does not run at all
+    # (tested from pythonw.exe, 2026-10-26); CREATE_NO_WINDOW gives it a hidden one
     subprocess.Popen(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
-        creationflags=flags | getattr(subprocess, "DETACHED_PROCESS", 0)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-        close_fds=True,
+        [str(powershell), "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+        creationflags=flags | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0), close_fds=True,
     )  # fmt: skip
 
 
@@ -170,7 +177,7 @@ class Updater:
         fetch: Callable[[str], dict[str, Any]] = fetch_json,
         launch: Callable[[Path, list[str], bool], None] = start_installer,
         has_task: Callable[[], bool] = task_exists,
-        start_task: Callable[[Path, list[str]], None] = run_task,
+        start_task: Callable[[Path, list[str], Path | None], None] = run_task,
     ):
         self.store = store
         self.data_dir = data_dir
@@ -264,7 +271,7 @@ class Updater:
             self.status.state, self.status.error = "installing", ""
             try:
                 log.info("Installing %s through the update task, lan-streamer ends now", self.status.latest)
-                await asyncio.to_thread(self.start_task, self.root, relaunch)
+                await asyncio.to_thread(self.start_task, self.root, relaunch, self.data_dir / "logs" / "relaunch.log")
             except OSError as exc:
                 self.status.state, self.status.error = "idle", f"update failed: {exc}"
                 log.warning("%s", self.status.error)
