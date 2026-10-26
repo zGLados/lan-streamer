@@ -6,6 +6,11 @@ name: Windows
 
 on:
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Also take the screenshots for the docs (artifact docs-images-…)"
+        type: boolean
+        default: false
   push:
     branches: [main]
     tags: ["[0-9]*"]  # release: builds, tests and attaches the installer to the GitHub release
@@ -108,7 +113,9 @@ jobs:
           name: testclip
           path: build/clip.mp4
 
+      # only for the doc screenshots: on demand (workflow_dispatch) and for releases
       - name: Demo clips (60 s, with a title) for the screenshots in the docs
+        if: github.ref_type == 'tag' || inputs.screenshots
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/demo | Out-Null
@@ -123,6 +130,7 @@ jobs:
           Get-ChildItem build/demo | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
+        if: github.ref_type == 'tag' || inputs.screenshots
         with:
           name: democlips
           path: build/demo/*.mp4
@@ -138,7 +146,30 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40  # incl. a real update (installer twice)
     steps:
-      - uses: actions/checkout@v4  # only for tests/e2e
+      - uses: actions/checkout@v4  # tests/e2e, and the history to see what changed
+        with:
+          fetch-depth: 0
+
+      # The update test (installs a second time) runs when the updater or the installer
+      # changed, the doc screenshots on demand – both always for a release tag.
+      - name: Optional checks for this change
+        id: scope
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHOTS: ${{ github.ref_type == 'tag' || inputs.screenshots }}
+        run: |
+          update=false
+          if [ "$GITHUB_REF_TYPE" = tag ] || [ "$GITHUB_EVENT_NAME" != push ] \
+             || ! git cat-file -e "${BEFORE:-none}^{commit}" 2>/dev/null; then
+            update=true  # release, manual run, pull request or unknown range: everything
+          elif git diff --name-only "$BEFORE" HEAD | grep -qE \
+               '^(src/lanstreamer/updater\.py|packaging/windows/|tests/e2e/check_update\.py|\.github/workflows/windows\.yml)'; then
+            update=true
+          fi
+          echo "update=$update" >> "$GITHUB_OUTPUT"
+          echo "screenshots=$SHOTS" >> "$GITHUB_OUTPUT"
+          echo "update test: $update · doc screenshots: $SHOTS"
 
       - uses: actions/download-artifact@v4
         with:
@@ -269,6 +300,7 @@ jobs:
           exit $player
 
       - uses: actions/download-artifact@v4
+        if: steps.scope.outputs.screenshots == 'true'
         with:
           name: democlips
           path: demo
@@ -276,6 +308,7 @@ jobs:
       # Pictures for docs/images: a fresh setup (own data folder) with viewers, a queue
       # and the lower third. Never blocks a build or release – copied by hand when wanted.
       - name: Screenshots for the docs
+        if: steps.scope.outputs.screenshots == 'true'
         continue-on-error: true
         timeout-minutes: 8
         shell: pwsh
@@ -296,7 +329,7 @@ jobs:
           if ($shots -ne 0) { throw "doc screenshots failed" }
 
       - name: Upload doc screenshots
-        if: always()
+        if: always() && steps.scope.outputs.screenshots == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: docs-images-${{ env.VERSION }}
@@ -324,6 +357,7 @@ jobs:
       # The updater for real: the installer just built is offered as version 99.0.0;
       # check, install (download, SHA-256, silent installer), restart by the installer.
       - name: Update through the admin API (installer offered as 99.0.0)
+        if: steps.scope.outputs.update == 'true'
         timeout-minutes: 12
         shell: pwsh
         run: |
@@ -342,7 +376,7 @@ jobs:
           if ($code -ne 0) { throw "update check failed" }
 
       - name: Upload update logs
-        if: always()
+        if: always() && steps.scope.outputs.update == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: logs-update-${{ env.VERSION }}
