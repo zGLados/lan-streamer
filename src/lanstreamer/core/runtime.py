@@ -137,8 +137,7 @@ class OutputRuntime:
         for input_id in [i for i in self.inputs if i not in wanted]:
             inp = self.inputs.pop(input_id)
             log.info("Input removed: %s", inp.cfg.name)
-            if self.pending and self.pending[1] == input_id:
-                self.pending = None
+            # a switch to it stays pending until the worker answers (on_worker_event)
             await self._retire(inp)
         updated: dict[str, InputRuntime] = {}
         for icfg in cfg.inputs:
@@ -312,6 +311,8 @@ class OutputRuntime:
             inp.cooldown_until = self.clock() + FAILED_COOLDOWN_S
             self.failed_switches += 1
             return
+        if inp.retired or self.inputs.get(inp.cfg.id) is not inp:
+            return  # removed or replaced while it answered: decide again on the next tick
         inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
         self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
@@ -357,6 +358,14 @@ class OutputRuntime:
     def on_worker_event(self, event: dict[str, Any]) -> None:
         kind, play_id = event.get("event"), str(event.get("id", ""))
         inp = self._input_of(play_id) if play_id else None
+        if inp is None and self.pending and self.pending[0] == play_id and kind in ("playing", "switch_failed"):
+            # the input was removed during its switch: end the switch; if its source is
+            # on screen now, count it as on air so the next tick replaces or clears it
+            self.pending = None
+            if kind == "playing":
+                self.on_air = OnAir(play_id.split("#", 1)[0], self.clock())
+            self.on_change()
+            return
         if kind == "playing" and self.pending and self.pending[0] == play_id and inp:
             self.pending = None
             self.on_air = OnAir(inp.cfg.id, self.clock())

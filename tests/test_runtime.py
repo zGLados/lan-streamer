@@ -6,6 +6,7 @@ import pytest
 
 from lanstreamer.core import runtime as rt
 from lanstreamer.core.config import InputConfig, OutputConfig
+from lanstreamer.plugins.process import PluginProcess
 from lanstreamer.plugins.registry import discover
 
 
@@ -248,3 +249,60 @@ def test_the_lower_third_shows_what_is_on_air(tmp_path):
         assert worker.overlays[count:] == [("", "", 8.0)]
 
     asyncio.run(run(cfg, tmp_path, 0.1, during=steps))
+
+
+def test_an_input_removed_while_switching_to_it_does_not_block_the_output(tmp_path, monkeypatch):
+    # CI 2026-10-26: the admin deleted an input while the core waited for its source;
+    # the switch stayed "in progress" for ever and nothing went on air any more.
+    real_get_source = PluginProcess.get_source
+    asked, removed = asyncio.Event(), asyncio.Event()
+
+    async def get_source(self):  # b's answer arrives only after b was removed
+        source = await real_get_source(self)
+        if self.instance_id == "b":
+            asked.set()
+            await removed.wait()
+        return source
+
+    monkeypatch.setattr(PluginProcess, "get_source", get_source)
+    only_a = OutputConfig(inputs=[pattern("a", 10)])
+
+    async def during(runtime, worker):
+        await asyncio.sleep(0.5)
+        await runtime.apply(OutputConfig(inputs=[pattern("a", 10), pattern("b", 20)]))
+        await asyncio.wait_for(asked.wait(), 10)
+        await runtime.apply(only_a)
+        removed.set()
+        await asyncio.sleep(0.4)
+        await runtime.apply(OutputConfig(inputs=[pattern("a", 10), pattern("c", 30)]))
+
+    _, worker = asyncio.run(run(only_a, tmp_path, 1.0, during=during))
+    assert "b" not in worker.plays
+    assert worker.plays[-1] == "c"
+
+
+def test_an_input_removed_before_its_switch_completed_is_replaced(tmp_path):
+    # removed after the play command, before the worker said "playing"
+    class SlowWorker(FakeWorker):
+        async def play(self, play_id, label, source):
+            if play_id.startswith("b#"):
+                self.plays.append("b")
+                self.last_id = play_id
+                return  # "playing" is sent by the test, after b was removed
+            await super().play(play_id, label, source)
+
+    only_a = OutputConfig(inputs=[pattern("a", 10)])
+
+    async def during(runtime, worker):
+        await asyncio.sleep(0.5)
+        await runtime.apply(OutputConfig(inputs=[pattern("a", 10), pattern("b", 20)]))
+        for _ in range(200):
+            if "b" in worker.plays:
+                break
+            await asyncio.sleep(0.02)
+        await runtime.apply(only_a)
+        runtime.on_worker_event({"event": "playing", "id": worker.last_id})  # b's source on screen
+
+    runtime, worker = asyncio.run(run(only_a, tmp_path, 0.6, during=during, worker=SlowWorker()))
+    assert worker.plays == ["a", "b", "a"]  # a replaces the removed input's picture
+    assert runtime.on_air is not None and runtime.on_air.id == "a"
