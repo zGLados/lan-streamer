@@ -38,6 +38,7 @@ class OutputConfig:
     overlay: OverlayMode = "switch"
     overlay_s: float = 8.0
     restream_url: str = ""  # rtmp(s)://… with the stream key: also send the output there; "" = off
+    debug_clock: bool = False  # debug: input name + time (ms) in the top right, to measure the delay
     inputs: list[InputConfig] = field(default_factory=list)
 
 

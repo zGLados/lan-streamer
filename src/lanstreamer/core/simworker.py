@@ -24,6 +24,7 @@ class SimulatedWorker:
         self._tasks: set[asyncio.Task] = set()
         self._current: str | None = None
         self.overlay_text = ("", "")
+        self.clock_on = False
 
     async def start(self) -> None:
         self.running = True
@@ -49,6 +50,9 @@ class SimulatedWorker:
 
     async def overlay(self, title: str, subtitle: str, duration_s: float) -> None:
         self.overlay_text = (title, subtitle)
+
+    async def debug_clock(self, on: bool) -> None:
+        self.clock_on = on
 
     async def stop(self) -> None:
         self.running = False

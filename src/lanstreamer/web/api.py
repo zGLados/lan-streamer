@@ -137,6 +137,7 @@ class OutputPatch(BaseModel):
     overlay: Literal["switch", "always", "off"] | None = None
     overlay_s: float | None = Field(None, ge=2, le=60)
     restream_url: str | None = Field(None, max_length=500)
+    debug_clock: bool | None = None
 
     @field_validator("restream_url")
     @classmethod

@@ -74,12 +74,16 @@ MIGRATIONS = [
     """
     ALTER TABLE outputs ADD COLUMN restream_url TEXT NOT NULL DEFAULT '';
     """,
+    # 7: the debug clock in the picture, off by default (it was always on before)
+    """
+    ALTER TABLE outputs ADD COLUMN debug_clock INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 INPUT_FIELDS = ("name", "plugin", "settings", "priority", "fallback", "min_duration_s",
                 "max_duration_s", "override")  # fmt: skip
 OUTPUT_FIELDS = ("name", "width", "height", "fps", "bitrate_kbps", "encoder", "overlay", "overlay_s",
-                 "restream_url")  # fmt: skip
+                 "restream_url", "debug_clock")  # fmt: skip
 
 
 class NotFound(KeyError):
@@ -144,7 +148,7 @@ class Store:
             id=row["id"], name=row["name"], width=row["width"], height=row["height"],
             fps=row["fps"], bitrate_kbps=row["bitrate_kbps"], encoder=row["encoder"],
             overlay=row["overlay"], overlay_s=row["overlay_s"], restream_url=row["restream_url"],
-            inputs=[self._input(i) for i in inputs],
+            debug_clock=bool(row["debug_clock"]), inputs=[self._input(i) for i in inputs],
         )  # fmt: skip
 
     @staticmethod
@@ -166,9 +170,9 @@ class Store:
             position = len(taken)
             self._db.execute(
                 "INSERT INTO outputs (id, name, width, height, fps, bitrate_kbps, encoder, position,"
-                " overlay, overlay_s, restream_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " overlay, overlay_s, restream_url, debug_clock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (cfg.id, cfg.name, cfg.width, cfg.height, cfg.fps, cfg.bitrate_kbps,
-                 cfg.encoder, position, cfg.overlay, cfg.overlay_s, cfg.restream_url),
+                 cfg.encoder, position, cfg.overlay, cfg.overlay_s, cfg.restream_url, int(cfg.debug_clock)),
             )  # fmt: skip
         for inp in cfg.inputs:
             self.add_input(cfg.id, inp)

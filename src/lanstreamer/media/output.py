@@ -19,6 +19,8 @@ Protocol, one JSON object per line ("id" identifies one play command):
             {"cmd": "clear"}   fade out to the background
             {"cmd": "overlay", "title": "...", "subtitle": "...", "duration_s": 8}
                 the lower third; duration 0 keeps it, an empty title hides it
+            {"cmd": "debug_clock", "on": true}
+                debug: the input's name and the time (ms) in the top right, to measure the delay
             {"cmd": "stop"}
     stdout: {"event": "ready"} {"event": "playing", "id": "7", "label": "..."}
             {"event": "switch_failed", "id": "8", "label": "...", "reason": "..."}
@@ -93,6 +95,7 @@ class Output:
         self.muxed: set[str] = set()  # mux inputs that have delivered data
         self.muxed_all_at: float | None = None  # when the last one did
         self.tables = TableReader()  # diagnostics: which tracks MediaMTX gets
+        self.clock_on = False  # debug clock in the picture (debug_clock)
         self.tables_until: float | None = None
         self.reported_sent = False
         self.pipeline = self._build()
@@ -104,7 +107,7 @@ class Output:
         pipeline = Gst.parse_launch(
             f"compositor name=vmix background=black ignore-inactive-pads=true"
             f" ! {self.raw_caps}"
-            f" ! textoverlay name=info halignment=right valignment=top"
+            f" ! textoverlay name=info halignment=right valignment=top silent=true"
             f'   font-desc="Sans 16" shaded-background=true'
             # the lower third; font sizes are relative to 640 px width (auto-resize)
             f" ! textoverlay name=ovtitle {OVERLAY_TEXT} ypad=118 font-desc=\"Sans Bold 14\""
@@ -488,7 +491,13 @@ class Output:
             warning, _debug = message.parse_warning()
             log(f"warning from {message.src.get_name()}: {warning.message}")
 
+    def debug_clock(self, on: bool) -> None:
+        self.clock_on = on
+        self.pipeline.get_by_name("info").set_property("silent", not on)
+
     def _update_overlay(self) -> bool:
+        if not self.clock_on:
+            return True
         now = time.time()
         label = self.current.label if self.current else "Background"
         clock = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int(now * 1000) % 1000:03d}"
@@ -522,6 +531,8 @@ class Output:
         elif command.get("cmd") == "overlay":
             self.overlay(str(command.get("title", "")), str(command.get("subtitle", "")),
                          float(command.get("duration_s", 0)))  # fmt: skip
+        elif command.get("cmd") == "debug_clock":
+            self.debug_clock(bool(command.get("on")))
         elif command.get("cmd") == "stop":
             self.loop.quit()
         return False

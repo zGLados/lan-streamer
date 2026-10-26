@@ -144,6 +144,9 @@ def test_output_patch_reports_restart(setup):
     assert client.patch("/api/admin/outputs/out1", json={"restream_url": "http://x"}).status_code == 422
     assert client.patch("/api/admin/outputs/out1", json={"restream_url": "rtmp://host/only-key"}).status_code == 422
     assert client.patch("/api/admin/outputs/out1", json={"restream_url": ""}).json()["output"]["restream_url"] == ""
+    assert client.get("/api/admin/outputs").json()[0]["debug_clock"] is False  # off by default
+    r = client.patch("/api/admin/outputs/out1", json={"debug_clock": True})
+    assert r.json()["restart_required"] is False and r.json()["output"]["debug_clock"] is True
 
 
 def test_logs(setup):

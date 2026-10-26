@@ -78,7 +78,7 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
      "info": "2 waiting · yt-dlp 2026.10.21", "viewer_form": true}
   ],
   "switches": 12, "failed_switches": 0, "last_error": "",
-  "restream": "off", "whep_port": 8889, "whep_path": "out1",
+  "restream": "off", "debug_clock": false, "whep_port": 8889, "whep_path": "out1",
   "started": 1793038002.6, "uptime_s": 3600, "viewer_version": 7,
   "outputs": [{"id": "out1", "name": "Output 1", "current": "Short-video submissions"}]
 }
@@ -86,6 +86,7 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
 
 - `state` of the output: `starting`, `running`, `failed`, `stopping`.
 - `state` of an input: `on air`, `active`, `inactive`, `cooling down` (its source failed, it sits out 30 s), `error` (the plugin process failed; `error` says why).
+- `debug_clock`: the output shows the debug clock; the player page then shows its local clock next to it (the difference is the delay).
 - `viewer_version` grows whenever a viewer list changes – reload `/api/viewer` then.
 - The player connects to `http(s)://<server>:<whep_port>/<whep_path>/whep` (see [Media](#5-media-streams-in-and-out)).
 
@@ -133,7 +134,7 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `DELETE /api/admin/plugins/<id>` | remove an uploaded plugin (not built-in, not in use) → 204 |
 | `GET /api/admin/outputs` | → outputs with their inputs (below) |
 | `POST /api/admin/outputs` | `{"name"}` → 201, the new output (first output's format, a Standby input); starts at once |
-| `PATCH /api/admin/outputs/<id>` | any of `name`, `width`, `height`, `fps` (30/60), `bitrate_kbps` (0 = automatic), `encoder` (`auto`, `nvidia`, `amd`, `intel`, `cpu`), `overlay` (`switch`, `always`, `off`), `overlay_s`, `restream_url` (`rtmp(s)://server/app/key`, empty = off) → `{"output", "restart_required"}`; format and encoder take effect after a restart |
+| `PATCH /api/admin/outputs/<id>` | any of `name`, `width`, `height`, `fps` (30/60), `bitrate_kbps` (0 = automatic), `encoder` (`auto`, `nvidia`, `amd`, `intel`, `cpu`), `overlay` (`switch`, `always`, `off`), `overlay_s`, `restream_url` (`rtmp(s)://server/app/key`, empty = off), `debug_clock` (bool: the input's name and the time in ms in the top right of the picture, to measure the delay; off by default) → `{"output", "restart_required"}`; format and encoder take effect after a restart |
 | `DELETE /api/admin/outputs/<id>` | remove an output and its inputs (not the last one) → 204 |
 | `POST /api/admin/outputs/<id>/inputs` | `{"name", "plugin", "settings", "priority" (0–1000, default 10), "fallback", "min_duration_s", "max_duration_s"}` → 201, the input; the settings are validated by the plugin |
 | `PUT /api/admin/outputs/<id>/order` | `{"ids": [every input id once]}` – order among equal priorities → 204 |
@@ -147,7 +148,7 @@ An output from `GET /api/admin/outputs`:
 
 ```json
 {"id": "out1", "name": "Output 1", "width": 1920, "height": 1080, "fps": 60, "bitrate_kbps": 0,
- "encoder": "auto", "overlay": "switch", "overlay_s": 8.0, "restream_url": "",
+ "encoder": "auto", "overlay": "switch", "overlay_s": 8.0, "restream_url": "", "debug_clock": false,
  "inputs": [{"id": "submissions", "name": "Short-video submissions", "plugin": "submissions",
              "settings": {}, "priority": 50, "fallback": false, "min_duration_s": 0.0,
              "max_duration_s": null, "override": "none"}]}
@@ -228,6 +229,7 @@ How a source dict reaches the output worker (`source_to_dict`): `FileSource` bec
 | `{"cmd": "play", "id": "7", "label": "…", "source": {…}}` | start the source in a new slot, fade it in at its first frame (`"cut": true`: replace without fading) |
 | `{"cmd": "clear"}` | fade out to the background (black and silence) |
 | `{"cmd": "overlay", "title", "subtitle", "duration_s"}` | the lower third; `duration_s` 0 keeps it, an empty title hides it |
+| `{"cmd": "debug_clock", "on": true}` | the debug clock in the picture on/off (starts off) |
 | `{"cmd": "stop"}` | end |
 
 | Worker → core (stdout) | |

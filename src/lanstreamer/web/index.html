@@ -86,7 +86,7 @@
     <div class="forms" id="forms"></div>
   </div>
   <aside>
-    <section>
+    <section id="clock-card" hidden>
       <h2>Local clock</h2>
       <div class="clock" id="clock">--:--:--.---</div>
       <p class="hint">Compare with the clock in the top right of the video (take a screenshot): the difference is the delay from encoder to screen.</p>
@@ -178,6 +178,7 @@ async function connect() {
 }
 
 function render(next) {
+  $("clock-card").hidden = !next.debug_clock;  // the debug clock is on for this output
   if (status && next.viewer_version !== status.viewer_version) loadForms();
   status = next;
   const outputs = status.outputs || [];

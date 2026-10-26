@@ -145,6 +145,20 @@ def main() -> int:
             assert page.locator("#output-note").is_hidden(), "the overlay needs no restart"
             step("overlay set to 'always' on the output, no restart needed")
 
+            page.wait_for_timeout(1000)  # the save above reloads the outputs and refills the form
+            assert not page.locator("#o-debug-clock").is_checked(), "the debug clock is off by default"
+            page.check("#o-debug-clock")
+            page.click("#output-form button[type=submit]")
+            expect(page.locator("#toast")).to_contain_text("Output saved", timeout=10_000)
+            status = page.evaluate("fetch('/api/status').then(r => r.json())")
+            assert status["debug_clock"] is True, status.get("debug_clock")
+            page.wait_for_timeout(1000)
+            page.uncheck("#o-debug-clock")
+            page.click("#output-form button[type=submit]")
+            expect(page.locator("#toast")).to_contain_text("Output saved", timeout=10_000)
+            page.wait_for_timeout(1000)  # let the save's reload finish before the next action
+            step("debug clock: off by default, turned on and off again")
+
             page.click("#o-add")  # the prompt is accepted with its suggestion "Output 2"
             expect(page.locator("#toast")).to_contain_text('Output "Output 2" added', timeout=30_000)
             expect(page.locator("#o-select")).to_have_value("output-2")

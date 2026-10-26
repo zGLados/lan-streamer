@@ -78,6 +78,7 @@ class Status:
     failed_switches: int = 0
     last_error: str = ""
     restream: str = "off"  # off, connecting, live, retrying in … s: <error>
+    debug_clock: bool = False  # the player page shows its local clock to compare
     whep_port: int = WEBRTC_PORT
     whep_path: str = "out1"
     started: float = field(default_factory=time.time)
@@ -126,6 +127,7 @@ class Output:
             await self.worker.start()
         else:
             await self._start_worker(out)
+        await self._debug_clock(out.debug_clock)
         self.runtime = OutputRuntime(out, self.app.plugins(), paths.data_dir(), self.worker,
                                      on_change=self._on_change)  # fmt: skip
         log.info("Starting %d inputs of %s", len(out.inputs), out.name)
@@ -134,6 +136,11 @@ class Output:
         self.status.state = "running"
         await self._restream(out.restream_url)
         self.refresh_status()
+
+    async def _debug_clock(self, on: bool) -> None:
+        assert self.worker is not None
+        await self.worker.debug_clock(on)
+        self.status.debug_clock = on
 
     async def _restream(self, url: str) -> None:
         """Starts, changes or stops sending this output to an RTMP server."""
@@ -218,6 +225,9 @@ class Output:
         self.cfg.inputs = stored.inputs
         self.cfg.overlay, self.cfg.overlay_s = stored.overlay, stored.overlay_s
         self.cfg.restream_url = stored.restream_url
+        if self.worker is not None and stored.debug_clock != self.cfg.debug_clock:
+            await self._debug_clock(stored.debug_clock)
+        self.cfg.debug_clock = stored.debug_clock
         if self.runtime is not None:
             await self.runtime.apply(self.cfg, self.app.plugins())
             await self._restream(stored.restream_url)

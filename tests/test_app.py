@@ -88,3 +88,25 @@ def test_open_port_reports_a_port_in_use():
             open_port(port)
     finally:
         first.close()
+
+
+def test_the_debug_clock_is_off_and_can_be_turned_on_while_running(tmp_path, monkeypatch):
+    import asyncio
+
+    from lanstreamer import paths
+    from lanstreamer.core.store import Store
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    store = Store(tmp_path / "db")
+    app = App(Args(), store.outputs(), store)
+
+    async def steps():
+        await app.start()
+        output = app.outputs["out1"]
+        assert (output.worker.clock_on, output.status.debug_clock) == (False, False)
+        store.update_output("out1", debug_clock=True)
+        await app.apply_config("out1")
+        assert (output.worker.clock_on, output.status.debug_clock) == (True, True)
+        await app.stop()
+
+    asyncio.run(steps())

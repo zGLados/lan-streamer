@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The clock in the top right of the picture (input name and time in ms, for measuring the delay) is off by default; it is a debug option per output now (admin page → Output → Debug clock, no restart needed). The player page shows its local clock only while it is on.
+
 ## [0.1.0] – 2026-10-26
 
 First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 with a guide and example plugins.
