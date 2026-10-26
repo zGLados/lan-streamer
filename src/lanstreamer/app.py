@@ -48,6 +48,7 @@ WEBRTC_PORT = 8889
 # MediaMTX's control API, only on this machine: the ingest input asks it whether
 # someone publishes (the shipped default config has it off, env vars override it).
 MEDIAMTX_API = "127.0.0.1:9997"
+SHUTDOWN_S = 5  # open web connections get this long to finish when lan-streamer stops
 
 log = logging.getLogger("lanstreamer")
 
@@ -509,6 +510,7 @@ def run(args: argparse.Namespace) -> int:
 async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray | None) -> int:
     server = uvicorn.Server(uvicorn.Config(
         create_app(app.backend()), log_config=None, access_log=False,  # our logging (pythonw: no stderr)
+        timeout_graceful_shutdown=SHUTDOWN_S,
     ))  # fmt: skip
     web: asyncio.Task | None = None
     sock: socket.socket | None = None
@@ -533,6 +535,13 @@ async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray |
     finally:
         server.should_exit = True
         if web is not None:
+            # On Windows a connection reset by the client can stay registered with the
+            # asyncio server for ever, and the web server then waits for it without end
+            # (CI 2026-10-26: "Shutting down", then nothing). Wait a while, then stop it.
+            done, _ = await asyncio.wait({web}, timeout=SHUTDOWN_S + 2)
+            if not done:
+                log.warning("The web server did not stop within %d s – stopping it anyway", SHUTDOWN_S + 2)
+                web.cancel()
             await asyncio.gather(web, return_exceptions=True)
         elif sock is not None:
             sock.close()
