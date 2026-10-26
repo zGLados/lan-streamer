@@ -43,6 +43,9 @@ class OutputWorker:
         done, _ = await asyncio.wait({waiter, self._reader}, timeout=timeout_s, return_when="FIRST_COMPLETED")
         if waiter not in done or self.error:
             waiter.cancel()
+            if self.proc.returncode is None:  # hung: do not leave it running
+                self.proc.kill()
+                await self.proc.wait()
             raise WorkerError(f"output worker did not start: {self.error or 'timeout'}")
 
     @property

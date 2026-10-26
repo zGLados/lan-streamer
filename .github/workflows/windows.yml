@@ -193,6 +193,8 @@ jobs:
           path: media
 
       - name: Windowless start (pythonw.exe --tray, stored configuration) + web API + admin page + viewer side + ingest + restream
+        # a start error opens a message box in tray mode, which would wait for ever
+        timeout-minutes: 12
         shell: pwsh
         run: |
           $dir = "$env:ProgramFiles\lan-streamer\python"
@@ -275,6 +277,7 @@ jobs:
       # and the lower third. Never blocks a build or release – copied by hand when wanted.
       - name: Screenshots for the docs
         continue-on-error: true
+        timeout-minutes: 8
         shell: pwsh
         run: |
           $env:LOCALAPPDATA = "$env:RUNNER_TEMP\docs-data"

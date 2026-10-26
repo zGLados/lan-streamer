@@ -107,7 +107,7 @@ class Output:
         pipeline = Gst.parse_launch(
             f"compositor name=vmix background=black ignore-inactive-pads=true"
             f" ! {self.raw_caps}"
-            f" ! textoverlay name=info halignment=right valignment=top silent=true"
+            f" ! textoverlay name=info halignment=right valignment=top"
             f'   font-desc="Sans 16" shaded-background=true'
             # the lower third; font sizes are relative to 640 px width (auto-resize)
             f" ! textoverlay name=ovtitle {OVERLAY_TEXT} ypad=118 font-desc=\"Sans Bold 14\""
@@ -492,8 +492,10 @@ class Output:
             log(f"warning from {message.src.get_name()}: {warning.message}")
 
     def debug_clock(self, on: bool) -> None:
+        # empty text instead of the "silent" property: the overlay stays as it always ran
         self.clock_on = on
-        self.pipeline.get_by_name("info").set_property("silent", not on)
+        if not on:
+            self.pipeline.get_by_name("info").set_property("text", "")
 
     def _update_overlay(self) -> bool:
         if not self.clock_on:
@@ -538,6 +540,7 @@ class Output:
         return False
 
     def run(self) -> int:
+        log("worker: pipeline built, starting it")
         result = self.pipeline.set_state(self.Gst.State.PLAYING)
         if result == self.Gst.StateChangeReturn.FAILURE:
             emit("error", message="pipeline did not start (is MediaMTX running?)")
@@ -547,6 +550,7 @@ class Output:
         self.GLib.timeout_add(2000, self._report_stats)
         threading.Thread(target=self._read_commands, daemon=True).start()
         emit("ready", encoder=self.args.encoder)
+        log(f"worker: running ({result})")
         try:
             self.loop.run()
         except KeyboardInterrupt:
@@ -589,6 +593,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bitrate", type=int, default=8000, help="video bitrate in kbit/s")
     args = parser.parse_args(argv)
 
+    log(f"worker: starting ({args.encoder}, {args.width}x{args.height} @ {args.fps})")
     Gst = gst.init()
     from gi.repository import GLib
 
