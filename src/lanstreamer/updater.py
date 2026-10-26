@@ -210,7 +210,8 @@ class Updater:
                 target.unlink(missing_ok=True)
                 raise ValueError("the downloaded installer does not match the release's SHA-256")
             self.status.state = "installing"
-            args = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/LAUNCH=1"]
+            args = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/LAUNCH=1",
+                    f'/LOG="{folder / "install.log"}"']  # what the installer did, for problems
             if self.fps:
                 args.append(f"/LAUNCHFPS={self.fps}")
             log.info("Installing %s: starting the installer, lan-streamer ends now", self.status.latest)

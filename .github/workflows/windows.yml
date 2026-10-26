@@ -371,6 +371,9 @@ jobs:
           $code = $LASTEXITCODE
           Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
           Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 25
+          Write-Host "--- installer log"
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\updates\install.log" -Tail 60 -ErrorAction SilentlyContinue
+          Get-Process | Where-Object { $_.Name -like 'lan-streamer-setup*' -or $_.Name -like '*.tmp' } | Format-Table Id, Name, Path
           # the restarted lan-streamer must go before the uninstall
           Get-Process pythonw, python, mediamtx -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -like "$env:ProgramFiles\lan-streamer\*" } | Stop-Process -Force

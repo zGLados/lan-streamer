@@ -98,6 +98,7 @@ def test_install_downloads_checks_and_starts_the_installer(tmp_path, monkeypatch
     path, args = launched[0]
     assert path.read_bytes() == SETUP and path.parent == tmp_path / "updates"
     assert "/VERYSILENT" in args and "/LAUNCH=1" in args and "/LAUNCHFPS=30" in args
+    assert f'/LOG="{tmp_path / "updates" / "install.log"}"' in args
     assert quits == [1]  # lan-streamer ends, the installer replaces it
 
 
