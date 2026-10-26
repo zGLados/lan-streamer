@@ -455,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="run without console, with a tray icon (Windows start menu)")  # fmt: skip
     args = parser.parse_args(argv)
     tray.set_app_id()
+    tray.hold_running_mutex()
     code = run(args)
     if code and args.pause_on_error and sys.stdin is not None:
         input("\nPress Enter to close this window ...")

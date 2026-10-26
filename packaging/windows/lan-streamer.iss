@@ -116,6 +116,26 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\lan-streamer"
 
 [Code]
+// An update from the admin page (/LAUNCH=1): lan-streamer ends right after starting
+// this installer. Wait until it has (its mutex is gone, see tray.py) – otherwise its
+// files are still in use and a silent install aborts.
+function InitializeSetup(): Boolean;
+var
+  Waited: Integer;
+begin
+  Result := True;
+  if ExpandConstant('{param:LAUNCH|0}') = '1' then
+  begin
+    Waited := 0;
+    while CheckForMutexes('lan-streamer-running') and (Waited < 120000) do
+    begin
+      Sleep(500);
+      Waited := Waited + 500;
+    end;
+    Log(Format('Waited %d ms for lan-streamer to end', [Waited]));
+  end;
+end;
+
 function LaunchAfterUpdate(Fps: String): Boolean;
 begin
   Result := (ExpandConstant('{param:LAUNCH|0}') = '1') and (ExpandConstant('{param:LAUNCHFPS|60}') = Fps);

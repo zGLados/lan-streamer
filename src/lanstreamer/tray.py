@@ -13,6 +13,8 @@ from pathlib import Path
 log = logging.getLogger("lanstreamer")
 
 APP_ID = "zGLados.lan-streamer"  # same AppUserModelID as the start menu shortcuts
+RUNNING_MUTEX = "lan-streamer-running"  # the installer waits for it to go (lan-streamer.iss)
+_mutex = None
 
 
 def set_app_id() -> None:
@@ -21,6 +23,18 @@ def set_app_id() -> None:
         import ctypes
 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+
+
+def hold_running_mutex() -> None:
+    """A named mutex while this process runs; Windows removes it when the process ends.
+
+    An update's installer waits until it is gone, so no file is in use any more.
+    """
+    global _mutex
+    if sys.platform == "win32" and _mutex is None:
+        import ctypes
+
+        _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, RUNNING_MUTEX)
 
 
 def message_box(title: str, text: str) -> None:
