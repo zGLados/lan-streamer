@@ -196,7 +196,7 @@ class Settings(BaseModel):
     channels: list[str] = Field(default_factory=list)               # one entry per line
 ```
 
-- `description` is shown under the field. Give every field a default when you can – the admin then only fills in what matters.
+- `title` is the label (without it the field name is used, e.g. "Live Check S"), `description` is shown under the field. Give every field a default when you can – the admin then only fills in what matters.
 - Enumerations (`Literal`, `Enum`) become a drop-down, numbers with `ge`/`le` get limits, `bool` a check box, `list[str]` a text box with one entry per line; anything else is edited as JSON.
 - The admin page validates the input in a short-lived plugin process before storing it, so your validators (`field_validator`, …) run and their messages are shown.
 - When the settings change, the input's process is restarted with the new settings.

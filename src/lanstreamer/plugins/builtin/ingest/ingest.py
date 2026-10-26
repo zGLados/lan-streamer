@@ -30,9 +30,9 @@ RTMP_PORT, SRT_PORT, RTSP_PORT = 1935, 8890, 8554
 
 
 class Settings(BaseModel):
-    key: str = Field("", pattern=r"^[A-Za-z0-9_-]*$", max_length=64,
+    key: str = Field("", title="Stream key", pattern=r"^[A-Za-z0-9_-]*$", max_length=64,
                      description="Stream key (letters, digits, - and _); empty = one is made up")  # fmt: skip
-    api: str = Field("http://127.0.0.1:9997", description="MediaMTX API (change only for a special setup)")
+    api: str = Field("http://127.0.0.1:9997", title="MediaMTX API", description="MediaMTX API (change only for a special setup)")
 
 
 def lan_address() -> str:

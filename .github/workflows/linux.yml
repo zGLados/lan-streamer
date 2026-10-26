@@ -9,23 +9,38 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    # no build for documentation-only or Windows-only changes
+    tags: ["[0-9]*"]  # release: builds, tests and attaches the packages to the GitHub release
+    # no build for documentation-only or Windows-only changes (not checked for tags)
     paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/windows/**", ".github/workflows/windows.yml"]
   pull_request:
     paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/windows/**", ".github/workflows/windows.yml"]
 
 env:
   GST_PLUGINS_RS: "0.13"  # branch of gst-plugins-rs that builds against GStreamer 1.24
-  VERSION: 0.0.1-test.${{ github.run_number }}
+  # A release tag (e.g. 0.1.0, no "v": Debian versions start with a digit) builds that
+  # version; anything else a test build of the version in development
+  # (lanstreamer.__version__, checked by tests/test_version.py).
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('{0}-test.{1}', '0.1.0', github.run_number) }}
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 40  # the first gst-plugins-rs build takes ~15 min
     steps:
-      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
-      - name: apt – short timeouts and retries
-        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+      # Azure's Ubuntu mirror was dead (2026-10-22) and then crawling at ~40 kB/s
+      # (2026-10-26): the main mirror first, short timeouts, and the downloaded
+      # packages cached between runs (also used by install.sh's apt-get).
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-build-${{ hashFiles('packaging/linux/depends.txt') }}-${{ github.run_id }}
+          restore-keys: apt-build-${{ hashFiles('packaging/linux/depends.txt') }}-
+
+      - name: apt – main mirror, timeouts, package cache
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+          mkdir -p ~/apt-cache/partial
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nDir::Cache::archives "%s/apt-cache/";\nAPT::Keep-Downloaded-Packages "true";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/99ci
 
       - uses: actions/checkout@v4
 
@@ -78,9 +93,20 @@ jobs:
       LANSTREAMER_BROWSER: chrome  # the e2e checks use Edge on Windows
       DEBIAN_FRONTEND: noninteractive
     steps:
-      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
-      - name: apt – short timeouts and retries
-        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+      # Azure's Ubuntu mirror was dead (2026-10-22) and then crawling at ~40 kB/s
+      # (2026-10-26): the main mirror first, short timeouts, and the downloaded
+      # packages cached between runs (also used by install.sh's apt-get).
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-deb-${{ hashFiles('packaging/linux/depends.txt') }}-${{ github.run_id }}
+          restore-keys: apt-deb-${{ hashFiles('packaging/linux/depends.txt') }}-
+
+      - name: apt – main mirror, timeouts, package cache
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+          mkdir -p ~/apt-cache/partial
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nDir::Cache::archives "%s/apt-cache/";\nAPT::Keep-Downloaded-Packages "true";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/99ci
 
       - uses: actions/checkout@v4  # only for tests/e2e
 
@@ -90,7 +116,7 @@ jobs:
           path: dist
 
       - name: Install the .deb (apt resolves GStreamer & co.; the service starts)
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           set -x
           sudo apt-get update -q
@@ -196,9 +222,20 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
     steps:
-      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
-      - name: apt – short timeouts and retries
-        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+      # Azure's Ubuntu mirror was dead (2026-10-22) and then crawling at ~40 kB/s
+      # (2026-10-26): the main mirror first, short timeouts, and the downloaded
+      # packages cached between runs (also used by install.sh's apt-get).
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-tarball-${{ hashFiles('packaging/linux/depends.txt') }}-${{ github.run_id }}
+          restore-keys: apt-tarball-${{ hashFiles('packaging/linux/depends.txt') }}-
+
+      - name: apt – main mirror, timeouts, package cache
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+          mkdir -p ~/apt-cache/partial
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nDir::Cache::archives "%s/apt-cache/";\nAPT::Keep-Downloaded-Packages "true";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/99ci
 
       - uses: actions/download-artifact@v4
         with:
@@ -223,3 +260,21 @@ jobs:
             if [ -e "$path" ]; then echo "uninstall left $path behind"; exit 1; fi
           done
           if id lanstreamer 2>/dev/null; then echo 'user left behind'; exit 1; fi
+
+  # Release tag: the packages go to the GitHub release (created beforehand).
+  release:
+    if: github.ref_type == 'tag'
+    needs: [test-deb, test-tarball]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-linux-${{ env.VERSION }}
+          path: dist
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"

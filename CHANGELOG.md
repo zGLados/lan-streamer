@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0] – 2026-10-26
+
+First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 with a guide and example plugins.
+
 ### Changed
 
 - A fresh setup has only Standby and Short-video submissions; the two test inputs are gone (also from existing installs). The name is optional when submitting a video.
@@ -54,3 +58,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - Black picture in the browser on fast machines: mpegtsmux's stale stream header made MediaMTX drop the video track.
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
+
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.0

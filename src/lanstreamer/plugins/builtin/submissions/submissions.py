@@ -39,11 +39,11 @@ from lanstreamer_sdk import (
 
 
 class Settings(BaseModel):
-    max_length_s: int = Field(180, ge=5, le=3600, description="Longer videos are refused")
-    per_device: int = Field(3, ge=1, le=50, description="Videos one device may have waiting at once")
-    max_queue: int = Field(50, ge=1, le=500, description="Videos waiting at most")
-    auto_update: bool = Field(True, description="Update yt-dlp on start (needs internet)")
-    card_s: float = Field(2.0, ge=0, le=10, description="How long the \"Up next\" card shows "
+    max_length_s: int = Field(180, title="Max. video length (s)", ge=5, le=3600, description="Longer videos are refused")
+    per_device: int = Field(3, title="Videos per device", ge=1, le=50, description="Videos one device may have waiting at once")
+    max_queue: int = Field(50, title="Max. queue length", ge=1, le=500, description="Videos waiting at most")
+    auto_update: bool = Field(True, title="Update yt-dlp", description="Update yt-dlp on start (needs internet)")
+    card_s: float = Field(2.0, title="\"Up next\" card (s)", ge=0, le=10, description="How long the \"Up next\" card shows "
                           "before the first video (0: no card)")  # fmt: skip
 
 

@@ -11,7 +11,7 @@ DEFAULT = resources.files("lanstreamer.assets").joinpath("standby.png")
 
 
 class Settings(BaseModel):
-    image: str = Field("", description="PNG or JPEG file on this PC; empty = the lan-streamer slate")
+    image: str = Field("", title="Picture", description="PNG or JPEG file on this PC; empty = the lan-streamer slate")
 
     @field_validator("image")
     @classmethod

@@ -29,11 +29,11 @@ TRIES = 3  # videos tried in a row before get_source gives up (removed, private,
 
 
 class Settings(BaseModel):
-    url: str = Field(..., description="A video, playlist or channel link, or a channel's /live page")
-    max_height: int = Field(1080, ge=360, le=1080, description="Highest resolution to fetch")
-    shuffle: bool = Field(False, description="Play the videos in random order")
-    live_check_s: int = Field(60, ge=15, le=3600, description="How often a live page is checked")
-    auto_update: bool = Field(True, description="Update yt-dlp on start (needs internet)")
+    url: str = Field(..., title="Link", description="A video, playlist or channel link, or a channel's /live page")
+    max_height: int = Field(1080, title="Max. height (pixels)", ge=360, le=1080, description="Highest resolution to fetch")
+    shuffle: bool = Field(False, title="Shuffle", description="Play the videos in random order")
+    live_check_s: int = Field(60, title="Live check every (s)", ge=15, le=3600, description="How often a live page is checked")
+    auto_update: bool = Field(True, title="Update yt-dlp", description="Update yt-dlp on start (needs internet)")
 
     @field_validator("url")
     @classmethod

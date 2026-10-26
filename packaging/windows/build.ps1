@@ -12,8 +12,8 @@
 param(
     [Parameter(Mandatory)] [string]$GstRoot,
     [Parameter(Mandatory)] [string]$PyGObjectWheel,
-    [Parameter(Mandatory)] [string]$Version,      # shown to users, e.g. 0.0.1-test.7
-    [Parameter(Mandatory)] [string]$NumVersion,   # numeric for the file version, e.g. 0.0.1.7
+    [Parameter(Mandatory)] [string]$Version,      # shown to users, e.g. 0.1.0-test.7 or 0.1.0
+    [Parameter(Mandatory)] [string]$NumVersion,   # numeric for the file version, e.g. 0.1.0.7
     [ValidateSet('fast', 'normal', 'max')] [string]$Compression = 'max',
     [string]$MediaMtxVersion = 'v1.21.2',
     [string]$MediaMtxSha256 = 'a84224f5a490855684e62ba6fb71e80ea2a5e16aed61883bb58380290e93e467'

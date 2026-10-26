@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    # no build for documentation-only or Linux-only changes
+    tags: ["[0-9]*"]  # release: builds, tests and attaches the installer to the GitHub release
+    # no build for documentation-only or Linux-only changes (not checked for tags)
     paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/linux/**", ".github/workflows/linux.yml"]
   pull_request:
     paths-ignore: ["docs/**", "**.md", "LICENSE", "packaging/linux/**", ".github/workflows/linux.yml"]
@@ -17,8 +18,11 @@ env:
   GST_VERSION: "1.28.6"
   PYGOBJECT_VERSION: "3.50.2"
   GST_ROOT: C:\gstreamer\1.0\msvc_x86_64
-  VERSION: 0.0.1-test.${{ github.run_number }}
-  NUM_VERSION: 0.0.1.${{ github.run_number }}
+  # A release tag (e.g. 0.1.0, no "v": Debian versions start with a digit) builds that
+  # version; anything else a test build of the version in development
+  # (lanstreamer.__version__, checked by tests/test_version.py).
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('{0}-test.{1}', '0.1.0', github.run_number) }}
+  NUM_VERSION: ${{ format('{0}.{1}', github.ref_type == 'tag' && github.ref_name || '0.1.0', github.run_number) }}
   # Test builds compress fast; release tags get the smallest installer.
   COMPRESSION: ${{ startsWith(github.ref, 'refs/tags/') && 'max' || 'fast' }}
 
@@ -103,6 +107,25 @@ jobs:
         with:
           name: testclip
           path: build/clip.mp4
+
+      - name: Demo clips (60 s, with a title) for the screenshots in the docs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/demo | Out-Null
+          foreach ($clip in @(@('Highlights', 'smpte', 440), @('Intro', 'colors', 523), @('Finale', 'spokes', 659))) {
+            $name, $pattern, $freq = $clip
+            gst-launch-1.0 -q videotestsrc num-buffers=1800 pattern=$pattern `
+              ! video/x-raw,width=1280,height=720,framerate=30/1 `
+              ! textoverlay text=$name font-desc="Sans Bold 64" valignment=center halignment=center shaded-background=true `
+              ! x264enc speed-preset=ultrafast ! h264parse ! mp4mux name=m ! filesink location=build/demo/$name.mp4 `
+              audiotestsrc num-buffers=2813 freq=$freq volume=0.2 ! audio/x-raw,rate=48000 ! avenc_aac ! aacparse ! m.
+          }
+          Get-ChildItem build/demo | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: democlips
+          path: build/demo/*.mp4
 
       - uses: actions/upload-artifact@v4
         with:
@@ -243,6 +266,40 @@ jobs:
           if ($app.ExitCode -ne 0) { Write-Host "app smoke test failed ($($app.ExitCode))"; exit 1 }
           exit $player
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: democlips
+          path: demo
+
+      # Pictures for docs/images: a fresh setup (own data folder) with viewers, a queue
+      # and the lower third. Never blocks a build or release – copied by hand when wanted.
+      - name: Screenshots for the docs
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $env:LOCALAPPDATA = "$env:RUNNER_TEMP\docs-data"
+          New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
+          $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8000', '--directory', 'demo'
+          $app = Start-Process -PassThru -FilePath "$env:ProgramFiles\lan-streamer\python\pythonw.exe" `
+            -ArgumentList '-m', 'lanstreamer', '--no-browser', '--encoder', 'cpu', '--smoke-test', '300', `
+              '--smoke-stop-file', "$env:RUNNER_TEMP\docs-done"
+          python tests/e2e/doc_screenshots.py http://localhost:8080 --media http://127.0.0.1:8000 `
+            --playlist (Resolve-Path demo).Path --out docs-images
+          $shots = $LASTEXITCODE
+          New-Item -ItemType File "$env:RUNNER_TEMP\docs-done" | Out-Null
+          $app.WaitForExit()
+          Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
+          Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 20
+          if ($shots -ne 0) { throw "doc screenshots failed" }
+
+      - name: Upload doc screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-images-${{ env.VERSION }}
+          path: docs-images
+          if-no-files-found: ignore
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -276,3 +333,32 @@ jobs:
           foreach ($dir in "$env:ProgramFiles\lan-streamer", "$env:LOCALAPPDATA\lan-streamer") {
             if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "uninstall left $dir behind" }
           }
+
+  # Release tag: the installer and the example plugins go to the GitHub release
+  # (created beforehand, e.g. as a draft, with the notes from CHANGELOG.md).
+  release:
+    if: github.ref_type == 'tag'
+    needs: test-install
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-setup-${{ env.VERSION }}
+          path: dist
+
+      - name: Example plugins as upload-ready zips
+        run: |
+          python3 -m venv .venv && .venv/bin/pip install -q "pydantic>=2.7"
+          for example in examples/*/; do
+            PYTHONPATH=src .venv/bin/python -m lanstreamer_sdk pack "$example" -o "dist/example-$(basename "$example")-$VERSION.zip"
+          done
+          ls -la dist
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"

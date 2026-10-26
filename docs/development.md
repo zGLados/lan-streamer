@@ -15,6 +15,18 @@
 
 Run the local tests before pushing – `run_local.py` always, `local_linux.py` when the packaging, the pipeline or a GStreamer-dependent feature changed; push (and so build) only what needs the Windows runner or the test PC to be checked.
 
+## Versions and releases
+
+Versions follow [Semantic Versioning](https://semver.org/); `lanstreamer.__version__` (and `pyproject.toml`) is the version in development. CI builds of `main` are test builds `<version>-test.<run>`; a tag builds exactly the tag's version. Tags have no "v" (`0.1.0`), because Debian versions start with a digit.
+
+A release:
+
+1. Set the version in `pyproject.toml`, `src/lanstreamer/__init__.py` and the two workflows (`tests/test_version.py` checks they agree); in `CHANGELOG.md` turn "Unreleased" into `## [x.y.z] – <date>`. Commit, push, wait for green CI.
+2. `gh release create x.y.z --draft --title "lan-streamer x.y.z" --notes-file <the changelog section>` – a draft, so nobody sees it without its files.
+3. `git tag x.y.z && git push origin x.y.z` – both workflows build and test that version and attach the Windows installer, the example plugins (upload-ready zips) and the Linux packages to the release.
+4. When all files are there: `gh release edit x.y.z --draft=false`.
+5. Set the next version in development (e.g. `0.1.1`) in the same places.
+
 ## A display PC or TV (kiosk mode)
 
 `http://<server>:8080/tv` shows only the stream. In a normal browser a click turns on the sound and goes full screen. A display PC can open it without anyone at it, with sound:

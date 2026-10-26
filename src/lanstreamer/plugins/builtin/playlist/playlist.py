@@ -17,9 +17,9 @@ IMAGE = {".png", ".jpg", ".jpeg"}
 
 
 class Settings(BaseModel):
-    items: list[str] = Field(default_factory=list, description="Files, folders or URLs – one per line")
-    loop: bool = Field(True, description="Start again after the last item")
-    image_duration_s: float = Field(10, ge=1, le=3600, description="How long a picture is shown")
+    items: list[str] = Field(default_factory=list, title="Items", description="Files, folders or URLs – one per line")
+    loop: bool = Field(True, title="Loop", description="Start again after the last item")
+    image_duration_s: float = Field(10, title="Picture duration (s)", ge=1, le=3600, description="How long a picture is shown")
 
 
 def expand(items: list[str]) -> list[str]:

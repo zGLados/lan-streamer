@@ -2,11 +2,11 @@
 
 from importlib import resources
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"  # the version in development; a release tag builds exactly this
 
 
 def _build() -> str:
-    """The installer's build version (e.g. 0.0.1-test.23), written by build.ps1."""
+    """The installer's build version (e.g. 0.1.0-test.23 or 0.1.0), written by build.ps1."""
     try:
         return resources.files(__name__).joinpath("BUILD").read_text().strip()
     except OSError:
