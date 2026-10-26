@@ -28,7 +28,7 @@ Versions follow [Semantic Versioning](https://semver.org/); `lanstreamer.__versi
 A release:
 
 0. Optionally refresh the screenshots: run the Windows workflow by hand with "screenshots" ticked; it uploads `docs-images-<version>` (`tests/e2e/doc_screenshots.py`); copy the pictures to `docs/images/`.
-1. Set the version in `pyproject.toml`, `src/lanstreamer/__init__.py` and the two workflows (`tests/test_version.py` checks they agree); in `CHANGELOG.md` turn "Unreleased" into `## [x.y.z] – <date>`. Commit, push, and run the full test on that commit (`git push origin HEAD:ci`) until it is green.
+1. Set the version in `pyproject.toml`, `src/lanstreamer/__init__.py` and the two workflows (`tests/test_version.py` checks they agree); in `CHANGELOG.md` turn "Unreleased" into `## [x.y.z] – <date>`. Commit, push, and run the full test on exactly that commit (`git push origin HEAD:ci`) until it is green – the changelog belongs into this commit, so the tag can use the quick run.
 2. `gh release create x.y.z --draft --title "lan-streamer x.y.z" --notes-file <the changelog section>` – a draft, so nobody sees it without its files.
 3. `git tag x.y.z && git push origin x.y.z` – both workflows build and test that version and attach the Windows installer, the example plugins (upload-ready zips) and the Linux packages to the release.
 4. When all files are there: `gh release edit x.y.z --draft=false`.

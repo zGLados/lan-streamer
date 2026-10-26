@@ -4,10 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.3] – 2026-10-26
+
+Updates without an admin prompt. Coming from 0.1.2: this update still asks once (the old updater); from 0.1.3 on, "Install update" needs no rights.
+
 ### Changed
 
 - Updates no longer ask for admin rights (install for all users): the installer sets up the task "lan-streamer Update" (runs as SYSTEM, every user may start it), which downloads the release, checks its SHA-256 and installs it; lan-streamer starts again by itself. A failed update is shown on the admin page. Comes into effect after installing this version once.
 - One start menu entry "lan-streamer" instead of "lan-streamer (1080p60)", "(1080p30)" and "self-test": the frame rate is set per output on the admin page, the self-test is in the tray menu now. An update removes the old entries.
+
+### Fixed
+
+- After an update, lan-streamer could stay off when its relauncher did not start; the relauncher now writes `logs\relaunch.log`.
 
 ## [0.1.2] – 2026-10-26
 
@@ -86,7 +94,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.2...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.3...HEAD
+[0.1.3]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.3
 [0.1.2]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.2
 [0.1.1]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.1
 [0.1.0]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.0
