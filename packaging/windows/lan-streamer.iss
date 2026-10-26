@@ -103,6 +103,9 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page)"" dir=in action=allow program=""{app}\python\pythonw.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page, console)"""; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""lan-streamer (web page, console)"" dir=in action=allow program=""{app}\python\python.exe"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode
+; Updates without an admin prompt (all users): the task "lan-streamer Update" runs
+; update-helper.ps1 as SYSTEM, every user may start it (update-task.ps1).
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"""; Flags: runhidden; Check: IsAdminInstallMode
 ; Update from the admin page (updater.py): the installer runs silently with /LAUNCH=1
 ; and starts lan-streamer again afterwards – as the user who started the update, not
 ; as admin – with the frame rate it ran with (/LAUNCHFPS=30, default 60).
@@ -110,6 +113,7 @@ Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; Worki
 Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('30')
 
 [UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Unregister"; Flags: runhidden; RunOnceId: "update-task"; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (MediaMTX)"""; Flags: runhidden; RunOnceId: "fw-media"; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page)"""; Flags: runhidden; RunOnceId: "fw-webw"; Check: IsAdminInstallMode
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""lan-streamer (web page, console)"""; Flags: runhidden; RunOnceId: "fw-web"; Check: IsAdminInstallMode
@@ -121,18 +125,19 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\lan-streamer"
 
 [Code]
-// An update from the admin page (/LAUNCH=1): lan-streamer ends right after starting
-// this installer. Wait until it has (its mutex is gone, see tray.py) – otherwise its
-// files are still in use and a silent install aborts.
+// An update from the admin page (/LAUNCH=1 from lan-streamer itself, /WAITAPP=1 from
+// the SYSTEM task): lan-streamer ends right after starting it. Wait until it has (its
+// mutexes are gone, see tray.py) - otherwise its files are still in use and a silent
+// install aborts. The Global\ one is seen from the task's session too.
 function InitializeSetup(): Boolean;
 var
   Waited: Integer;
 begin
   Result := True;
-  if ExpandConstant('{param:LAUNCH|0}') = '1' then
+  if (ExpandConstant('{param:LAUNCH|0}') = '1') or (ExpandConstant('{param:WAITAPP|0}') = '1') then
   begin
     Waited := 0;
-    while CheckForMutexes('lan-streamer-running') and (Waited < 120000) do
+    while CheckForMutexes('lan-streamer-running,Global\lan-streamer-running') and (Waited < 120000) do
     begin
       Sleep(500);
       Waited := Waited + 500;

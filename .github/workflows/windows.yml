@@ -222,6 +222,9 @@ jobs:
           $ini = Get-Content "$env:ProgramFiles\lan-streamer\setup.ini" -Raw
           Write-Host "setup.ini:`n$ini"
           foreach ($want in 'submissions=on', 'playlist=on', 'test-pattern=off') { if ($ini -notmatch [regex]::Escape($want)) { throw "setup.ini lacks $want" } }
+          # Updates without an admin prompt: the task every user may start (runs as SYSTEM)
+          schtasks.exe /Query /TN 'lan-streamer Update' /V /FO LIST | Select-String 'TaskName|Run As User|Task To Run'
+          if ($LASTEXITCODE -ne 0) { throw "the task 'lan-streamer Update' is missing" }
           # Firewall rules for the LAN (private/domain networks)
           foreach ($rule in 'lan-streamer (MediaMTX)', 'lan-streamer (web page)', 'lan-streamer (web page, console)') {
             $shown = netsh advfirewall firewall show rule name="$rule" verbose
@@ -389,7 +392,10 @@ jobs:
         timeout-minutes: 12
         shell: pwsh
         run: |
-          $env:LANSTREAMER_UPDATE_FEED = 'http://127.0.0.1:8001/latest.json'
+          $env:LANSTREAMER_UPDATE_FEED = 'http://127.0.0.1:8001/latest.json'  # for lan-streamer's check
+          # the update task (SYSTEM) reads its address only from HKLM (admins only)
+          New-Item -Path 'HKLM:\Software\lan-streamer' -Force | Out-Null
+          Set-ItemProperty -Path 'HKLM:\Software\lan-streamer' -Name UpdateFeed -Value 'http://127.0.0.1:8001/latest.json'
           $env:PYTHONIOENCODING = 'utf-8'  # the console's code page cannot print every character
           New-Item -ItemType Directory -Force update | Out-Null
           $web = Start-Process -PassThru -NoNewWindow -FilePath python -ArgumentList '-m', 'http.server', '8001', '--directory', 'update'
@@ -399,8 +405,10 @@ jobs:
           $code = $LASTEXITCODE
           Stop-Process -Id $web.Id -ErrorAction SilentlyContinue
           Get-Content "$env:LOCALAPPDATA\lan-streamer\logs\lan-streamer.log" -Tail 25
-          Write-Host "--- installer log"
-          Get-Content "$env:LOCALAPPDATA\lan-streamer\updates\install.log" -Tail 60 -ErrorAction SilentlyContinue
+          Write-Host "--- update task result and installer log"
+          Get-Content "$env:ProgramFiles\lan-streamer\updates\result.json" -ErrorAction SilentlyContinue
+          Get-Content "$env:ProgramFiles\lan-streamer\updates\install.log" -Tail 60 -ErrorAction SilentlyContinue
+          Remove-Item -Path 'HKLM:\Software\lan-streamer' -Recurse -ErrorAction SilentlyContinue
           Get-Process | Where-Object { $_.Name -like 'lan-streamer-setup*' -or $_.Name -like '*.tmp' } | Format-Table Id, Name, Path
           # the restarted lan-streamer must go before the uninstall
           Get-Process pythonw, python, mediamtx -ErrorAction SilentlyContinue |
@@ -422,6 +430,8 @@ jobs:
           $p = Start-Process -Wait -PassThru -FilePath "$env:ProgramFiles\lan-streamer\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           Start-Sleep 3
           if (Test-Path $key) { throw 'uninstall entry still registered' }
+          schtasks.exe /Query /TN 'lan-streamer Update' 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "the task 'lan-streamer Update' was left behind" }
           foreach ($rule in 'lan-streamer (MediaMTX)', 'lan-streamer (web page)', 'lan-streamer (web page, console)') {
             netsh advfirewall firewall show rule name="$rule" | Out-Null
             if ($LASTEXITCODE -eq 0) { throw "firewall rule '$rule' left behind" }

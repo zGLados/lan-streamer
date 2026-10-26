@@ -14,7 +14,7 @@ log = logging.getLogger("lanstreamer")
 
 APP_ID = "zGLados.lan-streamer"  # same AppUserModelID as the start menu shortcuts
 RUNNING_MUTEX = "lan-streamer-running"  # the installer waits for it to go (lan-streamer.iss)
-_mutex = None
+_mutexes: list = []
 
 
 def set_app_id() -> None:
@@ -30,11 +30,12 @@ def hold_running_mutex() -> None:
 
     An update's installer waits until it is gone, so no file is in use any more.
     """
-    global _mutex
-    if sys.platform == "win32" and _mutex is None:
+    if sys.platform == "win32" and not _mutexes:
         import ctypes
 
-        _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, RUNNING_MUTEX)
+        # the session's one, and a Global\ one the update task (SYSTEM) can see
+        for name in (RUNNING_MUTEX, f"Global\\{RUNNING_MUTEX}"):
+            _mutexes.append(ctypes.windll.kernel32.CreateMutexW(None, False, name))
 
 
 def message_box(title: str, text: str) -> None:

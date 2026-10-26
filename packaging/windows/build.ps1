@@ -206,6 +206,9 @@ python (Join-Path $PSScriptRoot 'make_icon.py') (Join-Path $Stage 'lan-streamer.
 if ($LASTEXITCODE -ne 0) { throw 'icon generation failed' }
 Copy-Item (Join-Path $PSScriptRoot 'self-test.cmd') $Stage
 Copy-Item (Join-Path $PSScriptRoot 'start.cmd') $Stage
+# updates without an admin prompt: the task and its script (lan-streamer.iss, updater.py)
+Copy-Item (Join-Path $PSScriptRoot 'update-task.ps1') $Stage
+Copy-Item (Join-Path $PSScriptRoot 'update-helper.ps1') $Stage
 Copy-Item (Join-Path $Repo 'LICENSE') $Stage
 
 # --- Installer -----------------------------------------------------------------

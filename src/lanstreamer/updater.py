@@ -3,11 +3,17 @@
 Checks the latest release on start and every CHECK_EVERY_S (can be turned off
 on the admin page) and shows it there. Installing is the admin's click:
 
-Windows (installed with the installer): the release's installer is downloaded,
-its size and SHA-256 checked against the release, and started silently; then
-lan-streamer quits so its files can be replaced. The installer starts it again
-(/LAUNCH, see lan-streamer.iss). An all-users install needs admin rights:
-Windows asks on the server's screen (UAC).
+Windows, install for all users (C:\\Program Files): no admin prompt. The installer
+registered the task "lan-streamer Update", which runs update-helper.ps1 as SYSTEM
+and which every user may start. lan-streamer starts it, leaves a small relauncher
+behind (PowerShell, in the user's session) and ends; the task downloads the
+release's installer, checks its SHA-256 and installs silently; the relauncher
+then starts lan-streamer again. The task's result (updates/result.json in the
+program folder) is shown after the restart.
+
+Windows, install "only for me": the release's installer is downloaded, its size
+and SHA-256 checked, and started silently (no admin rights needed); lan-streamer
+ends, the installer starts it again (/LAUNCH, see lan-streamer.iss).
 
 Linux and repo checkouts: the update is only shown, with the link.
 
@@ -23,11 +29,13 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +49,8 @@ CHECK_EVERY_S = 12 * 3600.0
 SETTING = "update_check"  # "on" / "off"
 INSTALLER = re.compile(r"^lan-streamer-setup-[\w.\-]+\.exe$")
 TIMEOUT_S = 30.0
+TASK = "lan-streamer Update"  # registered by the installer (update-task.ps1)
+RESULT_FRESH_S = 3600.0  # a task result this old is still shown after the restart
 
 _VERSION = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?$")
 
@@ -100,6 +110,42 @@ def download(url: str, target: Path, size: int, progress: Callable[[int], None])
     return digest.hexdigest()
 
 
+def task_exists() -> bool:
+    """Windows: is the update task there (install for all users)?"""
+    if sys.platform != "win32":
+        return False
+    result = subprocess.run(["schtasks.exe", "/Query", "/TN", TASK], check=False, capture_output=True,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # fmt: skip
+    return result.returncode == 0
+
+
+def run_task(root: Path, relaunch: list[str]) -> None:
+    """Windows: starts the update task (SYSTEM) and a relauncher in this session.
+
+    The relauncher waits for the task's result file (a newer one than now), then
+    starts lan-streamer again – also after a failed update, so it does not stay off.
+    """
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    result = subprocess.run(["schtasks.exe", "/Run", "/TN", TASK], check=False, capture_output=True, text=True,
+                            creationflags=flags)  # fmt: skip
+    if result.returncode != 0:
+        raise OSError(f"the update task could not be started: {(result.stdout + result.stderr).strip()}")
+    marker = root / "updates" / "result.json"
+    args = ", ".join("'" + a.replace("'", "''") + "'" for a in relaunch[1:])
+    script = (
+        f"$start = (Get-Date).ToUniversalTime(); $file = '{marker}'; "
+        "for ($i = 0; $i -lt 1200; $i++) { Start-Sleep 1; "
+        "if ((Test-Path $file) -and (Get-Item $file).LastWriteTimeUtc -gt $start) { break } }; "
+        f"Start-Sleep 2; Start-Process -FilePath '{relaunch[0]}' -ArgumentList @({args})"
+    )
+    subprocess.Popen(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+        creationflags=flags | getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+        close_fds=True,
+    )  # fmt: skip
+
+
 def start_installer(installer: Path, args: list[str], elevate: bool) -> None:
     """Windows: starts the installer detached; with UAC if the install is for all users."""
     import ctypes  # Windows only
@@ -123,6 +169,8 @@ class Updater:
         feed: str | None = None,
         fetch: Callable[[str], dict[str, Any]] = fetch_json,
         launch: Callable[[Path, list[str], bool], None] = start_installer,
+        has_task: Callable[[], bool] = task_exists,
+        start_task: Callable[[Path, list[str]], None] = run_task,
     ):
         self.store = store
         self.data_dir = data_dir
@@ -134,10 +182,26 @@ class Updater:
         self.status = UpdateState(current=current)
         self.asset: dict[str, Any] | None = None
         self.root = paths.app_root() if sys.platform == "win32" else None
+        self.has_task = has_task
+        self.start_task = start_task
+        self._last_result()
         if self.root is None:
             self.status.how = ("Install the update with the Linux package (.deb / .tar.gz) from the release."
                                if sys.platform != "win32" else
                                "Not an installed lan-streamer (repo checkout): update with git.")  # fmt: skip
+
+    def _last_result(self) -> None:
+        """After an update by the task: show its failure (a success shows as the new version)."""
+        if self.root is None:
+            return
+        try:
+            result = json.loads((self.root / "updates" / "result.json").read_text(encoding="utf-8-sig"))
+            age = time.time() - datetime.fromisoformat(str(result["time"])).timestamp()
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if not result.get("ok") and age < RESULT_FRESH_S:
+            self.status.error = f"the last update failed: {result.get('message', '')}"
+            log.warning("%s", self.status.error)
 
     @property
     def auto_check(self) -> bool:
@@ -192,6 +256,22 @@ class Updater:
         digest = str(asset.get("digest") or "")
         if not digest.startswith("sha256:"):
             raise RuntimeError("the release gives no SHA-256 for the installer – not installed")
+        relaunch = [str(self.root / "python" / "pythonw.exe"), "-m", "lanstreamer", "--tray"]
+        if self.fps:
+            relaunch += ["--fps", str(self.fps)]
+        if await asyncio.to_thread(self.has_task):
+            # install for all users: the SYSTEM task downloads, checks and installs it
+            self.status.state, self.status.error = "installing", ""
+            try:
+                log.info("Installing %s through the update task, lan-streamer ends now", self.status.latest)
+                await asyncio.to_thread(self.start_task, self.root, relaunch)
+            except OSError as exc:
+                self.status.state, self.status.error = "idle", f"update failed: {exc}"
+                log.warning("%s", self.status.error)
+                return
+            await asyncio.sleep(2)
+            self.quit_app()
+            return
         self.status.state, self.status.progress, self.status.error = "downloading", 0, ""
         try:
             folder = self.data_dir / "updates"

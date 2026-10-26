@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- Updates no longer ask for admin rights (install for all users): the installer sets up the task "lan-streamer Update" (runs as SYSTEM, every user may start it), which downloads the release, checks its SHA-256 and installs it; lan-streamer starts again by itself. A failed update is shown on the admin page. Comes into effect after installing this version once.
 - One start menu entry "lan-streamer" instead of "lan-streamer (1080p60)", "(1080p30)" and "self-test": the frame rate is set per output on the admin page, the self-test is in the tray menu now. An update removes the old entries.
 
 ## [0.1.2] – 2026-10-26

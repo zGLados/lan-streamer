@@ -55,11 +55,13 @@ def release(url="http://x/setup.exe", digest=None, tag="0.2.0"):
     }  # fmt: skip
 
 
-def make(tmp_path, answer, current="0.1.1", installed=True):
+def make(tmp_path, answer, current="0.1.1", installed=True, task=False):
     launched, quits = [], []
     u = up.Updater(current, Store(tmp_path / "db"), tmp_path, lambda: quits.append(1), fps=30,
                    feed="http://feed", fetch=lambda url: answer() if callable(answer) else answer,
-                   launch=lambda path, args, elevate: launched.append((path, args)))  # fmt: skip
+                   launch=lambda path, args, elevate: launched.append((path, args)),
+                   has_task=lambda: task,
+                   start_task=lambda root, relaunch: launched.append(("task", relaunch)))  # fmt: skip
     u.root = tmp_path / "program" if installed else None
     return u, launched, quits
 
@@ -143,3 +145,29 @@ def test_api(tmp_path):
     assert client.patch("/api/admin/update", json={"auto_check": False}).json()["auto_check"] is False
     u.status.available = False
     assert client.post("/api/admin/update/install").status_code == 409
+
+
+def test_an_install_for_all_users_goes_through_the_task(tmp_path, monkeypatch):
+    # no download in lan-streamer and no admin prompt: the SYSTEM task does it
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    u, launched, quits = make(tmp_path, release(), task=True)
+    asyncio.run(u.check())
+    asyncio.run(u.install())
+    assert not u.status.error and quits == [1]
+    kind, relaunch = launched[0]
+    assert kind == "task" and relaunch[1:] == ["-m", "lanstreamer", "--tray", "--fps", "30"]
+    assert not (tmp_path / "updates").exists()
+
+
+def test_a_failed_task_update_is_shown_after_the_restart(tmp_path):
+    import json
+    from datetime import UTC, datetime
+
+    u, _, _ = make(tmp_path, release())
+    (u.root / "updates").mkdir(parents=True)
+    (u.root / "updates" / "result.json").write_text(json.dumps({
+        "ok": False, "message": "the installer ended with code 5", "version": "",
+        "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    }), encoding="utf-8-sig")  # fmt: skip
+    u._last_result()
+    assert u.state()["error"] == "the last update failed: the installer ended with code 5"

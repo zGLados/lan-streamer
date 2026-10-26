@@ -724,8 +724,7 @@ $("u-auto").onchange = async () => {
 };
 $("u-install").onclick = async () => {
   const latest = $("u-latest").textContent;
-  if (!confirm(`Install lan-streamer ${latest} now?\n\nThe streams stop until it has restarted (about a minute). ` +
-               "An install for all users asks for permission on the server's screen.")) return;
+  if (!confirm(`Install lan-streamer ${latest} now?\n\nThe streams stop until it has restarted (about a minute).`)) return;
   try { renderUpdate(await api("/api/admin/update/install", { method: "POST" })); }
   catch (err) { toast(err.message, true); return; }
   // follow it: download, installer, the old lan-streamer ends, the new one answers

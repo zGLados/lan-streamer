@@ -46,7 +46,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the outputs (add more, format, overlay), their inputs (add, priority, force/block, order) and the logs there.
 
-**Updates:** the admin page shows when a new release is out; on Windows "Install update" installs it and lan-streamer restarts by itself (an install for all users asks for permission on the server's screen).
+**Updates:** the admin page shows when a new release is out; on Windows "Install update" installs it and lan-streamer restarts by itself – without an admin prompt, so a PC with only a screen attached updates too.
 
 **Self-test** (tray menu → "Self-test") shows which video encoders work on your PC.
 
