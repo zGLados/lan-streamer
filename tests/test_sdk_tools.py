@@ -11,15 +11,16 @@ from lanstreamer_sdk.tools import check, main, pack
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 EXAMPLE_DIRS = sorted(p for p in EXAMPLES.iterdir() if (p / "plugin.toml").is_file())
+REQUIRED_SETTINGS = {"web-stream": {"url": "https://example.org/live.m3u8"}}
 
 
 def test_there_are_examples():
-    assert {p.name for p in EXAMPLE_DIRS} >= {"hello-plugin", "stream-queue"}
+    assert {p.name for p in EXAMPLE_DIRS} >= {"hello-plugin", "stream-queue", "web-stream"}
 
 
 @pytest.mark.parametrize("folder", EXAMPLE_DIRS, ids=lambda p: p.name)
 def test_every_example_checks_packs_and_installs(folder, tmp_path):
-    result = check(folder)
+    result = check(folder, REQUIRED_SETTINGS.get(folder.name))
     assert result["errors"] == [] and result["api_version"] == 1
 
     archive = pack(folder, tmp_path / "plugin.zip")

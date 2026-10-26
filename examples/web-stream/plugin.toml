@@ -1,0 +1,12 @@
+# Example: an external live stream that goes on air while it is online – the
+# usual shape of a plugin for a camera, a streaming service or another server.
+#   python -m lanstreamer_sdk check examples/web-stream
+#   python -m lanstreamer_sdk pack examples/web-stream
+# Guide: docs/plugin-guide.md · all interfaces: docs/interfaces.md
+id = "web-stream"
+name = "Web stream (example)"
+version = "1.0.0"
+api_version = 1
+entry = "web_stream:Plugin"
+description = "Example plugin: plays an HLS/MP4/RTSP/SRT stream while it is reachable; title from an optional JSON status URL."
+requirements = []

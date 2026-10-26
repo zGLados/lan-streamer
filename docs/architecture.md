@@ -142,7 +142,7 @@ entry = "tiktok_queue:Plugin"
 requirements = ["yt-dlp>=2026.1"]
 ```
 
-Upload (admin page → Plugins, `PUT /api/admin/plugins`, `plugins/install.py`): the zip is checked (size, no paths outside the plugin folder; `plugin.toml` at the top or in one folder) and unpacked into a staging folder; the manifest is checked including `api_version` – incompatible plugins are rejected with a clear message (F-PLG-04); the `requirements` are installed with pip into the plugin's own `.deps` folder (internet needed only then; the installer ships pip), so plugins cannot break each other's dependencies; the plugin is imported once in a plugin host process; only then it replaces an older version, and running inputs that use it restart with the new code. Uploaded plugins live in `<data>/plugins/<id>`, their instance data in `<data>/plugin-data/<instance>`. Built-in plugin ids cannot be taken; a plugin still used by an input cannot be removed. Templates are in `examples/` (`hello-plugin`, `stream-queue`); the guide for plugin authors is [plugin-guide.md](plugin-guide.md).
+Upload (admin page → Plugins, `PUT /api/admin/plugins`, `plugins/install.py`): the zip is checked (size, no paths outside the plugin folder; `plugin.toml` at the top or in one folder) and unpacked into a staging folder; the manifest is checked including `api_version` – incompatible plugins are rejected with a clear message (F-PLG-04); the `requirements` are installed with pip into the plugin's own `.deps` folder (internet needed only then; the installer ships pip), so plugins cannot break each other's dependencies; the plugin is imported once in a plugin host process; only then it replaces an older version, and running inputs that use it restart with the new code. Uploaded plugins live in `<data>/plugins/<id>`, their instance data in `<data>/plugin-data/<instance>`. Built-in plugin ids cannot be taken; a plugin still used by an input cannot be removed. Templates are in `examples/` (`hello-plugin`, `web-stream`, `stream-queue`); the guide for plugin authors is [plugin-guide.md](plugin-guide.md), all interfaces (HTTP API, protocols, ports, files) are in [interfaces.md](interfaces.md).
 
 Plugin authors depend only on the small SDK package `lanstreamer_sdk` (`src/lanstreamer_sdk/`, shipped with the app). It holds the base class, the source types, the context object and the manifest check, plus tools for authors: `python -m lanstreamer_sdk check|pack` (`tools.py`; the plugin host loads plugins with the same `load_plugin`) and a test context (`testing.py`). The API is pinned by contract tests (`tests/test_plugin_contract.py`): within API 1 only additions are allowed. The plugin API, version 1: The plugin API, version 1:
 
@@ -232,10 +232,10 @@ src/lanstreamer/
   web/               api.py (FastAPI), index.html (player), admin.html (admin page)
   doctor.py, tray.py, paths.py, assets/ (icon, standby slate)
 src/lanstreamer_sdk/ plugin SDK: InputPlugin, sources, context, manifest; tools.py (check, pack), testing.py
-examples/            hello-plugin, stream-queue (with tests) – templates for plugin authors
+examples/            hello-plugin, web-stream, stream-queue (with tests) – templates for plugin authors
 packaging/windows/   build.ps1, lan-streamer.iss, gstreamer-plugins.txt, make_icon.py, *.cmd
 tests/               unit tests; e2e/ (check_api, check_admin, check_player, run_local, edge.py)
-docs/                architecture, roadmap, development, plugin-guide
+docs/                architecture, roadmap, development, plugin-guide, interfaces
 ```
 
 ## Tech stack

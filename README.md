@@ -39,7 +39,7 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 - **Outputs** are permanently running encoders. They switch between inputs without the stream ever dropping, and [MediaMTX](https://github.com/bluenviron/mediamtx) serves them via WebRTC and LL-HLS.
 - **Everything is configured in the web UI**, including installing new input plugins as `.zip` uploads.
 
-Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: [docs/plugin-guide.md](docs/plugin-guide.md).
+Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: [docs/plugin-guide.md](docs/plugin-guide.md) and the [example plugins](examples). All interfaces (HTTP API, ports, protocols): [docs/interfaces.md](docs/interfaces.md).
 
 ## Stack
 

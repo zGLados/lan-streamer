@@ -11,7 +11,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Guide for plugin authors (`docs/plugin-guide.md`) and a full example plugin to copy (`examples/stream-queue`: a link queue for viewers, with its own tests).
+- Guide for plugin authors (`docs/plugin-guide.md`) and example plugins to copy, with their own tests: `examples/web-stream` (an external live stream while it is online) and `examples/stream-queue` (a link queue for viewers).
+- `docs/interfaces.md`: every interface in one place – HTTP API and WebSocket with examples, the plugin and output worker protocols, ports and stream paths, files and folders.
 - Plugin SDK: `python -m lanstreamer_sdk check <folder>` (load a plugin as lan-streamer does, show its forms) and `pack <folder>` (zip for the upload); `lanstreamer_sdk.testing.make_context()` to test a plugin without lan-streamer running.
 - Plugin API v1 is pinned by contract tests in CI: within API 1 only additions.
 - Linux packages: `.deb` and `.tar.gz` with `install.sh` (Ubuntu 24.04 / Debian 13+), systemd service, built and install-tested in GitHub Actions with the same end-to-end checks as Windows.

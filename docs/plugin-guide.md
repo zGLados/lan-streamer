@@ -25,16 +25,17 @@ Everything else is optional. This guide describes the **plugin API version 1**.
 
 ## Quick start
 
-There are two examples in [`examples/`](../examples):
+There are three examples in [`examples/`](../examples) (overview: [examples/README.md](../examples/README.md)); every interface of lan-streamer is described in [interfaces.md](interfaces.md).
 
 | Example | Shows |
 | --- | --- |
 | [`hello-plugin`](../examples/hello-plugin) | The smallest useful plugin: a test picture that is active during the first seconds of every minute. |
+| [`web-stream`](../examples/web-stream) | The usual case: an external live stream (camera, service, server) that is on air while it is online; network checks off the event loop, title from a JSON status URL. With its own tests. |
 | [`stream-queue`](../examples/stream-queue) | Every part of the API: viewers queue links to videos or streams, they play one after another. With its own tests. Copy it as a template. |
 
 To start your own:
 
-1. Copy `examples/stream-queue` (or `hello-plugin`) to a new folder.
+1. Copy the example closest to your idea to a new folder: `web-stream` for a source that is live now and then, `stream-queue` for things viewers send in.
 2. In `plugin.toml`, change `id`, `name` and `entry`; rename the `.py` file to match `entry`.
 3. Set up a development environment (a clone of lan-streamer, Python 3.12+):
 
