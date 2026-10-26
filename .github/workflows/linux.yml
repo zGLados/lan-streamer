@@ -20,7 +20,7 @@ env:
   # A release tag (e.g. 0.1.0, no "v": Debian versions start with a digit) builds that
   # version; anything else a test build of the version in development
   # (lanstreamer.__version__, checked by tests/test_version.py).
-  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('{0}-test.{1}', '0.1.1', github.run_number) }}
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('{0}-test.{1}', '0.1.2', github.run_number) }}
 
 jobs:
   build:

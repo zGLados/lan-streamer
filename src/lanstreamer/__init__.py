@@ -2,7 +2,7 @@
 
 from importlib import resources
 
-__version__ = "0.1.1"  # the version in development; a release tag builds exactly this
+__version__ = "0.1.2"  # the version in development; a release tag builds exactly this
 
 
 def _build() -> str:
