@@ -185,7 +185,9 @@ URLs that expire (signed CDN links) should be resolved in `get_source()`, right 
 
 ## Settings
 
-The settings are a Pydantic model; the admin page builds the form from its JSON Schema:
+The settings are a Pydantic model; the admin page builds the form from its JSON Schema (here the built-in YouTube input):
+
+<img src="images/add-input.png" alt="The admin page's form for a YouTube input, generated from its settings model" width="420">
 
 ```python
 class Settings(BaseModel):

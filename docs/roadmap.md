@@ -63,5 +63,5 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 ## Later – to be reviewed
 
 - [ ] Auto updater for lan-streamer itself: check for a new version, download and install it (Windows installer; Linux packages later), show it in the admin page – requested 2026-10-21
-- [ ] Screenshots in the docs (player page, submit form, TV view, admin page, installer) – after the auto updater, requested 2026-10-21
+- [x] Screenshots in the docs (player page with submit form, TV view, admin page, "Add input") – taken by the Windows CI (`tests/e2e/doc_screenshots.py`), done for 0.1.0; the installer pages are still missing
 - [ ] Twitch top stream (built-in plugin; Helix API for the ranking, streamlink for playback) – moved here 2026-10-21, the owner looks at it again before it is built

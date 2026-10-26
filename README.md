@@ -10,13 +10,29 @@ A self-hosted, modular media streaming platform for your local network. lan-stre
 
 > **Status:** early development, first release [0.1.0](https://github.com/zGLados/lan-streamer/releases) (Windows installer, Linux packages, plugin API 1). Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Installers for Windows and Linux, and a guide for plugin authors. Next: opening up for third-party plugins. See the [roadmap](docs/roadmap.md).
 
-## Try the prototype (Windows)
+![The player page: a submitted video on air with its lower third, the submit form and the queue](docs/images/player.png)
 
-1. Download the latest installer from [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml) (artifact `lan-streamer-setup-…`) and run it. It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps.
-2. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
-3. It shows the standby picture until a viewer submits a video. The installer asks which built-in inputs to turn on (short-video submissions and playlist by default; the test pattern is for tests); this can be changed later on the admin page. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
+<table>
+  <tr>
+    <td width="60%"><img src="docs/images/admin.png" alt="Admin page: what is on air, the inputs with state and priority, the plugins"></td>
+    <td><img src="docs/images/add-input.png" alt="Adding a YouTube input: the settings form comes from the plugin"></td>
+  </tr>
+  <tr>
+    <td>Admin page: on air, inputs by priority, plugins</td>
+    <td>Adding an input – the form comes from the plugin</td>
+  </tr>
+</table>
 
-**Linux (Ubuntu 24.04 / Debian 13 or newer):** download `lan-streamer-linux-…` from [Actions → Linux](https://github.com/zGLados/lan-streamer/actions/workflows/linux.yml), then `sudo apt install ./lan-streamer_….deb` – or unpack the `.tar.gz` and run `sudo ./install.sh`. It runs as the systemd service `lan-streamer` (player page on port 8080); `lan-streamer selftest` shows which encoders work. Remove it with `sudo apt purge lan-streamer` (or `sudo ./install.sh --uninstall --purge`).
+The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The pictures come from the Windows CI (real installer, real stream, demo clips) – `tests/e2e/doc_screenshots.py`.
+
+## Install
+
+**Windows:** download `lan-streamer-setup-<version>.exe` from the [releases](https://github.com/zGLados/lan-streamer/releases) and run it (test builds of every change: [Actions → Windows](https://github.com/zGLados/lan-streamer/actions/workflows/windows.yml), artifact `lan-streamer-setup-…`). It installs to `C:\Program Files\lan-streamer` (or only for you, without admin rights) and appears under Settings → Apps. Then:
+
+1. Start **lan-streamer (1080p60)** from the start menu. It runs in the background with a tray icon next to the clock (right-click: open player, log, quit), and the player page opens at `http://localhost:8080`.
+2. It shows the standby picture until a viewer submits a video. The installer asks which built-in inputs to turn on (short-video submissions and playlist by default; the test pattern is for tests); this can be changed later on the admin page. For a quick test with your own file or URL: `"C:\Program Files\lan-streamer\start.cmd" --source C:\path\video.mp4`.
+
+**Linux (Ubuntu 24.04 / Debian 13 or newer):** download the `.deb` or `.tar.gz` from the [releases](https://github.com/zGLados/lan-streamer/releases) (test builds: [Actions → Linux](https://github.com/zGLados/lan-streamer/actions/workflows/linux.yml)), then `sudo apt install ./lan-streamer_….deb` – or unpack the `.tar.gz` and run `sudo ./install.sh`. It runs as the systemd service `lan-streamer` (player page on port 8080); `lan-streamer selftest` shows which encoders work. Remove it with `sudo apt purge lan-streamer` (or `sudo ./install.sh --uninstall --purge`).
 
 **Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name.
 
@@ -45,7 +61,7 @@ Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [
 
 Python 3.13 (asyncio, FastAPI) · GStreamer · MediaMTX · plain HTML/JS · SQLite
 
-Windows first (installer today), Linux packages follow (M5). Hardware encoding is picked automatically (NVIDIA, AMD, Intel, or CPU as a fallback) and can be overridden in the settings.
+Windows first, Linux too (`.deb`, `.tar.gz` with a systemd service). Hardware encoding is picked automatically (NVIDIA, AMD, Intel, or CPU as a fallback) and can be overridden in the settings.
 
 ## Scope
 

@@ -16,6 +16,7 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 ### Added
 
 - Guide for plugin authors (`docs/plugin-guide.md`) and example plugins to copy, with their own tests: `examples/web-stream` (an external live stream while it is online) and `examples/stream-queue` (a link queue for viewers).
+- Screenshots in the README and the plugin guide, taken by the Windows CI from a real installation (`tests/e2e/doc_screenshots.py`).
 - `docs/interfaces.md`: every interface in one place – HTTP API and WebSocket with examples, the plugin and output worker protocols, ports and stream paths, files and folders.
 - Plugin SDK: `python -m lanstreamer_sdk check <folder>` (load a plugin as lan-streamer does, show its forms) and `pack <folder>` (zip for the upload); `lanstreamer_sdk.testing.make_context()` to test a plugin without lan-streamer running.
 - Plugin API v1 is pinned by contract tests in CI: within API 1 only additions.
