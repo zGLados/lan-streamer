@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40  # the first gst-plugins-rs build takes ~15 min
     steps:
+      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
+      - name: apt – short timeouts and retries
+        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+
       - uses: actions/checkout@v4
 
       - name: Unit tests (Python 3.12 of Ubuntu)
@@ -74,6 +78,10 @@ jobs:
       LANSTREAMER_BROWSER: chrome  # the e2e checks use Edge on Windows
       DEBIAN_FRONTEND: noninteractive
     steps:
+      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
+      - name: apt – short timeouts and retries
+        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+
       - uses: actions/checkout@v4  # only for tests/e2e
 
       - uses: actions/download-artifact@v4
@@ -188,6 +196,10 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
     steps:
+      # a dead mirror made apt-get update hang until the job time limit (2026-10-22)
+      - name: apt – short timeouts and retries
+        run: printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci
+
       - uses: actions/download-artifact@v4
         with:
           name: lan-streamer-linux-${{ env.VERSION }}
