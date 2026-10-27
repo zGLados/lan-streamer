@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.4] – 2026-10-27
+
+A small release, mainly the first update that installs without an admin prompt (coming from 0.1.3).
+
+### Changed
+
+- Windows: the self-test window opened from the tray is titled "lan-streamer self-test" instead of the path of python.exe.
+- Linux: when the output's MPEG-TS muxer fails while starting (seen once: "Could not create handler for stream"), the output log now records what each of its inputs had and GStreamer's reason; the service starts again by itself after 5 s as before.
+
 ## [0.1.3] – 2026-10-26
 
 Updates without an admin prompt. Coming from 0.1.2: this update still asks once (the old updater); from 0.1.3 on, "Install update" needs no rights.
@@ -94,7 +103,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.3...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.4...HEAD
+[0.1.4]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.4
 [0.1.3]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.3
 [0.1.2]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.2
 [0.1.1]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.1
