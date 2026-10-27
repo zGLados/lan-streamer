@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import threading
@@ -485,6 +486,10 @@ class Output:
                     slot.failed = True  # report once; the core switches away
                     emit("failed", id=slot.id, reason=error.message)
                 return
+            if message.src.get_name() == "mux":
+                for pad in message.src.sinkpads:  # what the muxer had when it failed
+                    caps = pad.get_current_caps()
+                    log(f"muxer input {pad.get_name()}: {caps.to_string() if caps else 'no caps'}")
             emit("error", message=f"{error.message} ({debug})")
             self.loop.quit()
         elif message.type == Gst.MessageType.WARNING:
@@ -594,6 +599,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     log(f"worker: starting ({args.encoder}, {args.width}x{args.height} @ {args.fps})")
+    # mpegtsmux gives the reason for a failed stream setup only in its debug log
+    # (seen once on Linux, GStreamer 1.24: "Could not create handler for stream")
+    os.environ.setdefault("GST_DEBUG", "basetsmux:2,mpegtsmux:2")
     Gst = gst.init()
     from gi.repository import GLib
 

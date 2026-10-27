@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fps", type=int, default=60, choices=(30, 60))
     parser.add_argument("--pause", action="store_true", help="wait for Enter at the end")
     args = parser.parse_args(argv)
+    if args.pause and sys.platform == "win32":
+        # the window opened from the tray would otherwise be titled with python.exe's path
+        import ctypes
+
+        ctypes.windll.kernel32.SetConsoleTitleW("lan-streamer self-test")
     code = check(args)
     if args.pause:
         input("\nPress Enter to close this window ...")

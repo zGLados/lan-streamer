@@ -149,8 +149,18 @@ jobs:
           set -x
           sudo apt-get update -q
           sudo -E apt-get install -y -q ./dist/lan-streamer_*.deb gstreamer1.0-tools
-          sleep 5
+          # running = the output streams; a failed first start (seen once with
+          # 0.1.3: mpegtsmux "Could not create handler for stream") is restarted
+          # by systemd after 5 s and shows up below in its log
+          for i in $(seq 1 120); do
+            curl -fs http://localhost:8080/api/status | grep -q '"state":"running"' && break
+            sleep 1
+          done
           systemctl is-active lan-streamer
+          curl -fs http://localhost:8080/api/status | python3 -c "import json, sys; s = json.load(sys.stdin); print(s['version'], s['state'], s['encoder']); assert s['state'] == 'running'"
+          if sudo grep -q 'Could not create handler' /var/lib/lan-streamer/logs/lan-streamer.log; then
+            echo '::warning::the first service start failed in mpegtsmux (restarted by systemd) – see logs-linux: output.log'
+          fi
           systemctl show lan-streamer -p User -p MainPID
           id lanstreamer
           timeout 300 lan-streamer selftest
