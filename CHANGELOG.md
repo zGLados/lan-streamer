@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.5] – 2026-10-27
+
+Full screen on the streaming PC, set from the admin page.
+
 ### Added
 
 - Player page: a "Full screen" button (or a double-click on the video) shows only the stream in full screen with sound, like `/tv`; Esc or a double-click leaves it.
@@ -112,7 +116,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.4...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.5...HEAD
+[0.1.5]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.5
 [0.1.4]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.4
 [0.1.3]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.3
 [0.1.2]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.2
