@@ -82,6 +82,13 @@ def main() -> int:
         expect(form.locator(".msg.bad")).to_be_visible(timeout=60_000)
         step(f"a bad link is refused: {form.locator('.msg').inner_text()!r}")
 
+        page.click("#fullscreen")
+        page.wait_for_function("document.fullscreenElement?.classList.contains('player')", timeout=5_000)
+        assert not page.evaluate("document.getElementById('video').muted"), "full screen left the sound off"
+        page.dblclick(".player")
+        page.wait_for_function("!document.fullscreenElement", timeout=5_000)
+        step("Full screen shows the player with sound, a double-click leaves it")
+
         tv = browser.new_context(viewport={"width": 1280, "height": 720}).new_page()
         tv.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [tv error] {exc}")))
         tv.goto(base + "/tv")

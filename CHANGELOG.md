@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Player page: a "Full screen" button (or a double-click on the video) shows only the stream in full screen with sound, like `/tv`; Esc or a double-click leaves it.
+
 ## [0.1.4] – 2026-10-27
 
 A small release, mainly the first update that installs without an admin prompt (coming from 0.1.3).

@@ -27,6 +27,8 @@
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .player { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
   video { width: 100%; height: 100%; display: block; }
+  .player:fullscreen { border-radius: 0; aspect-ratio: auto; }
+  .player:fullscreen video { object-fit: contain; }
   .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
   .overlay[hidden] { display: none; }
   .controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -80,6 +82,7 @@
       <button class="primary" id="next" hidden title="Only for the admin">Next input</button>
       <button id="sound">Sound on</button>
       <button id="reconnect">Reconnect</button>
+      <button id="fullscreen" title="Only the stream, full screen (Esc or double-click to leave)">Full screen</button>
       <a class="tvlink" id="tvlink" href="/tv" title="Only the stream, full window">TV view</a>
     </div>
     <p class="now" id="now" hidden></p>
@@ -358,6 +361,16 @@ $("sound").onclick = () => {
   video.muted = !video.muted;
   $("sound").textContent = video.muted ? "Sound on" : "Sound off";
 };
+// Full screen like /tv: only the video, sound on (a click allows both).
+function toggleFullscreen() {
+  if (document.fullscreenElement) return document.exitFullscreen().catch(() => {});
+  video.muted = false;
+  video.play().catch(() => {});
+  $("sound").textContent = "Sound off";
+  document.querySelector(".player").requestFullscreen?.().catch(() => {});
+}
+$("fullscreen").onclick = toggleFullscreen;
+document.querySelector(".player").ondblclick = toggleFullscreen;
 
 pollStatus().then(connect);
 openSocket();
