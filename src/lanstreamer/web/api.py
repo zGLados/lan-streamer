@@ -118,6 +118,7 @@ class Backend:
     plugins_changed: Callable[[str], Awaitable[None]] | None = None  # plugin id → restart its inputs
     viewer: Any = None  # the running outputs: viewer_forms(output), viewer_submit, items, remove_item
     updater: Any = None  # lanstreamer.updater.Updater
+    local_page: Any = None  # lanstreamer.localpage.LocalPage (None: no desktop, e.g. the Linux service)
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -187,6 +188,10 @@ class Order(BaseModel):
 
 class UpdateSettings(BaseModel):
     auto_check: bool
+
+
+class LocalPageSettings(BaseModel):
+    mode: str
 
 
 # --- app --------------------------------------------------------------------------------
@@ -544,6 +549,30 @@ def create_app(backend: Backend) -> FastAPI:
         background.add(task)
         task.add_done_callback(background.discard)
         return u.state()
+
+    # --- the page lan-streamer opens on its own PC --------------------------------------
+
+    def local_page() -> Any:
+        if backend.local_page is None:
+            raise HTTPException(501, "this lan-streamer has no desktop to open a page on")
+        return backend.local_page
+
+    @app.get("/api/admin/local-page", dependencies=[Depends(logged_in)])
+    def local_page_state() -> dict[str, Any]:
+        return local_page().state()
+
+    @app.patch("/api/admin/local-page", dependencies=[Depends(logged_in)])
+    def local_page_settings(body: LocalPageSettings) -> dict[str, Any]:
+        try:
+            local_page().set_mode(body.mode)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return local_page().state()
+
+    @app.post("/api/admin/local-page/open", dependencies=[Depends(logged_in)])
+    def local_page_open() -> dict[str, Any]:
+        page = local_page()
+        return {**page.state(), "message": page.open()}
 
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
              dependencies=[Depends(logged_in)])  # fmt: skip

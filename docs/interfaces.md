@@ -146,6 +146,9 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `PATCH /api/admin/update` | `{"auto_check": bool}` – look for new releases on start and twice a day |
 | `POST /api/admin/update/check` | look now → the state above |
 | `POST /api/admin/update/install` | → 202; downloads the release's Windows installer, checks its SHA-256, starts it silently and ends lan-streamer; the installer starts it again. 409 when there is nothing to install (or not on Windows) |
+| `GET /api/admin/local-page` | → `{"mode" (player, fullscreen, off), "modes", "edge", "kiosk_open"}` – what lan-streamer opens on its own PC when it starts (not after an update); 501 without a desktop (Linux service) |
+| `PATCH /api/admin/local-page` | `{"mode": "player" \| "fullscreen" \| "off"}` – fullscreen = only the stream (/tv) in Microsoft Edge's kiosk mode, with sound |
+| `POST /api/admin/local-page/open` | opens it now as set (a kiosk window opened before is closed first) → the state above plus `"message"` |
 | `GET /api/admin/logs/<name>?lines=300` | plain text, the last lines (max. 5000) of `lan-streamer.log`, `output.log`, `output-<id>.log` or `mediamtx.log` |
 
 An output from `GET /api/admin/outputs`:

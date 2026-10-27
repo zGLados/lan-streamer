@@ -192,6 +192,20 @@
     <label style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="u-auto"> Check for updates automatically (twice a day, needs internet)</label>
   </section>
 
+  <section id="lp-section" hidden>
+    <h2>Page on this PC</h2>
+    <p class="muted">What lan-streamer opens on the PC it runs on when it starts (not after an update).</p>
+    <div class="row">
+      <label>On start <select id="lp-mode">
+        <option value="player">Player page</option>
+        <option value="fullscreen">Full screen – only the stream, with sound</option>
+        <option value="off">Nothing</option>
+      </select></label>
+      <button id="lp-open" title="Opens it on this PC now, as set">Open now</button>
+    </div>
+    <p class="muted" id="lp-info"></p>
+  </section>
+
   <section>
     <h2>Admin password</h2>
     <form id="pw-form" class="row">
@@ -308,6 +322,7 @@ async function start() {
   await loadPlugins();
   await reload();
   loadUpdate();
+  loadLocalPage();
   openSocket();
   refreshLog();
 }
@@ -686,6 +701,29 @@ $("output-form").onsubmit = async (e) => {
     toast("Output saved");
     await reload();
   } catch (err) { toast(err.message, true); }
+};
+
+// --- the page on the PC lan-streamer runs on ------------------------------------------
+function renderLocalPage(p) {
+  $("lp-section").hidden = false;
+  $("lp-mode").value = p.mode;
+  let text = p.message || "";
+  if (!p.message && p.mode === "fullscreen") {
+    text = p.edge ? "Full screen uses Microsoft Edge in kiosk mode; Alt+F4 on the PC ends it."
+                  : "Microsoft Edge was not found: the TV view opens instead, a click there goes full screen.";
+  }
+  $("lp-info").textContent = text;
+}
+async function loadLocalPage() {
+  try { renderLocalPage(await api("/api/admin/local-page")); } catch { /* no desktop (Linux service) */ }
+}
+$("lp-mode").onchange = async () => {
+  try { renderLocalPage(await api("/api/admin/local-page", { method: "PATCH", body: { mode: $("lp-mode").value } })); }
+  catch (err) { toast(err.message, true); await loadLocalPage(); }
+};
+$("lp-open").onclick = async () => {
+  try { renderLocalPage(await api("/api/admin/local-page/open", { method: "POST" })); }
+  catch (err) { toast(err.message, true); }
 };
 
 // --- updates of lan-streamer itself ---------------------------------------------------

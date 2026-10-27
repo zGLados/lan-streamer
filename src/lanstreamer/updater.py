@@ -263,7 +263,8 @@ class Updater:
         digest = str(asset.get("digest") or "")
         if not digest.startswith("sha256:"):
             raise RuntimeError("the release gives no SHA-256 for the installer – not installed")
-        relaunch = [str(self.root / "python" / "pythonw.exe"), "-m", "lanstreamer", "--tray"]
+        # after an update the player page is not opened again (owner, 2026-10-27)
+        relaunch = [str(self.root / "python" / "pythonw.exe"), "-m", "lanstreamer", "--tray", "--no-browser"]
         if self.fps:
             relaunch += ["--fps", str(self.fps)]
         if await asyncio.to_thread(self.has_task):

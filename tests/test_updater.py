@@ -155,7 +155,7 @@ def test_an_install_for_all_users_goes_through_the_task(tmp_path, monkeypatch):
     asyncio.run(u.install())
     assert not u.status.error and quits == [1]
     kind, relaunch = launched[0]
-    assert kind == "task" and relaunch[1:] == ["-m", "lanstreamer", "--tray", "--fps", "30"]
+    assert kind == "task" and relaunch[1:] == ["-m", "lanstreamer", "--tray", "--no-browser", "--fps", "30"]
     assert not (tmp_path / "updates").exists()
 
 

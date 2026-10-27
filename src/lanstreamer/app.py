@@ -21,7 +21,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,6 +35,7 @@ from lanstreamer.core.runtime import OutputRuntime
 from lanstreamer.core.simworker import SimulatedWorker
 from lanstreamer.core.store import NotFound, Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
+from lanstreamer.localpage import LocalPage
 from lanstreamer.media import encoders
 from lanstreamer.plugins import choice
 from lanstreamer.plugins.registry import discover
@@ -277,6 +277,7 @@ class App:
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
         self.updater: Updater | None = None  # made with the web backend
+        self.local_page: LocalPage | None = None  # likewise
 
     @property
     def first(self) -> Output:
@@ -386,12 +387,14 @@ class App:
     def backend(self) -> Backend:
         store = self.store or Store(paths.data_dir() / "lanstreamer.db")
         self.updater = Updater(BUILD, store, paths.data_dir(), self.quit.set, fps=self.args.fps)
+        if LocalPage.available():
+            self.local_page = LocalPage(store, f"http://localhost:{self.args.port}", paths.data_dir() / "kiosk-browser")
         return Backend(
             status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
-            viewer=_Viewers(self), updater=self.updater,
+            viewer=_Viewers(self), updater=self.updater, local_page=self.local_page,
         )  # fmt: skip
 
     async def plugin_changed(self, plugin_id: str) -> None:
@@ -526,8 +529,8 @@ async def _serve(app: App, args: argparse.Namespace, url: str, icon: tray.Tray |
                 raise RuntimeError("the web server did not start")
             await asyncio.sleep(0.05)
         log.info("Open %s  (%s to stop)", url, "tray menu" if icon else "Ctrl+C")
-        if not args.no_browser and not args.smoke_test:
-            webbrowser.open(url)
+        if app.local_page is not None and not args.no_browser and not args.smoke_test:
+            app.local_page.open()  # as set on the admin page: player page, full screen or nothing
         if icon:
             threading.Thread(target=_refresh_tray, args=(icon, app), daemon=True).start()
         if app.updater is not None and not args.smoke_test and not args.source:

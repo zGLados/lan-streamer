@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - Player page: a "Full screen" button (or a double-click on the video) shows only the stream in full screen with sound, like `/tv`; Esc or a double-click leaves it.
+- Admin page → "Page on this PC": what lan-streamer opens on the PC it runs on when it starts – the player page (as before), only the stream in full screen with sound (Microsoft Edge in kiosk mode, no click needed; Alt+F4 ends it) or nothing. "Open now" applies it at once.
+
+### Changed
+
+- After an update lan-streamer starts again without opening the browser. (Takes effect from the update after this version: the restart is done by the version that was running.)
 
 ## [0.1.4] – 2026-10-27
 

@@ -162,6 +162,18 @@ def main() -> int:
             expect(page.locator("#u-current")).not_to_have_text("–", timeout=10_000)
             step(f"updates section shows the installed version {page.locator('#u-current').text_content()}")
 
+            if page.locator("#lp-section").is_visible():  # hidden without a desktop (Linux service)
+                expect(page.locator("#lp-mode")).to_have_value("player")
+                page.select_option("#lp-mode", "fullscreen")
+                expect(page.locator("#lp-info")).to_contain_text("Edge", timeout=10_000)
+                page.reload()
+                expect(page.locator("#lp-mode")).to_have_value("fullscreen", timeout=10_000)
+                page.select_option("#lp-mode", "player")
+                page.wait_for_timeout(500)
+                step("page on this PC: set to full screen, kept over a reload, set back")
+            else:
+                step("page on this PC: no desktop, section hidden")
+
             page.click("#o-add")  # the prompt is accepted with its suggestion "Output 2"
             expect(page.locator("#toast")).to_contain_text('Output "Output 2" added', timeout=30_000)
             expect(page.locator("#o-select")).to_have_value("output-2")

@@ -109,8 +109,8 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 ; Update from the admin page (updater.py): the installer runs silently with /LAUNCH=1
 ; and starts lan-streamer again afterwards – as the user who started the update, not
 ; as admin – with the frame rate it ran with (/LAUNCHFPS=30, default 60).
-Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('60')
-Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --fps 30"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('30')
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --no-browser"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('60')
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m lanstreamer --tray --no-browser --fps 30"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate('30')
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Unregister"; Flags: runhidden; RunOnceId: "update-task"; Check: IsAdminInstallMode
