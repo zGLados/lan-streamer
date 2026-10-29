@@ -49,6 +49,9 @@ WEBRTC_PORT = 8889
 # someone publishes (the shipped default config has it off, env vars override it).
 MEDIAMTX_API = "127.0.0.1:9997"
 SHUTDOWN_S = 5  # open web connections get this long to finish when lan-streamer stops
+WORKER_RESTART_S = (1, 5, 15, 60)  # a hung or ended output worker starts again after this
+WORKER_CALM_S = 600.0  # restarts older than this do not count for the delay any more
+STATS_STALE_S = 6.0  # the worker sends stats every 2 s; none for this long: no frames
 
 log = logging.getLogger("lanstreamer")
 
@@ -78,6 +81,7 @@ class Status:
     inputs: list[dict[str, Any]] = field(default_factory=list)
     switches: int = 0
     failed_switches: int = 0
+    worker_restarts: int = 0  # output worker hung or ended and was started again
     last_error: str = ""
     restream: str = "off"  # off, connecting, live, retrying in … s: <error>
     debug_clock: bool = False  # the player page shows its local clock to compare
@@ -113,6 +117,10 @@ class Output:
         self.scheduler: asyncio.Task | None = None
         self.restreamer: Restreamer | None = None
         self.log_file: Any = subprocess.DEVNULL
+        self.worker_gen = 0  # events of a replaced worker are ignored
+        self.restarting = False
+        self.restart_times: list[float] = []
+        self.stats_at = 0.0  # when the worker last sent stats (monotonic)
 
     @property
     def log_name(self) -> str:
@@ -123,15 +131,10 @@ class Output:
     async def start(self) -> None:
         out = self.cfg
         log.info("Output %s: %dx%d @ %d fps", out.name, out.width, out.height, out.fps)
-        if self.app.args.simulate:
-            self.status.encoder = "simulated"
-            self.worker = SimulatedWorker(self._on_worker_event, out.fps)
-            await self.worker.start()
-        else:
-            await self._start_worker(out)
+        await self._start_worker(out)
         await self._debug_clock(out.debug_clock)
         self.runtime = OutputRuntime(out, self.app.plugins(), paths.data_dir(), self.worker,
-                                     on_change=self._on_change)  # fmt: skip
+                                     on_change=self._on_change, on_stuck=self.restart_worker)  # fmt: skip
         log.info("Starting %d inputs of %s", len(out.inputs), out.name)
         await self.runtime.start()
         self.scheduler = asyncio.create_task(self.runtime.run())
@@ -164,11 +167,16 @@ class Output:
         self.restreamer.start()
 
     async def _start_worker(self, out: OutputConfig) -> None:
+        if self.app.args.simulate:
+            self.status.encoder = "simulated"
+            self.worker = SimulatedWorker(self._worker_events(), out.fps)
+            await self.worker.start()
+            return
         spec = await self.app.encoder(out.encoder, out.fps)
         self.status.encoder = f"{spec.element} ({spec.vendor})"
         bitrate = out.bitrate_kbps or (8000 if out.fps > 30 else 6000)
         log.info("Starting output worker for %s (%s, %d kbit/s)", out.name, spec.element, bitrate)
-        if self.app.logs is not None:
+        if self.app.logs is not None and self.log_file is subprocess.DEVNULL:  # a restart appends
             self.log_file = open(self.app.logs / self.log_name, "w")  # noqa: SIM115, ASYNC230 – closed in stop()
         self.worker = OutputWorker(
             [
@@ -177,12 +185,18 @@ class Output:
                 "--width", str(out.width), "--height", str(out.height),
                 "--fps", str(out.fps), "--bitrate", str(bitrate),
             ],
-            self._on_worker_event, stderr=self.log_file,
+            self._worker_events(), stderr=self.log_file,
         )  # fmt: skip
         try:
             await self.worker.start()
         except WorkerError as exc:
             raise RuntimeError(str(exc)) from exc
+
+    def _worker_events(self) -> Any:
+        """The event handler for a new worker; a replaced worker's events are dropped."""
+        self.worker_gen += 1
+        gen = self.worker_gen
+        return lambda event: self._on_worker_event(event) if gen == self.worker_gen else None
 
     def _on_worker_event(self, event: dict[str, Any]) -> None:
         kind = event.get("event")
@@ -194,21 +208,73 @@ class Output:
                 self.status.ts_table = event["pmt"]
             log.info("MPEG-TS %s: %s", "sent" if event["sent"] else "held back", event["pmt"])
         elif kind == "stats":
-            self.status.fps = event["fps"]
+            self.status.fps, self.stats_at = event["fps"], time.monotonic()
         elif kind == "error":
             self.status.last_error = event["message"]
             log.error("Output error (%s): %s", self.cfg.name, event["message"])
-        elif kind == "exited" and self.status.state not in ("stopping", "removed"):
-            self.status.state = "failed"
-            self.app.failed.set()
+        elif kind == "stalled":
+            self.restart_worker(f"output worker hung ({event.get('seconds', '?')} s without an answer)")
+        elif kind == "exited":
+            self.restart_worker(f"output worker ended: {event.get('message') or 'unknown reason'}")
         elif self.runtime is not None:
             self.runtime.on_worker_event(event)
+
+    def restart_worker(self, reason: str) -> None:
+        """Replaces a hung or ended worker; only this output is affected.
+
+        The app used to end then (Windows CI 2026-10-27: one worker hung after a
+        switch and the whole output stood still). The thread dump of a hang is in
+        the output log, the restart appends to it.
+        """
+        if self.restarting or self.status.state in ("starting", "failed", "stopping", "removed"):
+            return
+        self.restarting = True
+        if self.runtime is not None:
+            self.runtime.worker_lost()
+        now = time.monotonic()
+        self.restart_times = [t for t in self.restart_times if now - t < WORKER_CALM_S] + [now]
+        delay = WORKER_RESTART_S[min(len(self.restart_times), len(WORKER_RESTART_S)) - 1]
+        self.status.state, self.status.last_error = "restarting", reason
+        self.status.worker_restarts += 1
+        log.error("Output %s: %s – restarting its worker in %s s", self.cfg.name, reason, delay)
+        self.app.spawn(self._restart_worker(delay))
+        self.app.changes.notify()
+
+    async def _restart_worker(self, delay: float) -> None:
+        old, self.worker_gen = self.worker, self.worker_gen + 1  # drop the old worker's events now
+        try:
+            if isinstance(old, OutputWorker):
+                await old.kill()
+            elif old is not None:
+                await old.stop()
+            await asyncio.sleep(delay)
+            if self.status.state != "restarting":
+                return  # stopped or removed meanwhile
+            await self._start_worker(self.cfg)
+            if self.status.state != "restarting":  # stopped while it started
+                await self.worker.stop()
+                return
+            await self._debug_clock(self.cfg.debug_clock)
+            if self.runtime is not None:
+                self.runtime.replace_worker(self.worker)
+            self.status.state = "running"
+            log.info("Output %s: worker running again", self.cfg.name)
+        except Exception as exc:  # noqa: BLE001 – try again later
+            log.error("Output %s: worker did not start again: %s", self.cfg.name, exc)
+            self.restarting = False
+            self.restart_worker(f"output worker did not start again: {exc}")
+            return
+        finally:
+            self.app.changes.notify()
+        self.restarting = False
 
     def _on_change(self) -> None:
         self.refresh_status()
         self.app.changes.notify()
 
     def refresh_status(self) -> None:
+        if self.status.state == "running" and time.monotonic() - self.stats_at > STATS_STALE_S:
+            self.status.fps = 0.0  # no stats: the worker counts no frames (or hangs)
         if self.runtime is None:
             return
         snapshot = self.runtime.status()
@@ -237,10 +303,13 @@ class Output:
 
     def smoke_ok(self) -> bool:
         s = self.status
-        ok = s.switches >= 1 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
+        self.refresh_status()  # fps 0 if the stats stopped
+        ok = (s.switches >= 1 and s.failed_switches == 0 and s.fps >= 10 and not s.last_error
+              and s.worker_restarts == 0)  # fmt: skip
         log.info(
-            "Smoke test %s (%s): %d switches, %d failed, %.1f fps (target %d)",
+            "Smoke test %s (%s): %d switches, %d failed, %.1f fps (target %d), %d worker restarts",
             "passed" if ok else "FAILED", self.cfg.name, s.switches, s.failed_switches, s.fps, s.target_fps,
+            s.worker_restarts,
         )  # fmt: skip
         return ok
 
@@ -273,7 +342,6 @@ class App:
         self.mediamtx_log: Any = subprocess.DEVNULL  # replaced by a log file in run()
         self._encoders: dict[tuple[str, int], Any] = {}
         self.quit = threading.Event()  # set by the tray menu
-        self.failed = threading.Event()
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
         self.updater: Updater | None = None  # made with the web backend
@@ -384,6 +452,11 @@ class App:
             await output.stop("removed")
         self.changes.notify()
 
+    def spawn(self, coro) -> None:
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     def backend(self) -> Backend:
         store = self.store or Store(paths.data_dir() / "lanstreamer.db")
         self.updater = Updater(BUILD, store, paths.data_dir(), self.quit.set, fps=self.args.fps)
@@ -407,7 +480,7 @@ class App:
     async def run(self, web: asyncio.Task | None = None) -> int:
         deadline = time.monotonic() + self.args.smoke_test if self.args.smoke_test else None
         stop_file = Path(self.args.smoke_stop_file) if getattr(self.args, "smoke_stop_file", None) else None
-        while not self.failed.is_set():
+        while True:
             if self.quit.is_set() or (web is not None and web.done()):
                 return 0  # tray "Quit" or Ctrl+C (the web server stops on it)
             if deadline and (time.monotonic() > deadline or (stop_file and stop_file.exists())):
@@ -416,9 +489,6 @@ class App:
             for output in list(self.outputs.values()):
                 output.refresh_status()
             await asyncio.sleep(0.2)
-        failed = next((o for o in self.outputs.values() if o.status.state == "failed"), self.first)
-        log.error("Output worker of %s stopped: %s", failed.cfg.name, failed.status.last_error or "unknown reason")
-        return 1
 
     async def stop(self) -> None:
         for output in list(self.outputs.values()):

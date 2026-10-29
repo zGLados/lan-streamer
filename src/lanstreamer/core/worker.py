@@ -75,6 +75,13 @@ class OutputWorker:
             self.proc.kill()
             await self.proc.wait()
 
+    async def kill(self) -> None:
+        """Ends a worker that hangs (it cannot answer "stop" any more)."""
+        if self.running:
+            assert self.proc is not None
+            self.proc.kill()
+            await self.proc.wait()
+
     async def _send(self, message: dict[str, Any]) -> None:
         if not self.running:
             raise WorkerError(self.error or "output worker is not running")

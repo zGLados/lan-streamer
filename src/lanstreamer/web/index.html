@@ -211,7 +211,8 @@ function render(next) {
     $("tstable").title = status.ts_table || "";
     $("format").textContent = `${status.resolution} @ ${status.target_fps}`;
     $("fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
-    $("switches").textContent = `${status.switches}` + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");
+    $("switches").textContent = `${status.switches}` + (status.failed_switches ? ` (${status.failed_switches} failed)` : "")
+    + (status.worker_restarts ? ` · worker restarted ${status.worker_restarts}×` : "");
     const u = status.uptime_s;
     $("uptime").textContent = `${Math.floor(u / 3600)}:${pad(Math.floor(u / 60) % 60)}:${pad(u % 60)}`;
     $("sources").innerHTML = "";

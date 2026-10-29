@@ -395,7 +395,8 @@ function renderStatus() {
   $("s-encoder").textContent = status.encoder || "–";
   $("s-format").textContent = `${status.resolution} @ ${status.target_fps}`;
   $("s-fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
-  $("s-switches").textContent = status.switches + (status.failed_switches ? ` (${status.failed_switches} failed)` : "");
+  $("s-switches").textContent = status.switches + (status.failed_switches ? ` (${status.failed_switches} failed)` : "")
+    + (status.worker_restarts ? ` · worker restarted ${status.worker_restarts}×` : "");
   $("s-restream").textContent = status.restream || "off";
   $("s-restream").style.color = status.restream === "live" ? "var(--ok)" : status.restream?.startsWith("retrying") ? "var(--bad)" : "";
   for (const input of status.inputs || []) {

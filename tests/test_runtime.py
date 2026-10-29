@@ -306,3 +306,36 @@ def test_an_input_removed_before_its_switch_completed_is_replaced(tmp_path):
     runtime, worker = asyncio.run(run(only_a, tmp_path, 0.6, during=during, worker=SlowWorker()))
     assert worker.plays == ["a", "b", "a"]  # a replaces the removed input's picture
     assert runtime.on_air is not None and runtime.on_air.id == "a"
+
+
+def test_a_switch_the_worker_never_answers_gives_up_and_reports_the_worker(tmp_path, monkeypatch):
+    # Windows CI 2026-10-27: the worker hung, the runtime waited for ever for "playing"
+    monkeypatch.setattr(rt, "PENDING_TIMEOUT_S", 0.3)
+
+    class MuteWorker(FakeWorker):
+        async def play(self, play_id, label, source):
+            if play_id.startswith("b#"):
+                self.plays.append("b")
+                return  # never answers
+            await super().play(play_id, label, source)
+
+    stuck = []
+    cfg = OutputConfig(inputs=[pattern("a", 10)])
+
+    async def during(runtime, worker):
+        runtime.on_stuck = stuck.append
+        await asyncio.sleep(0.4)
+        await runtime.apply(OutputConfig(inputs=[pattern("a", 10), pattern("b", 20)]))
+        await asyncio.sleep(0.8)
+        # the app restarts the worker; the fresh one plays what should be on air
+        fresh = FakeWorker()
+        fresh.runtime = runtime
+        runtime.replace_worker(fresh)
+        await asyncio.sleep(0.3)
+        assert fresh.plays == ["a"]  # b sits out its cooldown
+
+    runtime, worker = asyncio.run(run(cfg, tmp_path, 0.1, worker=MuteWorker(), during=during))
+    assert worker.plays == ["a", "b"]  # a stayed on air meanwhile
+    assert len(stuck) == 1 and "no answer" in stuck[0]
+    assert runtime.failed_switches == 1
+    assert runtime.on_air is not None and runtime.on_air.id == "a"

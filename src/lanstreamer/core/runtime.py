@@ -29,6 +29,7 @@ FAILED_COOLDOWN_S = 30.0  # an input whose source failed sits out this long
 RELEASE_POLL_S = 1.0
 RESTART_BACKOFF_S = (2, 5, 15, 60)
 STARTUP_GRACE_S = 5.0  # wait at most this long for every input's first activity report
+PENDING_TIMEOUT_S = 30.0  # the worker answers a play within 15 s (+ fade); after this it hangs
 OVERLAY_TITLE_MAX = 70
 NO_OVERLAY = ("", "")
 
@@ -84,6 +85,7 @@ class OutputRuntime:
         worker: Worker,
         on_change: Callable[[], None] = lambda: None,
         clock: Callable[[], float] = time.monotonic,
+        on_stuck: Callable[[str], None] = lambda _reason: None,
     ):
         self.cfg = cfg
         self.plugins = plugins
@@ -91,9 +93,12 @@ class OutputRuntime:
         self.worker = worker
         self.on_change = on_change
         self.clock = clock
+        self.on_stuck = on_stuck  # the worker did not answer a switch: restart it
         self.inputs = {i.id: InputRuntime(i, plugins.get(i.plugin)) for i in cfg.inputs}
         self.on_air: OnAir | None = None
         self.pending: tuple[str, str] | None = None  # (play id, input id)
+        self.pending_since = 0.0
+        self.worker_ok = True  # False while the app restarts a hung or ended worker
         self.pending_kind = ""  # source kind of the pending play ("uri", "card", ...)
         self.on_air_kind = ""
         self.overlay_text: tuple[str, str] | None = NO_OVERLAY  # last sent; None: send anyway
@@ -115,7 +120,10 @@ class OutputRuntime:
 
     async def run(self) -> None:
         while not self._stopped:
-            await self.tick()
+            try:
+                await self.tick()
+            except Exception:  # the output must keep switching
+                log.exception("Output %s: scheduling failed", self.cfg.name)
             await asyncio.sleep(TICK_S)
 
     async def stop(self) -> None:
@@ -246,9 +254,11 @@ class OutputRuntime:
         now = self.clock()
         for inp in self.inputs.values():
             inp.debounce.update(inp.raw_active, now)
-        if not self._is_settled(now):
+        if not self._is_settled(now) or not self.worker_ok:
             return
         await self._poll_release(now)
+        if self.pending is not None and now - self.pending_since > PENDING_TIMEOUT_S:
+            self._give_up_switch()
         if self.pending is not None:
             return  # a switch is in progress
         target = decide(self.states(now), self.on_air, now)
@@ -316,8 +326,35 @@ class OutputRuntime:
         inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
         self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
+        self.pending_since = self.clock()
         inp.releasable = False  # until the plugin says otherwise
         await self.worker.play(play_id, inp.cfg.name, source)
+
+    def _give_up_switch(self) -> None:
+        """The worker never answered a play (CI 2026-10-27: its main loop hung).
+
+        Counts it as a failed switch, so the scheduler goes on, and reports the
+        worker as stuck (the app restarts it).
+        """
+        assert self.pending is not None
+        play_id = self.pending[0]
+        reason = f"no answer from the output worker within {PENDING_TIMEOUT_S:.0f} s"
+        log.error("Switch to %s: %s", play_id, reason)
+        self.on_worker_event({"event": "switch_failed", "id": play_id, "reason": reason})
+        self.pending = None  # also if the input was removed meanwhile
+        self.on_stuck(reason)
+
+    def worker_lost(self) -> None:
+        """The worker hung or ended: wait for replace_worker, send it nothing."""
+        self.worker_ok, self.pending = False, None
+
+    def replace_worker(self, worker: Worker) -> None:
+        """A fresh worker after the old one hung or ended: it shows only the
+        background, so whatever should be on air is played again on the next tick."""
+        self.worker, self.worker_ok = worker, True
+        self.pending, self.on_air, self.on_air_kind = None, None, ""
+        self.overlay_text = NO_OVERLAY
+        self.on_change()
 
     # --- overlay (lower third) ----------------------------------------------------
 
@@ -344,6 +381,8 @@ class OutputRuntime:
 
     def _send_overlay(self, text: tuple[str, str], again: bool) -> None:
         """again: show it once more even if unchanged (a new switch)."""
+        if not self.worker_ok:
+            return  # the fresh worker gets it after its first switch
         if text == self.overlay_text and (not again or text == NO_OVERLAY or self.cfg.overlay == "always"):
             return
         self.overlay_text = text

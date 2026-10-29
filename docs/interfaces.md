@@ -77,14 +77,14 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
      "fallback": false, "override": "none", "state": "on air", "error": "", "title": "Funny cat",
      "info": "2 waiting · yt-dlp 2026.10.21", "viewer_form": true}
   ],
-  "switches": 12, "failed_switches": 0, "last_error": "",
+  "switches": 12, "failed_switches": 0, "worker_restarts": 0, "last_error": "",
   "restream": "off", "debug_clock": false, "whep_port": 8889, "whep_path": "out1",
   "started": 1793038002.6, "uptime_s": 3600, "viewer_version": 7,
   "outputs": [{"id": "out1", "name": "Output 1", "current": "Short-video submissions"}]
 }
 ```
 
-- `state` of the output: `starting`, `running`, `failed`, `stopping`.
+- `state` of the output: `starting`, `running`, `restarting` (its output worker hung or ended and starts again; `last_error` says why, `worker_restarts` counts it), `failed`, `stopping`.
 - `state` of an input: `on air`, `active`, `inactive`, `cooling down` (its source failed, it sits out 30 s), `error` (the plugin process failed; `error` says why).
 - `debug_clock`: the output shows the debug clock; the player page then shows its local clock next to it (the difference is the delay).
 - `viewer_version` grows whenever a viewer list changes – reload `/api/viewer` then.
@@ -246,6 +246,7 @@ How a source dict reaches the output worker (`source_to_dict`): `FileSource` bec
 | `{"event": "switch_failed", "id", "reason"}` | it never delivered a frame; the old source stays → `"failed"` |
 | `{"event": "ended", "id"}` / `{"event": "failed", "id", "reason"}` | the source on air ended / broke → `"ended"` / `"failed"` |
 | `{"event": "stats", "fps"}`, `{"event": "stream", "caps"}`, `{"event": "ts_table", …}`, `{"event": "error", "message"}` | for the status and diagnostics |
+| `{"event": "stalled", "seconds"}` | the worker's main loop has not answered for 5 s; the stacks of all its threads are in its output log. The core kills the worker and starts a new one (as when it ends), which plays what should be on air again. |
 
 The pipeline itself never stops while the worker runs: background layer + input slots → compositor/audiomixer → H.264 (constrained baseline) + Opus → MPEG-TS → SRT to MediaMTX.
 

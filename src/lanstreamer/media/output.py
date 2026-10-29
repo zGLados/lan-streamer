@@ -30,11 +30,14 @@ Protocol, one JSON object per line ("id" identifies one play command):
             {"event": "stats", "fps": 59.9} {"event": "error", "message": "..."}
             {"event": "stream", "caps": "video/x-h264, profile=..., level=..."}
             {"event": "ts_table", "pmt": "PMT v0: PID 65 H.264 ...", "sent": true}
+            {"event": "stalled", "seconds": 5.2}   the main loop answers no more (see _watch);
+                every thread's stack went to stderr (output.log)
 """
 
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import os
 import re
@@ -53,6 +56,8 @@ START_TIMEOUT_S = 15.0
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
 CARD_COLOR = 0xFF111217  # the standby picture's background
+HEARTBEAT_S = 0.5
+STALL_S = 5.0  # the main loop silent this long: report it (_watch)
 
 
 def emit(event: str, **data) -> None:
@@ -99,6 +104,8 @@ class Output:
         self.clock_on = False  # debug clock in the picture (debug_clock)
         self.tables_until: float | None = None
         self.reported_sent = False
+        self.heartbeat = time.monotonic()  # the main loop's last sign of life
+        self.watching = False
         self.pipeline = self._build()
 
     # --- pipeline ---------------------------------------------------------------
@@ -518,6 +525,38 @@ class Output:
         emit("stats", fps=round(fps, 1))
         return True
 
+    # --- watchdog -----------------------------------------------------------------
+
+    def _beat(self) -> bool:
+        self.heartbeat = time.monotonic()
+        return True
+
+    def _watch(self) -> None:
+        """Reports a main loop that hangs (seen once on Windows CI after a switch:
+        no answers, no overlay any more, the picture went on). Dumps every
+        thread's stack into output.log once per hang; the core restarts the worker."""
+        stalled = False
+        while self.watching:
+            time.sleep(1.0)
+            silent = time.monotonic() - self.heartbeat
+            if silent < STALL_S:
+                if stalled:
+                    log(f"watchdog: main loop answers again after {silent:.1f} s")
+                stalled = False
+                continue
+            if stalled or not self.watching:  # shutting down: set_state(NULL) may take a while
+                continue
+            stalled = True
+            current = self.current.label if self.current else "background"
+            pending = self.pending.label if self.pending else "none"
+            log(f"watchdog: main loop silent for {silent:.1f} s (on air: {current}, pending: {pending});"
+                " stacks of all threads:")  # fmt: skip
+            try:
+                faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+            except Exception as exc:  # noqa: BLE001 – stderr may not be a real file
+                log(f"watchdog: cannot dump stacks: {exc}")
+            emit("stalled", seconds=round(silent, 1))
+
     # --- control ----------------------------------------------------------------
 
     def _read_commands(self) -> None:
@@ -553,6 +592,9 @@ class Output:
         self._stats_since = time.monotonic()
         self.GLib.timeout_add(15, self._update_overlay)
         self.GLib.timeout_add(2000, self._report_stats)
+        self.heartbeat, self.watching = time.monotonic(), True
+        self.GLib.timeout_add(int(HEARTBEAT_S * 1000), self._beat)
+        threading.Thread(target=self._watch, daemon=True).start()
         threading.Thread(target=self._read_commands, daemon=True).start()
         emit("ready", encoder=self.args.encoder)
         log(f"worker: running ({result})")
@@ -560,6 +602,7 @@ class Output:
             self.loop.run()
         except KeyboardInterrupt:
             pass
+        self.watching = False
         self.pipeline.set_state(self.Gst.State.NULL)
         return 0
 

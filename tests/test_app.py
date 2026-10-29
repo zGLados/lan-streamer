@@ -30,9 +30,66 @@ def test_worker_events_update_status():
     out._on_worker_event({"event": "stream", "caps": "video/x-h264, profile=(string)constrained-baseline"})
     out._on_worker_event({"event": "ts_table", "pmt": "PMT v0: PID 65 H.264", "sent": True})
     assert (out.status.fps, out.status.ts_table) == (59.8, "PMT v0: PID 65 H.264")
-    assert not app.failed.is_set()
-    out._on_worker_event({"event": "exited", "message": "boom"})
-    assert app.failed.is_set() and out.status.state == "failed"
+
+
+def _running_app(tmp_path, monkeypatch):
+    from lanstreamer import app as app_module
+    from lanstreamer import paths
+    from lanstreamer.core.store import Store
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(app_module, "WORKER_RESTART_S", (0, 0))
+    store = Store(tmp_path / "db")
+    return App(Args(), store.outputs(), store)
+
+
+async def _until(check, seconds=5.0):
+    import asyncio
+
+    for _ in range(int(seconds / 0.05)):
+        if check():
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("timed out")
+
+
+def test_a_hung_or_ended_worker_is_restarted_and_its_input_plays_again(tmp_path, monkeypatch):
+    # Windows CI 2026-10-27: a worker's main loop hung; the app used to end (or wait for ever)
+    import asyncio
+
+    app = _running_app(tmp_path, monkeypatch)
+    out = app.first
+
+    async def steps():
+        await app.start()
+        await _until(lambda: out.status.switches >= 1)
+        for event in ({"event": "stalled", "seconds": 5.1}, {"event": "exited", "message": "boom"}):
+            old_events = out.worker.on_event
+            switches = out.status.switches
+            out._on_worker_event(event)
+            out._on_worker_event({"event": "exited"})  # the killed worker ends too: one restart
+            assert out.status.state == "restarting" and not out.runtime.worker_ok
+            await _until(lambda: out.status.state == "running")
+            assert out.runtime.worker is out.worker
+            await _until(lambda n=switches: out.status.switches > n)  # on air again
+            old_events({"event": "exited"})  # the replaced worker's events are ignored
+            assert out.status.state == "running"
+        assert out.status.worker_restarts == 2 and not out.smoke_ok()
+        await app.stop()
+
+    asyncio.run(steps())
+
+
+def test_the_smoke_test_notices_missing_stats(monkeypatch):
+    from lanstreamer import app as app_module
+
+    app = App(Args(), [demo_output(60, 20, [])])
+    out = app.first
+    out.status.state, out.status.switches = "running", 3
+    out._on_worker_event({"event": "stats", "fps": 59.8})
+    assert out.smoke_ok()
+    monkeypatch.setattr(app_module, "STATS_STALE_S", -1.0)  # the last stats are too old now
+    assert not out.smoke_ok() and out.status.fps == 0.0
 
 
 def test_status_lists_the_inputs_and_the_outputs():

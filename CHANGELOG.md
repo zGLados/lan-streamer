@@ -4,9 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-## [0.1.5] – 2026-10-27
+## [0.1.5] – 2026-10-29
 
-Full screen on the streaming PC, set from the admin page.
+Full screen on the streaming PC, set from the admin page, and an output that repairs itself when its video process hangs.
 
 ### Added
 
@@ -16,6 +16,8 @@ Full screen on the streaming PC, set from the admin page.
 ### Changed
 
 - After an update lan-streamer starts again without opening the browser. (Takes effect from the update after this version: the restart is done by the version that was running.)
+- An output whose video process hangs (no answer for 5 s) or ends is restarted on its own and plays what should be on air again; the other outputs keep running. Before, lan-streamer stopped completely (or that output stood still). The player and admin pages show "worker restarted N×", and the output log holds where the process hung.
+- A switch the video process never answers counts as failed after 30 s instead of blocking the output for ever.
 
 ## [0.1.4] – 2026-10-27
 
