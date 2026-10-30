@@ -48,11 +48,14 @@ class FileSource:
 
     cut: switch to it without crossfade, so nothing of its start is lost
     (e.g. a video that follows an announcement card).
+    audio_path: the sound from a second file, when picture and sound come
+    separately; path then gives only the picture.
     """
 
     path: str
     cut: bool = False
     kind: Literal["file"] = "file"
+    audio_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,7 +89,9 @@ MediaSource = TestSource | UriSource | FileSource | ImageSource | CardSource
 def source_to_dict(source: MediaSource) -> dict[str, Any]:
     """The form the core sends to the output worker."""
     if isinstance(source, FileSource):
-        uri = {"kind": "uri", "uri": Path(source.path).resolve().as_uri()}
+        uri: dict[str, Any] = {"kind": "uri", "uri": Path(source.path).resolve().as_uri()}
+        if source.audio_path:
+            uri["audio_uri"] = Path(source.audio_path).resolve().as_uri()
         return {**uri, "cut": True} if source.cut else uri
     if isinstance(source, ImageSource):
         return {"kind": "image", "path": str(Path(source.path).resolve())}

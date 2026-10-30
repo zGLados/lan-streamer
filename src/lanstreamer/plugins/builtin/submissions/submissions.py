@@ -90,7 +90,7 @@ class Plugin(InputPlugin[Settings]):
             elif entry["state"] == "loading":
                 self.queue.append(entry)
                 self._spawn(self._download(entry))
-        known = {e.get("file") for e in self.queue}
+        known = {e.get(key) for e in self.queue for key in ("file", "audio")}
         for file in self.videos.iterdir():
             if str(file) not in known:
                 self._delete(file)  # left over from a crash or still locked last time
@@ -176,7 +176,7 @@ class Plugin(InputPlugin[Settings]):
             return CardSource(entry["title"], heading="Up next",
                               subtitle=f"submitted by {entry['name']}" if entry["name"] else "")  # fmt: skip
         self.card, self.playing = None, entry["id"]
-        return FileSource(entry["file"], cut=self.settings.card_s > 0)
+        return FileSource(entry["file"], cut=self.settings.card_s > 0, audio_path=entry.get("audio", ""))
 
     async def can_release(self) -> bool:
         return self.released
@@ -211,22 +211,25 @@ class Plugin(InputPlugin[Settings]):
 
     async def _download(self, entry: dict[str, Any]) -> None:
         try:
-            file = await self.ytdlp.download(entry["link"], self.videos, entry["id"])
+            file, audio = await self.ytdlp.download(entry["link"], self.videos, entry["id"])
         except Exception as exc:  # noqa: BLE001
             self.ctx.log.warning("download failed for %s: %s", entry["link"], exc)
             self._drop(entry["id"])
             return
         if entry in self.queue:
-            entry["state"], entry["file"] = "ready", str(file)
+            entry["state"], entry["file"], entry["audio"] = "ready", str(file), str(audio) if audio else ""
             self._save()
-        else:
-            self._delete(file)  # removed while it was loading
+        else:  # removed while it was loading
+            self._delete(file)
+            if audio:
+                self._delete(audio)
 
     def _drop(self, item_id: str | None) -> None:
         for entry in [e for e in self.queue if e["id"] == item_id]:
             self.queue.remove(entry)
-            if entry["file"]:
-                self._delete(Path(entry["file"]))
+            for name in (entry["file"], entry.get("audio")):
+                if name:
+                    self._delete(Path(name))
         self._save()
 
     def _delete(self, file: Path) -> None:

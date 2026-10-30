@@ -118,25 +118,39 @@ class YtDlp:
 
         return await asyncio.wait_for(asyncio.to_thread(run), 60)
 
-    async def download(self, link: str, folder: Path, name: str) -> Path:
+    async def download(self, link: str, folder: Path, name: str) -> tuple[Path, Path | None]:
+        """The video file, and a second file with the sound if picture and sound come separately."""
         folder.mkdir(parents=True, exist_ok=True)
-        if FAKE:
+        if FAKE:  # "split" in a link: picture and sound separately
             target = folder / f"{name}.mp4"
             target.write_bytes(b"")
-            return target
+            if "split" not in link:
+                return target, None
+            sound = folder / f"{name}.audio.m4a"
+            sound.write_bytes(b"")
+            return target, sound
         yt_dlp = await self.module()
-        options = {
-            "quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True,
-            # one file with picture and sound (no ffmpeg needed to merge), at most 1080p
-            "format": "b[ext=mp4][height<=1080]/b[height<=1080]/b",
-            "outtmpl": str(folder / f"{name}.%(ext)s"),
-        }  # fmt: skip
+        options = {"quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True}
+        # 1080p at most, also upright (Shorts: 1080x1920). YouTube often has no file with both,
+        # so separate picture and sound come first (no ffmpeg needed: the output plays them together).
+        fit = "[width<=1920][height<=1920]"
+        chooser = {**options, "format": f"bv*{fit}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*{fit}+ba"
+                                        f"/b[ext=mp4]{fit}/b{fit}/b"}  # fmt: skip
 
-        def run() -> Path:
-            with yt_dlp.YoutubeDL(options) as ydl:
+        def fetch(format_id: str, stem: str) -> Path:
+            # looked up again: the download URLs only work with the session that got them
+            target = {**options, "format": format_id, "outtmpl": str(folder / f"{stem}.%(ext)s")}
+            with yt_dlp.YoutubeDL(target) as ydl:
                 info = ydl.extract_info(link, download=True) or {}
                 downloads = info.get("requested_downloads") or [{}]
                 return Path(downloads[0].get("filepath") or ydl.prepare_filename(info))
+
+        def run() -> tuple[Path, Path | None]:
+            with yt_dlp.YoutubeDL(chooser) as ydl:
+                info = ydl.extract_info(link, download=False) or {}
+            parts = info.get("requested_formats") or [info]
+            video = fetch(parts[0]["format_id"], name)
+            return video, fetch(parts[1]["format_id"], f"{name}.audio") if len(parts) > 1 else None
 
         return await asyncio.wait_for(asyncio.to_thread(run), 600)
 

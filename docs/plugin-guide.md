@@ -170,7 +170,7 @@ Class attributes:
 | Source | Plays |
 | --- | --- |
 | `UriSource(uri, audio_uri="")` | anything GStreamer opens by URI: `http(s)://` MP4/WebM/MKV/HLS (`.m3u8`)/DASH, `rtsp://`, `srt://`, `file:///`. With `audio_uri` the picture comes from `uri` and the sound from `audio_uri` (e.g. YouTube's separate HD streams). |
-| `FileSource(path, cut=False)` | a local media file. `cut=True` switches to it without the 1 s crossfade, so nothing of its start is lost. |
+| `FileSource(path, cut=False, audio_path="")` | a local media file. `cut=True` switches to it without the 1 s crossfade, so nothing of its start is lost. With `audio_path` the picture comes from `path` and the sound from that file. |
 | `ImageSource(path)` | a PNG or JPEG with silence; never ends by itself. |
 | `CardSource(title, heading="", subtitle="")` | a dark card with text and silence (e.g. "Up next" / title / "by Anna"); never ends by itself. |
 | `TestSource(pattern="smpte", freq=440)` | a generated test picture with a tone; `pattern` is any GStreamer `videotestsrc` pattern. |

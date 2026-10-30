@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Plugin authors no longer need a copy of lan-streamer: the SDK installs on its own as `lanstreamer-sdk` (see the plugin guide's quick start).
 - `python -m lanstreamer_sdk new <folder>` creates a working plugin with tests, ready to check, pack and upload.
 - New SDK versions are published to PyPI automatically with a release.
+- SDK: `FileSource(audio_path=…)` plays the sound from a second file.
 
 ### Changed
 
@@ -17,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - Short-video submissions and YouTube no longer fail to start when a downloaded yt-dlp update cannot replace the old one (`WinError 183`, a file in use on Windows): the version in use stays and the switch is tried again at the next start. An update cut off by closing lan-streamer is not used any more.
+- Short-video submissions from YouTube failed with "Requested format is not available", because YouTube often no longer offers a file with both picture and sound. Picture and sound are now downloaded separately and played together, in up to 1080p.
 
 ## [0.1.5] – 2026-10-29
 

@@ -124,6 +124,25 @@ def test_real_yt_dlp_downloads_a_plain_video_url(tmp_path):
     assert source["uri"].startswith("file:") and source["uri"].endswith(".mp4")
 
 
+def test_a_video_with_separate_sound_plays_both_and_deletes_both(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+    videos = tmp_path / "data" / "videos"
+
+    async def steps(proc, events):
+        await proc.viewer_submit({"link": "https://example.com/split1"}, "d1", "ip")
+        await wait_until(lambda: asyncio.sleep(0, len(list(videos.iterdir())) == 2))
+        await asyncio.sleep(1.2)  # the card first
+        await proc.get_source()
+        await proc.playback("started")
+        await wait_until(lambda: asyncio.sleep(0, any(e.get("event") == "next_source" for e in events)))
+        source = await proc.get_source()
+        assert source["uri"].endswith(".mp4") and source["audio_uri"].endswith(".audio.m4a")
+        await proc.playback("ended")
+        await wait_until(lambda: asyncio.sleep(0, not list(videos.iterdir())))
+
+    asyncio.run(with_plugin(tmp_path, {"card_s": 0.1}, steps))
+
+
 def test_a_downloaded_yt_dlp_update_is_used_from_the_next_start(tmp_path, monkeypatch):
     import logging
     import sys

@@ -216,14 +216,14 @@ The interface for plugin authors: the Python package `lanstreamer_sdk`. Full des
 | --- | --- |
 | `plugin.toml` | `id`, `name`, `version`, `api_version = 1`, `entry = "module:Class"`, optional `description`, `requirements` |
 | `InputPlugin[Settings]` | hooks `start`, `stop`, `is_active`, `watch_active`, `get_source`, `can_release`, `on_playback`, `on_viewer_submit`, `viewer_items`, `remove_item`; attributes `Settings`, `poll_interval_s`, `ViewerForm`, `viewer_title` |
-| Sources | `UriSource(uri, audio_uri)`, `FileSource(path, cut)`, `ImageSource(path)`, `CardSource(title, heading, subtitle)`, `TestSource(pattern, freq)` |
+| Sources | `UriSource(uri, audio_uri)`, `FileSource(path, cut, audio_path)`, `ImageSource(path)`, `CardSource(title, heading, subtitle)`, `TestSource(pattern, freq)` |
 | Data | `Metadata`, `PlaybackEvent`, `Viewer`, `ViewerItem`, `Rejected` |
 | Context `self.ctx` | `instance_id`, `data_dir`, `log`, `store`, `set_metadata()`, `next_source()`, `set_info()`, `changed()` |
 | Tools | `python -m lanstreamer_sdk check|pack <folder>`, `lanstreamer_sdk.testing.make_context()` |
 
 **Stability:** API 1 only grows – new things come with defaults. A breaking change means API 2, and lan-streamer refuses plugins of an API version it does not provide, at upload, with a clear message. [`tests/test_plugin_contract.py`](../tests/test_plugin_contract.py) pins all of the above in CI.
 
-How a source dict reaches the output worker (`source_to_dict`): `FileSource` becomes `{"kind": "uri", "uri": "file:///…"}` (plus `"cut": true`), `ImageSource` `{"kind": "image", "path"}`, `UriSource` `{"kind": "uri", "uri", "audio_uri"?}`, the others their fields.
+How a source dict reaches the output worker (`source_to_dict`): `FileSource` becomes `{"kind": "uri", "uri": "file:///…"}` (plus `"audio_uri"` and `"cut": true` when set), `ImageSource` `{"kind": "image", "path"}`, `UriSource` `{"kind": "uri", "uri", "audio_uri"?}`, the others their fields.
 
 ---
 
