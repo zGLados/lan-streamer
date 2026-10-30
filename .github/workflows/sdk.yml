@@ -1,0 +1,64 @@
+# The plugin SDK on PyPI (lanstreamer-sdk, packaging/sdk).
+#
+# Every run builds the wheel, walks the plugin guide's quick start with only that wheel
+# installed and compares it with PyPI. A release tag or "Run workflow" on main publishes
+# a version that is not there yet; the run fails if the SDK changed without a new version.
+# Publishing uses PyPI's trusted publishing: no token is stored anywhere.
+name: SDK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci]
+    tags: ["[0-9]*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.state.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the wheel
+        run: |
+          python3 -m venv /tmp/tools && /tmp/tools/bin/pip install -q build
+          /tmp/tools/bin/python -m build --wheel -o dist packaging/sdk
+
+      - name: Quick start with only the SDK installed
+        run: |
+          python3 -m venv /tmp/sdk
+          /tmp/sdk/bin/pip install -q "$(ls dist/*.whl)[test]"
+          cd "$(mktemp -d)"
+          /tmp/sdk/bin/python -m lanstreamer_sdk new my-plugin
+          /tmp/sdk/bin/python -m lanstreamer_sdk check my-plugin
+          /tmp/sdk/bin/python -m pytest -q my-plugin
+          /tmp/sdk/bin/python -m lanstreamer_sdk pack my-plugin
+          unzip -l my-plugin-0.1.0.zip | grep -q plugin.toml
+
+      - name: Compare with PyPI
+        id: state
+        run: python3 packaging/sdk/pypi_state.py dist/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-wheel
+          path: dist/*.whl
+
+  publish:
+    needs: build
+    if: needs.build.outputs.publish == 'true' && (github.ref_type == 'tag' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-wheel
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

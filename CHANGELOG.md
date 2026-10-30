@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Plugin authors no longer need a copy of lan-streamer: the SDK installs on its own as `lanstreamer-sdk` (see the plugin guide's quick start).
 - `python -m lanstreamer_sdk new <folder>` creates a working plugin with tests, ready to check, pack and upload.
+- New SDK versions are published to PyPI automatically with a release.
 
 ### Changed
 

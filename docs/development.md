@@ -34,6 +34,8 @@ A release:
 4. When all files are there: `gh release edit x.y.z --draft=false`.
 5. Set the next version in development (e.g. `0.1.1`) in the same places.
 
+The plugin SDK has its own version (`packaging/sdk/pyproject.toml`, major = plugin API version). The tag also runs `.github/workflows/sdk.yml`: a version not on PyPI yet is published as `lanstreamer-sdk`, unchanged code is left alone. If the SDK's code changed, raise that version in the same commit (additions: minor, fixes: patch); otherwise the run on `ci` already fails.
+
 ## A display PC or TV (kiosk mode)
 
 `http://<server>:8080/tv` shows only the stream. In a normal browser a click turns on the sound and goes full screen. A display PC can open it without anyone at it, with sound:
