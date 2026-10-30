@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.6] – 2026-10-30
+
+Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.
 
 ### Added
 
