@@ -36,6 +36,8 @@ class YtDlp:
 
     <folder>/current  the updated yt-dlp in use (if any), else the bundled one
     <folder>/next     a newer download, moved to current at the next start
+    <folder>/download a download in progress, moved to next when complete
+    <folder>/old-*    replaced versions, deleted as soon as nothing holds them
     """
 
     def __init__(self, folder: Path, auto_update: bool, log):
@@ -44,14 +46,29 @@ class YtDlp:
         self.version = "?"
         current, upcoming = folder / "current", folder / "next"
         if (upcoming / "yt_dlp").is_dir():  # downloaded during the last run
-            shutil.rmtree(current, ignore_errors=True)
-            upcoming.rename(current)
+            self._swap_in(current, upcoming)
+        for old in folder.glob("old-*"):
+            shutil.rmtree(old, ignore_errors=True)
         if (current / "yt_dlp").is_dir():
             sys.path.insert(0, str(current))
         self._update_task = asyncio.create_task(self._update()) if auto_update and not FAKE else None
 
+    def _swap_in(self, current: Path, upcoming: Path) -> None:
+        # Moved aside, not deleted: on Windows a file in use can stop a delete
+        # halfway, which would leave a broken current behind. A failed update
+        # must never stop the input, the version in use just stays.
+        old = self.folder / f"old-{os.getpid()}"
+        try:
+            if current.exists():
+                current.rename(old)
+            upcoming.rename(current)
+        except OSError as e:
+            if old.exists() and not current.exists():
+                old.rename(current)
+            self.log.warning("could not switch to the downloaded yt-dlp – keeping the one in use: %s", e)
+
     async def _update(self) -> None:
-        target = self.folder / "next"
+        target = self.folder / "download"
         shutil.rmtree(target, ignore_errors=True)
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
@@ -62,12 +79,21 @@ class YtDlp:
             out, _ = await asyncio.wait_for(proc.communicate(), 180)
         except TimeoutError:
             proc.kill()
+            await proc.wait()
+            shutil.rmtree(target, ignore_errors=True)
             self.log.warning("yt-dlp update timed out – using the installed version")
             return
         if proc.returncode != 0:
             shutil.rmtree(target, ignore_errors=True)
             self.log.warning("yt-dlp update failed (offline?) – using the installed version: %s",
                              out.decode(errors="replace").strip().splitlines()[-1:])  # fmt: skip
+            return
+        upcoming = self.folder / "next"
+        shutil.rmtree(upcoming, ignore_errors=True)
+        try:
+            target.rename(upcoming)
+        except OSError as e:
+            self.log.warning("could not keep the downloaded yt-dlp – using the installed version: %s", e)
             return
         self.log.info("downloaded the latest yt-dlp – used from the next start")
 

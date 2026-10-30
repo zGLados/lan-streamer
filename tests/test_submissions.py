@@ -141,6 +141,56 @@ def test_a_downloaded_yt_dlp_update_is_used_from_the_next_start(tmp_path, monkey
     asyncio.run(start())
     assert (folder / "current" / "yt_dlp").is_dir() and not (folder / "next").exists()
     assert sys.path[0] == str(folder / "current")
+    assert [p.name for p in folder.iterdir()] == ["current"]  # the old version is gone
+
+
+def test_a_yt_dlp_in_use_stays_and_the_input_still_starts(tmp_path, monkeypatch):
+    # On Windows a file in use can stop the switch (WinError 183 on the test PC,
+    # the input crashed at every start). Only the current folder is locked here.
+    import logging
+    import pathlib
+    import sys
+
+    from lanstreamer.plugins import ytdlp as module
+
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    folder = tmp_path / "yt-dlp"
+    (folder / "next" / "yt_dlp").mkdir(parents=True)
+    (folder / "current" / "yt_dlp" / "in_use.py").parent.mkdir(parents=True)
+    (folder / "current" / "yt_dlp" / "in_use.py").write_text("")
+    rename = pathlib.Path.rename
+
+    def locked(self, target):
+        if self.name == "current":
+            raise PermissionError(32, "in use")
+        return rename(self, target)
+
+    monkeypatch.setattr(pathlib.Path, "rename", locked)
+
+    async def start():
+        return module.YtDlp(folder, auto_update=False, log=logging.getLogger("t"))
+
+    asyncio.run(start())
+    assert (folder / "current" / "yt_dlp" / "in_use.py").exists()  # untouched
+    assert (folder / "next" / "yt_dlp").is_dir()  # tried again at the next start
+    assert sys.path[0] == str(folder / "current")
+
+
+def test_a_broken_off_yt_dlp_download_is_never_used(tmp_path, monkeypatch):
+    import logging
+    import sys
+
+    from lanstreamer.plugins import ytdlp as module
+
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    folder = tmp_path / "yt-dlp"
+    (folder / "download" / "yt_dlp").mkdir(parents=True)  # the app ended during the download
+
+    async def start():
+        return module.YtDlp(folder, auto_update=False, log=logging.getLogger("t"))
+
+    asyncio.run(start())
+    assert not (folder / "current").exists() and str(folder / "current") not in sys.path
 
 
 @pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="locks the file with folder permissions")

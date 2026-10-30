@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - `python -m lanstreamer_sdk check` and `pack` refuse the id of a built-in plugin at once instead of at the upload.
 
+### Fixed
+
+- Short-video submissions and YouTube no longer fail to start when a downloaded yt-dlp update cannot replace the old one (`WinError 183`, a file in use on Windows): the version in use stays and the switch is tried again at the next start. An update cut off by closing lan-streamer is not used any more.
+
 ## [0.1.5] – 2026-10-29
 
 Full screen on the streaming PC, set from the admin page, and an output that repairs itself when its video process hangs.
