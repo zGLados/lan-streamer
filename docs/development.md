@@ -9,7 +9,7 @@
 | Linux packages for real: gst-plugins-rs build, `.deb` installed with apt, self-test, the app with GStreamer, API checks, admin and viewer pages, ingest, restream, smoke test, purge, `install.sh` | `python tests/local_linux.py [--keep]` | Docker (throwaway Ubuntu 24.04 containers; images `lanstreamer-*`), `dpkg-deb`; the first run builds the Rust plugins (~15 min, cached) |
 | Windows installer, NVENC, WebRTC playback, systemd | GitHub Actions (`windows.yml`, `linux.yml`) | only in CI and on the test PC |
 
-**The CI runs only when started on purpose**, not on every push to `main`:
+**The CI runs only when started on purpose**, not on every push to `main`. The one exception: a pull request runs ruff and the unit tests on Linux and Windows (`tests.yml`).
 
 - **Full test run** (unit tests, build, install, every end-to-end check, on Windows and Linux): push the commit to the branch `ci` – `git push origin HEAD:ci` – or Actions → Windows / Linux → "Run workflow". A newer push to `ci` cancels a run still going.
 - Windows extras: the real update (`check_update.py`, installs a second time) when `updater.py`, `packaging/windows/`, the test or the workflow changed since the last push to `ci` (always on "Run workflow" and for releases); the doc screenshots (`doc_screenshots.py`) only with "Run workflow" and "screenshots" ticked.

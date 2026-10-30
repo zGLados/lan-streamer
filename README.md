@@ -57,7 +57,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 - **Outputs** are permanently running encoders. They switch between inputs without the stream ever dropping, and [MediaMTX](https://github.com/bluenviron/mediamtx) serves them via WebRTC and LL-HLS.
 - **Everything is configured in the web UI**, including installing new input plugins as `.zip` uploads.
 
-Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: `pip install lanstreamer-sdk`, [docs/plugin-guide.md](docs/plugin-guide.md) and the [example plugins](examples). All interfaces (HTTP API, ports, protocols): [docs/interfaces.md](docs/interfaces.md).
+Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: `pip install lanstreamer-sdk`, [docs/plugin-guide.md](docs/plugin-guide.md) and the [example plugins](examples). All interfaces (HTTP API, ports, protocols): [docs/interfaces.md](docs/interfaces.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Stack
 

@@ -8,6 +8,12 @@ import yaml
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
 
+def test_pull_requests_only_run_without_write_rights():
+    flow = yaml.safe_load((WORKFLOWS / "tests.yml").read_text(encoding="utf-8"))
+    assert list(flow[True]) == ["pull_request"]  # YAML reads the key "on" as True
+    assert flow["permissions"] == {"contents": "read"}
+
+
 def test_scope_outputs_come_from_its_own_step():
     # 2026-10-26: the job's outputs read needs.scope… (empty) – every check was skipped
     for file in ("windows.yml", "linux.yml"):
