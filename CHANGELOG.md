@@ -136,7 +136,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.5...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.6...HEAD
+[0.1.6]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.6
 [0.1.5]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.5
 [0.1.4]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.4
 [0.1.3]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.3
