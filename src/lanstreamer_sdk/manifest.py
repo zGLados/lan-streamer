@@ -9,12 +9,19 @@ from pathlib import Path
 
 from lanstreamer_sdk.plugin import API_VERSION
 
-_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}$")
+ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}$")
 _ENTRY = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
+# the plugins inside lan-streamer; an upload with one of these ids is refused
+BUILTIN_IDS = frozenset({"ingest", "playlist", "standby", "submissions", "test-pattern", "youtube"})
 
 
 class ManifestError(ValueError):
     pass
+
+
+def check_id_is_free(plugin_id: str) -> None:
+    if plugin_id in BUILTIN_IDS:
+        raise ManifestError(f"plugin id '{plugin_id}' belongs to a built-in plugin, choose another")
 
 
 @dataclass(frozen=True)
@@ -42,7 +49,7 @@ def load_manifest(folder: Path) -> Manifest:
     for key in ("id", "name", "version", "api_version", "entry"):
         if key not in data:
             raise ManifestError(f"plugin.toml: '{key}' is missing")
-    if not _ID.match(str(data["id"])):
+    if not ID_PATTERN.match(str(data["id"])):
         raise ManifestError("plugin.toml: 'id' must be 2–49 characters: a-z, 0-9 and '-'")
     if not _ENTRY.match(str(data["entry"])):
         raise ManifestError("plugin.toml: 'entry' must look like 'module:ClassName'")

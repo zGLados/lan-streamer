@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Plugin authors no longer need a copy of lan-streamer: the SDK installs on its own as `lanstreamer-sdk` (see the plugin guide's quick start).
+- `python -m lanstreamer_sdk new <folder>` creates a working plugin with tests, ready to check, pack and upload.
+
+### Changed
+
+- `python -m lanstreamer_sdk check` and `pack` refuse the id of a built-in plugin at once instead of at the upload.
+
 ## [0.1.5] – 2026-10-29
 
 Full screen on the streaming PC, set from the admin page, and an output that repairs itself when its video process hangs.

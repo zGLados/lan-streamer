@@ -1,0 +1,27 @@
+# lanstreamer-sdk: only what a plugin author needs, without lan-streamer itself.
+# The code is src/lanstreamer_sdk, the same package the app ships.
+# Major version = plugin API version (tests/test_sdk_tools.py checks it).
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lanstreamer-sdk"
+version = "1.0.0"
+description = "Write input plugins for lan-streamer"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.7"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.urls]
+Guide = "https://github.com/zGLados/lan-streamer/blob/main/docs/plugin-guide.md"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"../../src/lanstreamer_sdk" = "lanstreamer_sdk"

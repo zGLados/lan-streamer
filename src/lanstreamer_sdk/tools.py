@@ -1,5 +1,7 @@
-"""Tools for plugin authors: check a plugin folder and pack it for the upload.
+"""Tools for plugin authors: start a plugin, check its folder, pack it for the upload.
 
+    python -m lanstreamer_sdk new <folder> [--name '<display name>']
+        creates a working plugin; the folder's name becomes the plugin's id.
     python -m lanstreamer_sdk check <folder> [--settings '<json>']
         loads the plugin like lan-streamer does and prints its settings form
         (JSON Schema), the validated settings and its viewer form, or the error.
@@ -20,8 +22,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from lanstreamer_sdk.manifest import ManifestError, load_manifest
+from lanstreamer_sdk.manifest import ManifestError, check_id_is_free, load_manifest
 from lanstreamer_sdk.plugin import InputPlugin
+from lanstreamer_sdk.scaffold import new_plugin
 
 DEPS = ".deps"  # requirements installed at upload (lanstreamer/plugins/install.py)
 # never in the upload: caches, installed requirements, the plugin's own tests
@@ -45,6 +48,7 @@ def load_plugin(folder: Path) -> type[InputPlugin]:
 def check(folder: Path, settings: dict[str, Any] | None = None) -> dict[str, Any]:
     """What the admin page gets from the plugin; raises on a broken plugin."""
     manifest = load_manifest(folder)
+    check_id_is_free(manifest.id)
     cls = load_plugin(folder)
     result: dict[str, Any] = {
         "id": manifest.id, "version": manifest.version, "api_version": manifest.api_version,
@@ -65,6 +69,7 @@ def check(folder: Path, settings: dict[str, Any] | None = None) -> dict[str, Any
 def pack(folder: Path, out: Path | None = None) -> Path:
     """Zips the plugin folder (plugin.toml at the top of the zip)."""
     manifest = load_manifest(folder)
+    check_id_is_free(manifest.id)
     out = out or folder.parent / f"{manifest.id}-{manifest.version}.zip"
     files = sorted(
         p for p in folder.rglob("*")
@@ -81,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m lanstreamer_sdk", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     commands = parser.add_subparsers(dest="command", required=True)
+    new_cmd = commands.add_parser("new", help="create a working plugin in a new folder")
+    new_cmd.add_argument("folder", type=Path)
+    new_cmd.add_argument("--name", default="", help="display name in the admin page")
     check_cmd = commands.add_parser("check", help="load the plugin and show its forms")
     check_cmd.add_argument("folder", type=Path)
     check_cmd.add_argument("--settings", default="{}", help="settings to validate, as JSON")
@@ -90,6 +98,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "new":
+            print(f"created {new_plugin(args.folder, args.name)}")
+            return 0
         if args.command == "check":
             result = check(args.folder, json.loads(args.settings))
             print(json.dumps(result, indent=2))

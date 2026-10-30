@@ -25,6 +25,22 @@ Everything else is optional. This guide describes the **plugin API version 1**.
 
 ## Quick start
 
+You need Python 3.12+ and git, but no copy of lan-streamer. The SDK is a small package of its own:
+
+```
+python -m venv .venv
+.venv/bin/pip install "lanstreamer-sdk[test] @ git+https://github.com/zGLados/lan-streamer#subdirectory=packaging/sdk"
+                                            # Windows: .venv\Scripts\pip ...; then activate the venv
+python -m lanstreamer_sdk new my-plugin     # a working plugin in a new folder; the folder's name is its id
+python -m lanstreamer_sdk check my-plugin   # loads it like lan-streamer, shows the forms
+python -m pytest my-plugin                  # its tests
+python -m lanstreamer_sdk pack my-plugin    # → my-plugin-0.1.0.zip
+```
+
+Upload the zip in the admin page (Plugins → Upload), then add an input with it (Inputs → Add input). It plays a test picture; now replace `is_active()` and `get_source()` in `my_plugin.py` with your source.
+
+### Learning from the examples
+
 There are three examples in [`examples/`](../examples) (overview: [examples/README.md](../examples/README.md)); every interface of lan-streamer is described in [interfaces.md](interfaces.md).
 
 | Example | Shows |
@@ -33,33 +49,15 @@ There are three examples in [`examples/`](../examples) (overview: [examples/READ
 | [`web-stream`](../examples/web-stream) | The usual case: an external live stream (camera, service, server) that is on air while it is online; network checks off the event loop, title from a JSON status URL. With its own tests. |
 | [`stream-queue`](../examples/stream-queue) | Every part of the API: viewers queue links to videos or streams, they play one after another. With its own tests. Copy it as a template. |
 
-To start your own:
-
-1. Copy the example closest to your idea to a new folder: `web-stream` for a source that is live now and then, `stream-queue` for things viewers send in.
-2. In `plugin.toml`, change `id`, `name` and `entry`; rename the `.py` file to match `entry`.
-3. Set up a development environment (a clone of lan-streamer, Python 3.12+):
-
-   ```
-   python -m venv .venv
-   .venv/bin/pip install -e ".[dev]"        # Windows: .venv\Scripts\pip ...
-   ```
-
-4. Check, test and pack:
-
-   ```
-   python -m lanstreamer_sdk check my-plugin
-   python -m pytest my-plugin
-   python -m lanstreamer_sdk pack my-plugin
-   ```
-
-5. Upload the zip in the admin page (Plugins → Upload), then add an input with it (Inputs → Add input).
+To build on an example instead of the new plugin: copy `web-stream` for a source that is live now and then, or `stream-queue` for things viewers send in. Then, in `plugin.toml`, change `id`, `name` and `entry`, and rename the `.py` file to match `entry`.
 
 ## The plugin folder
 
 ```
 my-plugin/
   plugin.toml        the manifest
-  my_plugin.py       the module named in `entry` (more modules and files are fine)
+  my_plugin.py       the module named in `entry` (more modules and files are fine; end its name
+                     in `_plugin` or similar, so it cannot shadow a package you import)
   tests/             your tests – not packed into the upload
 ```
 
@@ -283,7 +281,7 @@ def test_next_item_after_the_end(tmp_path):
 
 **The plugin as lan-streamer loads it.** `python -m lanstreamer_sdk check my-plugin [--settings '{"url": "…"}']` checks the manifest, imports the plugin class and prints the settings form, the validated settings (or the errors) and the viewer form. It exits with 0 (fine), 1 (invalid settings) or 2 (the plugin cannot be loaded).
 
-**The whole thing.** In a lan-streamer clone, `python -m lanstreamer --simulate` runs the web server, admin page, scheduler and plugin processes for real, without video (the player stays black, the admin page shows what is on air). Upload the plugin there, add an input, submit viewer forms, watch the log (admin page → Logs). For real playback use an installed lan-streamer.
+**The whole thing.** In a clone of lan-streamer (`pip install -e ".[dev]"`), `python -m lanstreamer --simulate` runs the web server, admin page, scheduler and plugin processes for real, without video (the player stays black, the admin page shows what is on air). Upload the plugin there, add an input, submit viewer forms, watch the log (admin page → Logs). For real playback use an installed lan-streamer.
 
 ## Packing and uploading
 
