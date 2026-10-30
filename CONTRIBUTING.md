@@ -72,7 +72,7 @@ Welcome, with two rules: you are responsible for what you submit, so read and un
 
 ## Security problems
 
-Please do not describe a security problem in a public issue. Open an issue that only asks for a private way to reach the maintainer.
+Please do not describe a security problem in a public issue. [Report it privately](https://github.com/zGLados/lan-streamer/security/advisories/new) instead.
 
 Keep in mind that plugins run with lan-streamer's rights by design and that lan-streamer is meant for a LAN or VPN (see the [plugin guide](docs/plugin-guide.md#packing-and-uploading)).
 
