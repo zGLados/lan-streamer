@@ -8,7 +8,7 @@
 
 A self-hosted, modular media streaming platform for your local network. lan-streamer collects media from pluggable sources, such as the top Twitch stream of a category, TikTok links submitted by viewers, YouTube, your own OBS stream or a fallback playlist. It decides automatically what to show and plays it as a continuous, re-encoded 1080p live stream in the browser, with sub-second latency over WebRTC.
 
-> **Status:** early development, latest release [0.1.5](https://github.com/zGLados/lan-streamer/releases) (Windows installer with updates from the admin page, Linux packages, plugin API 1). Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Installers for Windows and Linux, and a guide for plugin authors. Next: opening up for third-party plugins. See the [roadmap](docs/roadmap.md).
+> **Status:** early development, latest release [0.1.5](https://github.com/zGLados/lan-streamer/releases) (Windows installer with updates from the admin page, Linux packages, plugin API 1). Streaming, switching, the core (scheduler, plugins incl. upload, configuration), the admin page, short-video submissions by viewers and a TV view work. Also YouTube, sending from OBS (RTMP/SRT), an overlay with title and submitter, and several outputs. Installers for Windows and Linux, and for plugin authors a guide and the SDK on [PyPI](https://pypi.org/project/lanstreamer-sdk/). See the [roadmap](docs/roadmap.md).
 
 ![The player page: a submitted video on air with its lower third, the submit form and the queue](docs/images/player.png)
 
@@ -57,7 +57,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 - **Outputs** are permanently running encoders. They switch between inputs without the stream ever dropping, and [MediaMTX](https://github.com/bluenviron/mediamtx) serves them via WebRTC and LL-HLS.
 - **Everything is configured in the web UI**, including installing new input plugins as `.zip` uploads.
 
-Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: [docs/plugin-guide.md](docs/plugin-guide.md) and the [example plugins](examples). All interfaces (HTTP API, ports, protocols): [docs/interfaces.md](docs/interfaces.md).
+Details: [docs/architecture.md](docs/architecture.md). Developing and testing: [docs/development.md](docs/development.md). Writing a plugin: `pip install lanstreamer-sdk`, [docs/plugin-guide.md](docs/plugin-guide.md) and the [example plugins](examples). All interfaces (HTTP API, ports, protocols): [docs/interfaces.md](docs/interfaces.md).
 
 ## Stack
 
