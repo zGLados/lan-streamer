@@ -59,7 +59,7 @@ Goal: prove the riskiest part first. A 1080p stream plays in the browser over We
 - [x] Plugin developer guide (`docs/plugin-guide.md`) + example plugins (`examples/web-stream`, `examples/stream-queue`, with tests), all interfaces in `docs/interfaces.md`, `python -m lanstreamer_sdk check|pack`, test context `lanstreamer_sdk.testing`
 - [x] Stable plugin API v1, contract tests in CI (`tests/test_plugin_contract.py`)
 - [x] SDK as its own package (`packaging/sdk`, no copy of lan-streamer needed), `python -m lanstreamer_sdk new`
-- [ ] Release for third-party developers (publish `lanstreamer-sdk` on PyPI)
+- [x] Release for third-party developers: [`lanstreamer-sdk` on PyPI](https://pypi.org/project/lanstreamer-sdk/), new versions published with each release
 
 ## Later – to be reviewed
 

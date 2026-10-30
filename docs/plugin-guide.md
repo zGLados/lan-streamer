@@ -25,11 +25,11 @@ Everything else is optional. This guide describes the **plugin API version 1**.
 
 ## Quick start
 
-You need Python 3.12+ and git, but no copy of lan-streamer. The SDK is a small package of its own:
+You need Python 3.12+, but no copy of lan-streamer. The SDK is a small package of its own:
 
 ```
 python -m venv .venv
-.venv/bin/pip install "lanstreamer-sdk[test] @ git+https://github.com/zGLados/lan-streamer#subdirectory=packaging/sdk"
+.venv/bin/pip install "lanstreamer-sdk[test]"
                                             # Windows: .venv\Scripts\pip ...; then activate the venv
 python -m lanstreamer_sdk new my-plugin     # a working plugin in a new folder; the folder's name is its id
 python -m lanstreamer_sdk check my-plugin   # loads it like lan-streamer, shows the forms
