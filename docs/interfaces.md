@@ -79,7 +79,7 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
   ],
   "switches": 12, "failed_switches": 0, "worker_restarts": 0, "last_error": "",
   "restream": "off", "debug_clock": false, "whep_port": 8889, "whep_path": "out1",
-  "started": 1793038002.6, "uptime_s": 3600, "viewer_version": 7,
+  "started": 1793038002.6, "uptime_s": 3600, "viewer_version": 7, "config_version": 42,
   "outputs": [{"id": "out1", "name": "Output 1", "current": "Short-video submissions"}]
 }
 ```
@@ -88,6 +88,7 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
 - `state` of an input: `on air`, `active`, `inactive`, `cooling down` (its source failed, it sits out 30 s), `error` (the plugin process failed; `error` says why).
 - `debug_clock`: the output shows the debug clock; the player page then shows its local clock next to it (the difference is the delay).
 - `viewer_version` grows whenever a viewer list changes – reload `/api/viewer` then.
+- `config_version` grows whenever the configuration changes (outputs, inputs, settings, plugins turned on or off, uploaded or removed) – from any admin or tab; the admin page reloads them then.
 - The player connects to `http(s)://<server>:<whep_port>/<whep_path>/whep` (see [Media](#5-media-streams-in-and-out)).
 
 `GET /api/viewer`:

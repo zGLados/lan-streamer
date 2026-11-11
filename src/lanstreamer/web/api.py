@@ -250,9 +250,15 @@ def create_app(backend: Backend) -> FastAPI:
     def favicon() -> Response:
         return Response(ICON.read_bytes(), media_type="image/png")
 
+    plugin_files = [0]  # uploads and removals: plugin files, not in the store
+
+    def with_config(status: dict[str, Any]) -> dict[str, Any]:
+        # grows with every configuration change, also by another admin: the admin page reloads then
+        return {**status, "config_version": backend.store.revision + plugin_files[0]}
+
     def output_status(output: str | None) -> dict[str, Any]:
         try:
-            return backend.status(output)
+            return with_config(backend.status(output))
         except KeyError as exc:
             raise HTTPException(404, f"no output {output!r}") from exc
 
@@ -294,7 +300,7 @@ def create_app(backend: Backend) -> FastAPI:
         try:
             while True:
                 try:
-                    status = backend.status(output)
+                    status = with_config(backend.status(output))
                 except KeyError:  # removed meanwhile
                     await ws.close(4404, "no such output")
                     return
@@ -404,6 +410,7 @@ def create_app(backend: Backend) -> FastAPI:
             del schema_cache[key]
         if backend.plugins_changed:
             await backend.plugins_changed(manifest.id)
+        plugin_files[0] += 1
         backend.changes.notify()
         return {"id": manifest.id, "name": manifest.name, "version": manifest.version}
 
@@ -451,6 +458,8 @@ def create_app(backend: Backend) -> FastAPI:
             del schema_cache[key]
         if backend.plugins_changed:
             await backend.plugins_changed(plugin_id)
+        plugin_files[0] += 1
+        backend.changes.notify()
 
     @app.get("/api/admin/outputs", dependencies=[Depends(logged_in)])
     def outputs() -> list[dict[str, Any]]:

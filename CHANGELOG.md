@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Standby: upload the picture on the admin page ("Upload picture…") instead of typing a path on the streaming PC.
 - Standby: new setting "Size". *auto* (default) shows a picture smaller than the screen at its size, centered on black (e.g. a 512×512 logo), and a larger one full screen; *fit* always scales it to the screen as before; *fill* covers the whole screen and cuts off the edges.
 - SDK 1.2.0: `ImageSource(size=…)` with `"fit"` (default, as before), `"auto"` and `"fill"`; a settings field with `"format": "image"` gets an upload button on the admin page.
+### Added
+
+- The admin page updates by itself when something changes elsewhere – another admin, another tab: plugins turned on or off, inputs, outputs and settings. An open dialog or a field being edited is not overwritten; the page updates after it.
 
 ## [0.1.6] – 2026-10-30
 

@@ -140,6 +140,27 @@ def main() -> int:
             page.keyboard.press("Escape")
             step("deleted them and turned the plugin off: it is no longer offered for new inputs")
 
+            # changes made elsewhere show without a reload (here a second admin tab, same login)
+            other = page.context.request
+            other.patch(f"{base}/api/admin/plugins/test-pattern", data={"enabled": True})
+            other.post(f"{base}/api/admin/outputs/out1/inputs",
+                       data={"name": "Other admin", "plugin": "test-pattern", "priority": 0})  # fmt: skip
+            expect(page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]')).to_be_checked(
+                timeout=10_000)  # fmt: skip
+            expect(page.locator('#inputs tr[data-id="other-admin"]')).to_be_visible(timeout=10_000)
+            page.click("#add-input")
+            page.fill("#i-name", "typed here")
+            other.delete(f"{base}/api/admin/inputs/other-admin")
+            page.wait_for_timeout(2500)  # a few status messages: an open dialog is not disturbed
+            expect(page.locator("#i-name")).to_have_value("typed here")
+            expect(page.locator('#inputs tr[data-id="other-admin"]')).to_have_count(1)  # reloads after the dialog
+            page.keyboard.press("Escape")
+            expect(page.locator('#inputs tr[data-id="other-admin"]')).to_have_count(0, timeout=10_000)
+            other.patch(f"{base}/api/admin/plugins/test-pattern", data={"enabled": False})
+            expect(page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]')).not_to_be_checked(
+                timeout=10_000)  # fmt: skip
+            step("changes by another admin showed without a reload, not while a dialog was open")
+
             # Upload the example plugin, use it, remove it
             archive = Path(tempfile.mkdtemp()) / "hello-plugin.zip"
             with zipfile.ZipFile(archive, "w") as z:
