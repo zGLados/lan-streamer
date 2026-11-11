@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.7] – 2026-11-11
+
+Every input about equally loud and no more crackling at loud passages; the standby picture can be uploaded and small logos stay centered; YouTube videos in the playlist; the admin page follows changes by itself; updates no longer stop at a MediaMTX left running.
 
 ### Added
 
@@ -152,7 +154,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.6...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.7...HEAD
+[0.1.7]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.7
 [0.1.6]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.6
 [0.1.5]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.5
 [0.1.4]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.4
