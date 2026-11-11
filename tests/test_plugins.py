@@ -107,6 +107,61 @@ def test_playlist_advances_and_releases_after_an_item_ended(tmp_path):
     assert second == {"kind": "uri", "uri": "https://x/live.m3u8"}
 
 
+def test_playlist_plays_youtube_links_and_skips_one_that_cannot_be_played(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")  # fake yt-dlp answers
+    clip = tmp_path / "a.mp4"
+    clip.write_bytes(b"")
+    items = [str(clip), "https://www.youtube.com/watch?v=abc", "https://youtu.be/offline", "https://youtu.be/def"]
+
+    async def steps(proc, events):
+        sources, titles = [], []
+        for _ in range(4):
+            sources.append(await proc.get_source())
+            titles.append([e for e in events if e.get("event") == "metadata"][-1]["value"]["title"])
+            await proc.playback("ended")
+            await asyncio.sleep(0.2)
+        return sources, titles
+
+    sources, titles = asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, {"items": items}, steps))
+    assert sources[0] == {"kind": "uri", "uri": clip.resolve().as_uri()}
+    # looked up right before playing; picture and sound as separate streams
+    assert sources[1] == {"kind": "uri", "uri": "https://fake.invalid/abc/video", "audio_uri": "https://fake.invalid/abc/audio"}
+    assert sources[2]["uri"] == "https://fake.invalid/def/video"  # the offline one was skipped
+    assert sources[3] == sources[0]  # starts over
+    assert titles == ["a.mp4", "Video abc", "Video def", "a.mp4"]
+
+
+def test_playlist_without_youtube_links_does_not_load_yt_dlp(tmp_path):
+    clip = tmp_path / "a.mp4"
+    clip.write_bytes(b"")
+
+    async def steps(proc, events):
+        return await proc.get_source()
+
+    asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, {"items": [str(clip), "https://x/live.m3u8"]}, steps))
+    assert not (tmp_path / "data" / "yt-dlp").exists()
+
+
+def test_a_playlist_without_loop_does_not_start_over_when_skipping(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+
+    async def steps(proc, events):
+        first = await proc.get_source()
+        await proc.playback("ended")
+        await asyncio.sleep(0.2)
+        try:
+            await proc.get_source()
+        except PluginError as exc:
+            return first, str(exc)
+        raise AssertionError("played the list again")
+
+    first, error = asyncio.run(run_plugin(
+        BUILTIN / "playlist", tmp_path, {"items": ["https://youtu.be/one", "https://youtu.be/offline"], "loop": False},
+        steps))  # fmt: skip
+    assert first["uri"] == "https://fake.invalid/one/video"
+    assert "playlist has ended" in error
+
+
 def test_empty_playlist_is_inactive(tmp_path):
     async def steps(proc, events):
         return await wait_for(events, "active")

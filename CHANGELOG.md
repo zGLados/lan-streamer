@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Playlist: YouTube video links play between files and other links (one per line, like any item). Each is looked up right before it plays; a video that cannot be played (removed, private) is skipped instead of holding up the playlist. New setting "Update yt-dlp", used only when the list has a YouTube link.
+
 ## [0.1.6] – 2026-10-30
 
 Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.
