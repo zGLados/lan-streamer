@@ -20,6 +20,7 @@ Admin (logged in):
     PUT    /api/admin/plugins                    upload a plugin (.zip as the request body)
     PATCH  /api/admin/plugins/{id}               turn a plugin on or off ({"enabled": bool})
     DELETE /api/admin/plugins/{id}               remove an uploaded plugin (not in use)
+    PUT    /api/admin/images                     upload a picture (PNG/JPEG as the body) → its path
     GET    /api/admin/outputs                    outputs and their inputs
     POST   /api/admin/outputs                    add an output ({"name"}; starts with a Standby input)
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
@@ -43,6 +44,7 @@ output at once (OutputRuntime.apply); added and removed outputs start and stop.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import secrets
@@ -64,6 +66,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
+from lanstreamer import images
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig, OutputConfig
 from lanstreamer.core.store import NotFound, Store
@@ -78,6 +81,7 @@ LOG_FILES = ("lan-streamer.log", "output.log", "mediamtx.log")
 RTMP_URL = re.compile(r"^rtmps?://[^/\s]+/[^/\s]+/\S+$")
 OUTPUT_LOG = re.compile(r"^output-[a-z0-9-]+\.log$")  # the workers of further outputs
 RESTART_FIELDS = {"width", "height", "fps", "bitrate_kbps", "encoder"}
+MAX_IMAGE_BYTES = 20 * 2**20  # uploaded pictures
 
 PAGES = resources.files("lanstreamer.web")
 ICON = resources.files("lanstreamer.assets").joinpath("icon.png")
@@ -119,6 +123,7 @@ class Backend:
     viewer: Any = None  # the running outputs: viewer_forms(output), viewer_submit, items, remove_item
     updater: Any = None  # lanstreamer.updater.Updater
     local_page: Any = None  # lanstreamer.localpage.LocalPage (None: no desktop, e.g. the Linux service)
+    images_dir: Path | None = None  # where uploaded pictures go (settings with format "image")
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -401,6 +406,32 @@ def create_app(backend: Backend) -> FastAPI:
             await backend.plugins_changed(manifest.id)
         backend.changes.notify()
         return {"id": manifest.id, "name": manifest.name, "version": manifest.version}
+
+    @app.put("/api/admin/images", status_code=201, dependencies=[Depends(logged_in)])
+    async def upload_image(request: Request) -> dict[str, Any]:
+        """A picture for a setting (e.g. the standby picture); the admin page puts its path there."""
+        if backend.images_dir is None:
+            raise HTTPException(501, "picture upload is not available")
+        if int(request.headers.get("content-length") or 0) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, f"the picture is larger than {MAX_IMAGE_BYTES // 2**20} MB")
+        data = await request.body()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, f"the picture is larger than {MAX_IMAGE_BYTES // 2**20} MB")
+        found, dimensions = images.kind(data), images.size(data)
+        if found is None or dimensions is None:
+            raise HTTPException(422, "not a PNG or JPEG picture")
+        # named after its content: the same picture uploaded twice is one file
+        target = backend.images_dir / f"{hashlib.sha256(data).hexdigest()[:16]}.{'png' if found == 'png' else 'jpg'}"
+
+        def write() -> None:
+            backend.images_dir.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                partial = target.with_suffix(".part")
+                partial.write_bytes(data)
+                partial.replace(target)
+
+        await asyncio.to_thread(write)
+        return {"path": str(target), "width": dimensions[0], "height": dimensions[1]}
 
     @app.delete("/api/admin/plugins/{plugin_id}", status_code=204, dependencies=[Depends(logged_in)])
     async def remove_plugin(plugin_id: str) -> None:

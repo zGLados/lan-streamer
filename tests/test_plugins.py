@@ -165,7 +165,7 @@ def test_playlist_expands_folders_and_shows_images_for_a_while(tmp_path):
     first, second, releasable = asyncio.run(
         run_plugin(BUILTIN / "playlist", tmp_path, {"items": [str(media)], "image_duration_s": 1}, steps)
     )
-    assert first == {"kind": "image", "path": str((media / "a.png").resolve())}
+    assert first == {"kind": "image", "path": str((media / "a.png").resolve())}  # fitted, as before
     assert second == {"kind": "uri", "uri": (media / "b.mp4").resolve().as_uri()}
     assert releasable is False  # a new item started
 
@@ -176,6 +176,9 @@ def test_standby_shows_the_built_in_slate_or_a_given_picture(tmp_path):
 
     source = asyncio.run(run_plugin(BUILTIN / "standby", tmp_path, {}, steps))
     assert source["kind"] == "image" and source["path"].endswith("standby.png")
+    assert source["size"] == "auto"  # a small picture stays its size, centered
+    source = asyncio.run(run_plugin(BUILTIN / "standby", tmp_path, {"size": "fill"}, steps))
+    assert source["size"] == "fill"
     proc = PluginProcess("x", BUILTIN / "standby", tmp_path, {"image": "/nope.png"}, lambda *_: None)
     with pytest.raises(PluginError, match="file not found"):
         asyncio.run(proc.start())

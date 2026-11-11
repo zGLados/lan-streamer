@@ -37,6 +37,7 @@ def setup(tmp_path):
         changes=Changes(),
         plugins_dir=tmp_path / "plugins",
         plugins_changed=plugins_changed,
+        images_dir=tmp_path / "images",
     )
     choice.set_enabled(store, "test-pattern", True)  # the tests add test-pattern inputs
     client = TestClient(create_app(backend))
@@ -189,6 +190,36 @@ def test_upload_use_and_remove_a_plugin(setup):
     assert client.delete("/api/admin/plugins/playlist").status_code == 409
     r = client.put("/api/admin/plugins", content=b"not a zip")
     assert r.status_code == 422 and "not a zip" in r.json()["detail"]
+
+
+def test_upload_a_picture_for_a_setting(setup):
+    from test_images import jpeg, png
+
+    from lanstreamer.web import api
+
+    client, *_ = setup
+    assert client.put("/api/admin/images", content=png(512, 512)).status_code == 401
+    login(client)
+    r = client.put("/api/admin/images", content=png(512, 512), headers={"Content-Type": "image/png"})
+    assert r.status_code == 201, r.text
+    first = r.json()
+    assert (first["width"], first["height"]) == (512, 512) and first["path"].endswith(".png")
+    assert client.put("/api/admin/images", content=png(512, 512)).json()["path"] == first["path"]  # same file
+    r = client.put("/api/admin/images", content=jpeg(1920, 1080))
+    assert r.json()["path"].endswith(".jpg") and r.json()["width"] == 1920
+
+    # the standby input takes the uploaded picture
+    r = client.post("/api/admin/outputs/out1/inputs", json={
+        "name": "Logo", "plugin": "standby", "settings": {"image": first["path"], "size": "auto"}})  # fmt: skip
+    assert r.status_code == 201, r.text
+    schema = {p["id"]: p for p in client.get("/api/admin/plugins").json()}["standby"]["schema"]
+    assert schema["properties"]["image"]["format"] == "image"
+    assert schema["properties"]["size"]["enum"] == ["auto", "fit", "fill"]
+
+    r = client.put("/api/admin/images", content=b"<svg></svg>")
+    assert r.status_code == 422 and "PNG or JPEG" in r.json()["detail"]
+    r = client.put("/api/admin/images", content=png(1, 1) + b"x" * api.MAX_IMAGE_BYTES)
+    assert r.status_code == 413
 
 
 def test_viewer_forms_and_submissions(setup, tmp_path):

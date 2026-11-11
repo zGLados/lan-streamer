@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Standby: upload the picture on the admin page ("Upload picture…") instead of typing a path on the streaming PC.
+- Standby: new setting "Size". *auto* (default) shows a picture smaller than the screen at its size, centered on black (e.g. a 512×512 logo), and a larger one full screen; *fit* always scales it to the screen as before; *fill* covers the whole screen and cuts off the edges.
+- SDK 1.2.0: `ImageSource(size=…)` with `"fit"` (default, as before), `"auto"` and `"fill"`; a settings field with `"format": "image"` gets an upload button on the admin page.
+
 ## [0.1.6] – 2026-10-30
 
 Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.

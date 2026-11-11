@@ -20,6 +20,7 @@ gstvolume.dll              # volume
 gstpango.dll               # textoverlay, clockoverlay (overlays)
 gstrsaudiofx.dll           # audioloudnorm (loudness, planned)
 gstimagefreeze.dll         # still images (fallback picture)
+gstvideobox.dll            # videobox (pictures centered or cut to the screen)
 
 # --- Encoding and output to MediaMTX ---------------------------------------------
 gstx264.dll                # x264enc (CPU encoder)

@@ -46,6 +46,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from lanstreamer import images
 from lanstreamer.media import encoders, gst
 from lanstreamer.media.mpegts import TableReader
 
@@ -261,8 +262,18 @@ class Output:
             bin_ = Gst.parse_bin_from_description(desc, False)
         elif source["kind"] == "image":
             path = str(source["path"]).replace("\\", "/").replace('"', "")
+            place = images.layout(str(source.get("size", "fit")), images.file_size(source["path"]),
+                                  (self.args.width, self.args.height))  # fmt: skip
+            if place is None:  # fit: video_tail scales it, with black bars
+                frame = ""
+            else:  # scaled (or kept) and centered once, before the picture is repeated
+                w, h, left, right, top, bottom = place
+                frame = (
+                    f" ! videoconvert ! videoscale ! video/x-raw,format=AYUV,width={w},height={h},pixel-aspect-ratio=1/1"
+                    f" ! videobox left={left} right={right} top={top} bottom={bottom} fill=black"
+                )
             desc = (
-                f'filesrc location="{path}" ! decodebin ! imagefreeze is-live=true'
+                f'filesrc location="{path}" ! decodebin{frame} ! imagefreeze is-live=true'
                 f" ! {video_tail}"
                 f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
             )

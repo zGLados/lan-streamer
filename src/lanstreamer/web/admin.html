@@ -37,6 +37,8 @@
   label .hint { color: var(--muted); font-size: 12px; }
   label.wide { flex: 1 1 320px; }
   label.wide input { width: 100%; }
+  .image-row { display: flex; gap: 6px; align-items: center; }
+  .image-row input { flex: 1; min-width: 0; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
   .status { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
   .status .item { display: grid; gap: 2px; }
@@ -542,12 +544,37 @@ function fieldFor(name, raw, root, value) {
     input = el("input", { value: value ?? s.default ?? "" });
     if (s.format === "password" || /password|token|secret|key/i.test(name)) input.type = "password";
     read = () => (input.value === "" && s.nullable ? null : input.value);
+    if (s.format === "image") return imageField(title, input, hint, read);
   } else {
     input = el("textarea", { value: JSON.stringify(value ?? s.default ?? null, null, 2) });
     read = () => JSON.parse(input.value);
     hint.textContent = (s.description ? s.description + " – " : "") + "JSON";
   }
   return { label: el("label", {}, title, input, hint), read };
+}
+// A picture setting: the path stays editable; "Upload" stores the file on this PC and puts its path in.
+function imageField(title, input, hint, read) {
+  const file = el("input", { type: "file", accept: "image/png,image/jpeg", hidden: true });
+  const upload = el("button", { type: "button", className: "small", textContent: "Upload picture…" });
+  const reset = el("button", { type: "button", className: "small", textContent: "Default" });
+  const info = el("span", { className: "hint" });
+  upload.onclick = () => file.click();
+  reset.onclick = () => { input.value = ""; info.textContent = ""; };
+  file.onchange = async () => {
+    const chosen = file.files[0];
+    file.value = "";
+    if (!chosen) return;
+    info.textContent = "Uploading …";
+    try {
+      const res = await fetch("/api/admin/images", { method: "PUT", headers: { "Content-Type": chosen.type || "application/octet-stream" }, body: chosen });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || res.statusText);
+      input.value = data.path;
+      info.textContent = `Uploaded ${chosen.name} (${data.width}×${data.height}) – save to use it`;
+    } catch (err) { info.textContent = `Upload failed: ${err.message}`; }
+  };
+  const row = el("span", { className: "image-row" }, input, upload, reset, file);
+  return { label: el("label", {}, title, row, info, hint), read };
 }
 let readers = {};
 function renderSettings(pluginId, values = {}) {

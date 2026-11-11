@@ -64,10 +64,15 @@ class ImageSource:
 
     It never ends by itself; an input that shows images decides how long
     (e.g. the playlist's image duration).
+
+    size: "fit" scales it to the screen with black bars; "auto" keeps a
+    picture that fits on the screen at its size, centered, and fits a larger
+    one; "fill" covers the whole screen and cuts off what sticks out.
     """
 
     path: str
     kind: Literal["image"] = "image"
+    size: Literal["fit", "auto", "fill"] = "fit"
 
 
 @dataclass(frozen=True)
@@ -94,7 +99,8 @@ def source_to_dict(source: MediaSource) -> dict[str, Any]:
             uri["audio_uri"] = Path(source.audio_path).resolve().as_uri()
         return {**uri, "cut": True} if source.cut else uri
     if isinstance(source, ImageSource):
-        return {"kind": "image", "path": str(Path(source.path).resolve())}
+        image = {"kind": "image", "path": str(Path(source.path).resolve())}
+        return {**image, "size": source.size} if source.size != "fit" else image
     if isinstance(source, UriSource):
         uri = {"kind": "uri", "uri": source.uri}
         return {**uri, "audio_uri": source.audio_uri} if source.audio_uri else uri

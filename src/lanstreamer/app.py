@@ -468,6 +468,7 @@ class App:
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
             viewer=_Viewers(self), updater=self.updater, local_page=self.local_page,
+            images_dir=paths.data_dir() / "images",
         )  # fmt: skip
 
     async def plugin_changed(self, plugin_id: str) -> None:
