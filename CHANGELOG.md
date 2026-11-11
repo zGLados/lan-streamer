@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Every input plays about equally loud: the sound of files, streams, YouTube and OBS is measured while it plays and turned up or down smoothly to a common level (quiet sources by up to +12 dB; pauses are not pulled up). No extra delay.
+
 ### Fixed
 
 - Crackling at loud passages: the Opus encoder takes only 16-bit samples, and the peaks of a loud source above full scale (common after decoding and resampling) were cut off hard there. A soft limiter in front of the encoder now bends them down; quieter sound is not touched.

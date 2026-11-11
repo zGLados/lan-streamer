@@ -46,7 +46,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from lanstreamer.media import encoders, gst
+from lanstreamer.media import encoders, gst, loudness
 from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
@@ -285,8 +285,12 @@ class Output:
             for name in ("heading", "title", "subtitle"):
                 bin_.get_by_name(name).set_property("text", _plain(source.get(name, "")))
         elif source["kind"] == "uri":
-            desc = f"{video_tail} {audio_tail}"
+            # media (files, streams, YouTube, OBS): its own gain, levelled (loudness.py)
+            levelled = (f"audioconvert name=ain ! audioresample ! {AUDIO_CAPS},format=F32LE"
+                        f" ! volume name=level ! queue name=aout")  # fmt: skip
+            desc = f"{video_tail} {levelled}"
             bin_ = Gst.parse_bin_from_description(desc, False)
+            loudness.attach(Gst, bin_.get_by_name("level"), log)
             heads = {
                 "video": bin_.get_by_name("vin").get_static_pad("sink"),
                 "audio": bin_.get_by_name("ain").get_static_pad("sink"),
