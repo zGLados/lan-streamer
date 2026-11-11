@@ -14,7 +14,7 @@ from lanstreamer.media import encoders, gst
 REQUIRED_ELEMENTS = (
     # output pipeline
     "videotestsrc", "audiotestsrc", "videoconvert", "videoscale", "videorate", "compositor",
-    "audioconvert", "audioresample", "audiomixer", "volume", "textoverlay", "audioloudnorm",
+    "audioconvert", "audioresample", "audiomixer", "audiodynamic", "volume", "textoverlay", "audioloudnorm",
     "imagefreeze", "videobox", "x264enc", "h264parse", "opusenc", "mpegtsmux", "capssetter", "srtsink",
     # restream to RTMP
     "srtsrc", "flvmux", "rtmp2sink", "avenc_aac",

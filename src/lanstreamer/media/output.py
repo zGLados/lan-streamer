@@ -47,7 +47,7 @@ import time
 from dataclasses import dataclass, field
 
 from lanstreamer import images
-from lanstreamer.media import encoders, gst
+from lanstreamer.media import encoders, gst, loudness
 from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
@@ -56,6 +56,11 @@ OVERLAY_SHADING = 110  # textoverlay's shaded background at full opacity
 START_TIMEOUT_S = 15.0
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
+# opusenc takes only 16-bit integers: a decoded or resampled source often peaks above
+# full scale, and those samples were cut off hard there - crackling at loud passages
+# (owner 2026-11-11). The mix is float; this soft knee bends what is above -2 dBFS
+# down instead, peaks up to about +4 dBFS stay below full scale.
+LIMITER = "audiodynamic mode=compressor characteristics=soft-knee threshold=0.8 ratio=0.25"
 CARD_COLOR = 0xFF111217  # the standby picture's background
 HEARTBEAT_S = 0.5
 STALL_S = 5.0  # the main loop silent this long: report it (_watch)
@@ -125,7 +130,7 @@ class Output:
             f" ! queue name=encq leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0"
             f" h264parse name=hparse config-interval=-1 ! queue ! mux."
             f" audiomixer name=amix ignore-inactive-pads=true ! {AUDIO_CAPS}"
-            f" ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
+            f" ! {LIMITER} ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
             # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
             # after some seconds (GLib writev bug), SRT brings its own sockets.
             f" mpegtsmux name=mux alignment=7 latency=0 pat-interval=9000 pmt-interval=9000"
@@ -291,8 +296,12 @@ class Output:
             for name in ("heading", "title", "subtitle"):
                 bin_.get_by_name(name).set_property("text", _plain(source.get(name, "")))
         elif source["kind"] == "uri":
-            desc = f"{video_tail} {audio_tail}"
+            # media (files, streams, YouTube, OBS): its own gain, levelled (loudness.py)
+            levelled = (f"audioconvert name=ain ! audioresample ! {AUDIO_CAPS},format=F32LE"
+                        f" ! volume name=level ! queue name=aout")  # fmt: skip
+            desc = f"{video_tail} {levelled}"
             bin_ = Gst.parse_bin_from_description(desc, False)
+            loudness.attach(Gst, bin_.get_by_name("level"), log)
             heads = {
                 "video": bin_.get_by_name("vin").get_static_pad("sink"),
                 "audio": bin_.get_by_name("ain").get_static_pad("sink"),

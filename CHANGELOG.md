@@ -4,20 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-### Fixed
-
-- An update could stop with "MediaMTX could not be closed": a MediaMTX (or another program from the install folder) left running by the old version held its files. The installer now ends such leftovers before it installs, and lan-streamer always stops MediaMTX when it ends, even if stopping an output fails.
 ### Added
 
 - Standby: upload the picture on the admin page ("Upload picture…") instead of typing a path on the streaming PC.
 - Standby: new setting "Size". *auto* (default) shows a picture smaller than the screen at its size, centered on black (e.g. a 512×512 logo), and a larger one full screen; *fit* always scales it to the screen as before; *fill* covers the whole screen and cuts off the edges.
 - SDK 1.2.0: `ImageSource(size=…)` with `"fit"` (default, as before), `"auto"` and `"fill"`; a settings field with `"format": "image"` gets an upload button on the admin page.
-### Added
-
 - The admin page updates by itself when something changes elsewhere – another admin, another tab: plugins turned on or off, inputs, outputs and settings. An open dialog or a field being edited is not overwritten; the page updates after it.
-### Added
-
 - Playlist: YouTube video links play between files and other links (one per line, like any item). Each is looked up right before it plays; a video that cannot be played (removed, private) is skipped instead of holding up the playlist. New setting "Update yt-dlp", used only when the list has a YouTube link.
+- Every input plays about equally loud: the sound of files, streams, YouTube and OBS is measured while it plays and turned up or down smoothly to a common level (quiet sources by up to +12 dB; pauses are not pulled up). No extra delay.
+
+### Fixed
+
+- An update could stop with "MediaMTX could not be closed": a MediaMTX (or another program from the install folder) left running by the old version held its files. The installer now ends such leftovers before it installs, and lan-streamer always stops MediaMTX when it ends, even if stopping an output fails.
+- Crackling at loud passages: the Opus encoder takes only 16-bit samples, and the peaks of a loud source above full scale (common after decoding and resampling) were cut off hard there. A soft limiter in front of the encoder now bends them down; quieter sound is not touched.
 
 ## [0.1.6] – 2026-10-30
 

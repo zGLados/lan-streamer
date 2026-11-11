@@ -16,6 +16,7 @@ gstcompositor.dll          # compositor (switching, crossfade)
 gstaudioconvert.dll        # audioconvert
 gstaudioresample.dll       # audioresample
 gstaudiomixer.dll          # audiomixer
+gstaudiofx.dll             # audiodynamic (soft limiter in front of the Opus encoder)
 gstvolume.dll              # volume
 gstpango.dll               # textoverlay, clockoverlay (overlays)
 gstrsaudiofx.dll           # audioloudnorm (loudness, planned)
