@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- An update could stop with "MediaMTX could not be closed": a MediaMTX (or another program from the install folder) left running by the old version held its files. The installer now ends such leftovers before it installs, and lan-streamer always stops MediaMTX when it ends, even if stopping an output fails.
+
 ## [0.1.6] – 2026-10-30
 
 Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.

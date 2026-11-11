@@ -491,14 +491,25 @@ class App:
             await asyncio.sleep(0.2)
 
     async def stop(self) -> None:
-        for output in list(self.outputs.values()):
-            await output.stop()
+        try:
+            for output in list(self.outputs.values()):
+                try:
+                    await output.stop()
+                except Exception:  # the other outputs and MediaMTX must still stop
+                    log.exception("Output %s did not stop cleanly", output.cfg.name)
+        finally:
+            # Windows does not end child processes with the app: a MediaMTX left
+            # running holds its files and stops the next update.
+            await asyncio.to_thread(self._stop_mediamtx)
+
+    def _stop_mediamtx(self) -> None:
         if self.mediamtx and self.mediamtx.poll() is None:
             self.mediamtx.terminate()
             try:
                 self.mediamtx.wait(5)
             except subprocess.TimeoutExpired:
                 self.mediamtx.kill()
+                self.mediamtx.wait(5)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -146,6 +146,42 @@ begin
   end;
 end;
 
+// Programs from the program folder that are still running although lan-streamer has
+// ended: MediaMTX or a Python process (output worker, plugin) it left behind. They
+// hold their files, and a silent install then aborts ("could not close mediamtx",
+// test PC 2026-11-11, update 0.1.5 -> 0.1.6). Ended here, before Setup checks for
+// files in use. Only when no lan-streamer runs - or during an update, after the wait
+// in InitializeSetup. Not the updates folder: the update task's installer runs there.
+function EndLeftovers(): Integer;
+var
+  Dir, Script: String;
+begin
+  Dir := AddBackslash(ExpandConstant('{app}'));
+  StringChangeEx(Dir, '''', '''''', True);
+  Script := '$d = ''' + Dir + '''; $n = 0; ' +
+    'Get-CimInstance Win32_Process | Where-Object { $p = $_.ExecutablePath; $p -and ' +
+    '($p.StartsWith($d + ''mediamtx\'', ''OrdinalIgnoreCase'') -or $p.StartsWith($d + ''python\'', ''OrdinalIgnoreCase'')) } | ' +
+    'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }; ' +
+    'if ($n) { Start-Sleep 2 }; exit $n';
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+              '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"',
+              '', SW_HIDE, ewWaitUntilTerminated, Result) then
+    Result := -1;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Ended: Integer;
+begin
+  Result := '';
+  if (ExpandConstant('{param:LAUNCH|0}') = '1') or (ExpandConstant('{param:WAITAPP|0}') = '1') or
+     not CheckForMutexes('lan-streamer-running,Global\lan-streamer-running') then
+  begin
+    Ended := EndLeftovers();
+    Log(Format('Leftover lan-streamer processes ended: %d', [Ended]));
+  end;
+end;
+
 function LaunchAfterUpdate(Fps: String): Boolean;
 begin
   Result := (ExpandConstant('{param:LAUNCH|0}') = '1') and (ExpandConstant('{param:LAUNCHFPS|60}') = Fps);

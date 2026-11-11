@@ -203,3 +203,29 @@ def test_lan_streamer_ends_even_if_the_web_server_hangs_on_shutdown(tmp_path, mo
     started = time.monotonic()
     assert asyncio.run(app_module._serve(app, ServeArgs(), "http://localhost", None)) == 0
     assert time.monotonic() - started < 15
+
+
+def test_mediamtx_stops_even_if_an_output_does_not(monkeypatch):
+    # test PC 2026-11-11: a MediaMTX left running held its files and stopped the update
+    import asyncio
+    import subprocess
+    import sys
+
+    one, two = demo_output(60, 20, []), demo_output(60, 20, [])
+    two.id = "second"
+    app = App(Args(), [one, two])
+    stopped = []
+
+    async def broken(state="stopping"):
+        raise RuntimeError("worker gone")
+
+    async def fine(state="stopping"):
+        stopped.append(state)
+
+    first, second = app.outputs.values()
+    monkeypatch.setattr(first, "stop", broken)
+    monkeypatch.setattr(second, "stop", fine)
+    app.mediamtx = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    asyncio.run(app.stop())
+    assert app.mediamtx.poll() is not None
+    assert stopped == ["stopping"]
