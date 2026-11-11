@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Short-video submissions from TikTok now download the H.264 file when there is one, like YouTube already did: TikTok's best file is often H.265, which is harder to decode.
+- More in the logs to find playback problems: which format a submission was downloaded in (`lan-streamer.log`), which decoders an input got and how many frames and how much sound it delivers per second (`output.log`, every 10 s).
+
+### Fixed
+
+- `output.log` on Windows filled up with "OverflowError: Python int too large to convert to C long" whenever an input started: some GStreamer message types do not fit a number on Windows. They are skipped now.
+
 ## [0.1.7] – 2026-11-11
 
 Every input about equally loud and no more crackling at loud passages; the standby picture can be uploaded and small logos stay centered; YouTube videos in the playlist; the admin page follows changes by itself; updates no longer stop at a MediaMTX left running.

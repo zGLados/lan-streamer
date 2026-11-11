@@ -31,6 +31,15 @@ class Stream:
     live: bool
 
 
+def describe(fmt: dict[str, Any]) -> str:
+    """A chosen format for the log, e.g. "h264 1080x1920 + aac (play_addr)"."""
+    sound = fmt.get("acodec")
+    size = f" {fmt['width']}x{fmt['height']}" if fmt.get("width") and fmt.get("height") else ""
+    picture = "no picture" if fmt.get("vcodec") == "none" else f"{fmt.get('vcodec') or '?'}{size}"
+    sound = "no sound" if sound == "none" else sound or "?"
+    return f"{picture} + {sound} ({fmt.get('format_id', '?')})"
+
+
 class YtDlp:
     """yt-dlp in a worker thread.
 
@@ -133,8 +142,12 @@ class YtDlp:
         options = {"quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True}
         # 1080p at most, also upright (Shorts: 1080x1920). YouTube often has no file with both,
         # so separate picture and sound come first (no ffmpeg needed: the output plays them together).
+        # H.264 first, it decodes cheapest: YouTube calls it avc1, TikTok h264 (its best file is
+        # often H.265; and its audio-only formats are the background music, not the video's sound).
+        # A file with both only from 720 lines up: YouTube's is 360p, its 1080p VP9 is better.
         fit = "[width<=1920][height<=1920]"
-        chooser = {**options, "format": f"bv*{fit}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*{fit}+ba"
+        h264 = "[vcodec~='^(avc|h264)']"
+        chooser = {**options, "format": f"bv*{fit}{h264}+ba[acodec^=mp4a]/b{fit}{h264}[height>=720]/bv*{fit}+ba"
                                         f"/b[ext=mp4]{fit}/b{fit}/b"}  # fmt: skip
 
         def fetch(format_id: str, stem: str) -> Path:
@@ -145,14 +158,17 @@ class YtDlp:
                 downloads = info.get("requested_downloads") or [{}]
                 return Path(downloads[0].get("filepath") or ydl.prepare_filename(info))
 
-        def run() -> tuple[Path, Path | None]:
+        def run() -> tuple[Path, Path | None, list[dict[str, Any]]]:
             with yt_dlp.YoutubeDL(chooser) as ydl:
                 info = ydl.extract_info(link, download=False) or {}
             parts = info.get("requested_formats") or [info]
             video = fetch(parts[0]["format_id"], name)
-            return video, fetch(parts[1]["format_id"], f"{name}.audio") if len(parts) > 1 else None
+            audio = fetch(parts[1]["format_id"], f"{name}.audio") if len(parts) > 1 else None
+            return video, audio, parts
 
-        return await asyncio.wait_for(asyncio.to_thread(run), 600)
+        video, audio, parts = await asyncio.wait_for(asyncio.to_thread(run), 600)
+        self.log.info("%s: %s", link, " + ".join(describe(f) for f in parts))
+        return video, audio
 
     async def stream(self, link: str, max_height: int = 1080) -> Stream:
         """The playable URLs of a video or live stream (raises if it has none, e.g. offline)."""

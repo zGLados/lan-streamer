@@ -64,6 +64,7 @@ LIMITER = "audiodynamic mode=compressor characteristics=soft-knee threshold=0.8 
 CARD_COLOR = 0xFF111217  # the standby picture's background
 HEARTBEAT_S = 0.5
 STALL_S = 5.0  # the main loop silent this long: report it (_watch)
+FLOW_S = 10.0  # how often the current input's flow goes into the log
 
 
 def emit(event: str, **data) -> None:
@@ -72,6 +73,37 @@ def emit(event: str, **data) -> None:
 
 def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+class Flow:
+    """How fast a source delivers, measured where it enters its bin (before videorate):
+    frames per second and seconds of sound per second. Below the output's frame
+    rate or below 1.0 the source cannot keep up – the picture stutters, the
+    sound breaks up. Counted in the streaming threads, read in the main loop."""
+
+    def __init__(self, ok) -> None:
+        self.ok = ok  # Gst.PadProbeReturn.OK
+        self.frames = 0
+        self.sound_ns = 0
+        self.since = time.monotonic()
+
+    def video(self, _pad, _info):
+        self.frames += 1
+        return self.ok
+
+    def audio(self, _pad, info):
+        duration = info.get_buffer().duration
+        if 0 < duration < 10**10:  # not CLOCK_TIME_NONE
+            self.sound_ns += duration
+        return self.ok
+
+    def take(self) -> tuple[float, float]:
+        """(frames per second, seconds of sound per second) since the last call."""
+        now = time.monotonic()
+        seconds = max(now - self.since, 1e-3)
+        result = (self.frames / seconds, self.sound_ns / 1e9 / seconds)
+        self.frames, self.sound_ns, self.since = 0, 0, now
+        return result
 
 
 @dataclass
@@ -86,6 +118,7 @@ class Slot:
     failed: bool = False
     cut: bool = False
     started: float = field(default_factory=time.monotonic)
+    flow: Flow | None = None
 
 
 class Output:
@@ -341,7 +374,11 @@ class Output:
             emit("switch_failed", id=id_, label=label, reason=str(exc))
             return
 
-        slot = Slot(id_, label, bin_, cut=bool(source.get("cut")))
+        slot = Slot(id_, label, bin_, cut=bool(source.get("cut")), flow=Flow(self.Gst.PadProbeReturn.OK))
+        # diagnostics: what the source delivers (logged every FLOW_S) and which decoders it got
+        bin_.get_by_name("vin").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER, slot.flow.video)
+        bin_.get_by_name("ain").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER, slot.flow.audio)
+        bin_.connect("deep-element-added", lambda _bin, _sub, element: self._log_decoder(label, element))
         self.pipeline.add(bin_)
         vmix, amix = self.pipeline.get_by_name("vmix"), self.pipeline.get_by_name("amix")
         slot.video_pad = vmix.request_pad_simple("sink_%u")
@@ -500,7 +537,13 @@ class Output:
 
     def _on_message(self, _bus, message) -> None:
         Gst = self.Gst
-        if message.type == Gst.MessageType.ERROR:
+        try:
+            kind = message.type
+        except (OverflowError, SystemError):
+            # the "extended" types (stream collection, ...) are above 2**31: they do not
+            # fit a C long on Windows, PyGObject cannot read them. None of them is used here.
+            return
+        if kind == Gst.MessageType.ERROR:
             error, debug = message.parse_error()
             slot = self._slot_of(message.src)
             if slot is not None:
@@ -519,7 +562,7 @@ class Output:
                     log(f"muxer input {pad.get_name()}: {caps.to_string() if caps else 'no caps'}")
             emit("error", message=f"{error.message} ({debug})")
             self.loop.quit()
-        elif message.type == Gst.MessageType.WARNING:
+        elif kind == Gst.MessageType.WARNING:
             warning, _debug = message.parse_warning()
             log(f"warning from {message.src.get_name()}: {warning.message}")
 
@@ -543,7 +586,19 @@ class Output:
         fps = self.frames / (now - self._stats_since)
         self.frames, self._stats_since = 0, now
         emit("stats", fps=round(fps, 1))
+        slot = self.current
+        if slot is not None and now - slot.flow.since >= FLOW_S:
+            frames, sound = slot.flow.take()
+            log(f"input {slot.label!r} delivers {frames:.1f} frames/s, {sound:.2f} s of sound per second")
         return True
+
+    @staticmethod
+    def _log_decoder(label: str, element) -> None:
+        # streaming thread possibly: only a log line
+        factory = element.get_factory()
+        klass = (factory.get_metadata("klass") or "") if factory is not None else ""
+        if "Decoder" in klass and "Bin" not in klass:  # not decodebin3 and friends
+            log(f"input {label!r}: decoder {factory.get_name()}")
 
     # --- watchdog -----------------------------------------------------------------
 

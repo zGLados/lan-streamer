@@ -80,3 +80,13 @@ def test_settings_need_a_link():
     result = asyncio.run(check_settings(PLUGIN, {}))
     assert [e["field"] for e in result["errors"]] == ["url"]
     assert asyncio.run(check_settings(PLUGIN, {"url": "youtube"}))["errors"][0]["field"] == "url"
+
+
+def test_chosen_format_is_described_for_the_log():
+    from lanstreamer.plugins.ytdlp import describe
+
+    tiktok = {"format_id": "play_addr", "vcodec": "h264", "acodec": "aac", "width": 1080, "height": 1920}
+    assert describe(tiktok) == "h264 1080x1920 + aac (play_addr)"
+    assert describe({"format_id": "140", "vcodec": "none", "acodec": "mp4a.40.2"}) == "no picture + mp4a.40.2 (140)"
+    assert describe({"format_id": "x", "vcodec": "vp9", "acodec": "none"}) == "vp9 + no sound (x)"
+    assert describe({}) == "? + ? (?)"
