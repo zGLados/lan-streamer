@@ -4,7 +4,7 @@ Runs against a lan-streamer with the stored configuration (Standby, Short-video
 submissions) whose admin password was set by check_api.py. Uses the page like a
 person would: log in, turn on the test-pattern plugin, add inputs through the
 generated form, watch one go on air, lower its priority in the table, press
-"Next input", block inputs, delete them, upload a plugin, show a log.
+"Next input", pause and resume, block inputs, delete them, upload a plugin, show a log.
 
     python tests/e2e/check_admin.py http://localhost:8080 [--cdp <DevTools WebSocket URL>]
 
@@ -117,6 +117,14 @@ def main() -> int:
             page.click("#next")
             expect(page.locator("#s-current")).not_to_have_text(before, timeout=20_000)
             step(f"'Next input' switched from {before} to {page.locator('#s-current').inner_text()}")
+
+            before = page.locator("#s-current").inner_text()
+            page.click("#pause")
+            expect(page.locator("#s-current")).to_have_text("Paused", timeout=20_000)
+            expect(page.locator("#pause")).to_have_text("Resume")
+            page.click("#pause")
+            expect(page.locator("#s-current")).to_have_text(before, timeout=20_000)
+            step(f"Pause showed 'Paused', Resume brought {before} back")
 
             row.locator("button.danger").click()
             expect(page.locator("#inputs tr")).to_have_count(4, timeout=10_000)

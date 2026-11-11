@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Pause button on the admin page (next to "Next input"): the output shows a "Paused" card without sound and does not switch inputs. Resume plays the input on from where it was paused (a second before, to pick up again) – files, submissions and videos; a live stream comes back live.
+
 ### Changed
 
 - Short-video submissions from TikTok now download the H.264 file when there is one, like YouTube already did: TikTok's best file is often H.265, which is harder to decode.

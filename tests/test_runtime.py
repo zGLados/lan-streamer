@@ -339,3 +339,52 @@ def test_a_switch_the_worker_never_answers_gives_up_and_reports_the_worker(tmp_p
     assert len(stuck) == 1 and "no answer" in stuck[0]
     assert runtime.failed_switches == 1
     assert runtime.on_air is not None and runtime.on_air.id == "a"
+
+
+def test_pause_shows_a_card_and_resume_plays_on_where_it_was(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_BACK_S", 0.0)
+    clips = [tmp_path / "1.mp4", tmp_path / "2.mp4"]
+    for clip in clips:
+        clip.write_bytes(b"")
+    cfg = OutputConfig(inputs=[
+        InputConfig("list", "Playlist", "playlist", {"items": [str(c) for c in clips]}),
+        pattern("a", priority=5, fallback=True),
+    ])  # fmt: skip
+    seen = {}
+
+    async def pause_and_resume(runtime, worker):
+        await asyncio.sleep(0.6)
+        assert worker.plays == ["list"]
+        since = runtime.on_air.since
+        runtime.pause(True)
+        await asyncio.sleep(0.4)
+        seen["paused"] = runtime.status()
+        seen["card"] = worker.sources[-1]
+        runtime.on_worker_event({"event": "ended", "id": "list#1"})  # ignored by now: the slot is gone
+        runtime.pause(False)
+        await asyncio.sleep(0.3)
+        seen["since_moved"] = runtime.on_air.since - since
+
+    _, worker = asyncio.run(run(cfg, tmp_path, 0.1, during=pause_and_resume))
+    assert seen["paused"]["paused"] is True and seen["paused"]["current"] == ""
+    assert seen["card"]["kind"] == "card" and seen["card"]["title"] == "Paused"
+    assert worker.plays[:3] == ["list", "", "list"]  # "": the card (its id starts with "#")
+    resumed = worker.sources[2]
+    assert resumed["uri"].endswith("1.mp4")  # the same item, not the next
+    assert 0.3 < resumed["start_s"] < 1.5  # about how long it had played
+    assert seen["since_moved"] >= 0.35  # the pause does not count as air time
+
+
+def test_pause_with_nothing_on_air_and_resume_clears_the_card(tmp_path):
+    cfg = OutputConfig(inputs=[pattern("a", override="block")])
+
+    async def pause_and_resume(runtime, worker):
+        await asyncio.sleep(0.4)
+        runtime.pause(True)
+        await asyncio.sleep(0.2)
+        runtime.pause(False)
+        await asyncio.sleep(0.2)
+
+    runtime, worker = asyncio.run(run(cfg, tmp_path, 0.0, during=pause_and_resume))
+    assert worker.sources[-1]["title"] == "Paused" and worker.clears == 1
+    assert runtime.status()["paused"] is False

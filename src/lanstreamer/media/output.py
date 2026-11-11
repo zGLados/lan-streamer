@@ -343,11 +343,14 @@ class Output:
                 parts = [(source["uri"], {"video": heads["video"]}), (source["audio_uri"], {"audio": heads["audio"]})]
             else:
                 parts = [(source["uri"], heads)]
+            start_s = float(source.get("start_s") or 0)
             for uri, wanted in parts:
                 src = Gst.ElementFactory.make("fallbacksrc", None)
                 src.set_property("uri", uri)
                 src.set_property("enable-video", "video" in wanted)
                 src.set_property("enable-audio", "audio" in wanted)
+                if start_s > 0:
+                    self._start_at(src, start_s)
                 bin_.add(src)
                 src.connect("pad-added", lambda _src, pad, wanted=wanted: _link_by_kind(pad, wanted))
                 for pad in src.srcpads:
@@ -359,6 +362,34 @@ class Output:
             target = bin_.get_by_name(element).get_static_pad("src")
             bin_.add_pad(Gst.GhostPad.new(name, target))
         return bin_
+
+    def _start_at(self, src, start_s: float) -> None:
+        """A resumed input (after a pause) starts at start_s: fallbacksrc holds its
+        output back (manual-unblock; live streams ignore it) until the decoder in it
+        has seeked. Not seekable (live): it starts where the stream is."""
+        Gst, GLib = self.Gst, self.GLib
+        src.set_property("manual-unblock", True)
+        done = []
+
+        def go(decoder) -> bool:
+            if done:
+                return False
+            done.append(True)
+            query = Gst.Query.new_seeking(Gst.Format.TIME)
+            if decoder is not None and decoder.query(query) and query.parse_seeking()[1]:
+                decoder.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT,
+                                    int(start_s * Gst.SECOND))  # fmt: skip
+                log(f"resuming at {start_s:.1f} s")
+            src.emit("unblock")
+            return False
+
+        def added(_bin, _sub, element) -> None:
+            factory = element.get_factory()
+            if factory is not None and factory.get_name() == "uridecodebin3":
+                element.connect("pad-added", lambda *_: GLib.idle_add(go, element))
+
+        src.connect("deep-element-added", added)
+        GLib.timeout_add(int(START_TIMEOUT_S * 500), go, None)  # no decoder after a while: play anyway
 
     # --- switching ------------------------------------------------------------
 

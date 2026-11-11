@@ -32,6 +32,9 @@ STARTUP_GRACE_S = 5.0  # wait at most this long for every input's first activity
 PENDING_TIMEOUT_S = 30.0  # the worker answers a play within 15 s (+ fade); after this it hangs
 OVERLAY_TITLE_MAX = 70
 NO_OVERLAY = ("", "")
+PAUSE_ID = "#pause"  # play id of the "Paused" card (no input has an id starting with "#")
+PAUSE_CARD = {"kind": "card", "heading": "", "title": "Paused", "subtitle": ""}
+RESUME_BACK_S = 1.0  # a resumed video starts this much before where it was paused
 
 
 class Worker(Protocol):
@@ -76,6 +79,17 @@ class InputRuntime:
         }  # fmt: skip
 
 
+@dataclass
+class Paused:
+    """What was on air when the output was paused (input_id None: nothing)."""
+
+    input_id: str | None
+    source: dict[str, Any] | None
+    position_s: float  # how far into its source it was
+    since: float  # when it went on air (OnAir.since)
+    at: float  # when it was paused
+
+
 class OutputRuntime:
     def __init__(
         self,
@@ -106,6 +120,13 @@ class OutputRuntime:
         self.switches = 0
         self.failed_switches = 0
         self.skip_requested = False
+        self.pause_wanted = False  # the admin's Pause button; tick() carries it out
+        self.paused: Paused | None = None
+        self.pending_source: dict[str, Any] = {}
+        self.on_air_source: dict[str, Any] = {}
+        self.on_air_started = 0.0  # when its source began to play ...
+        self.on_air_start_s = 0.0  # ... at this position (a resumed video)
+        self.resume_since: float | None = None  # a resume is pending: OnAir.since to restore
         self.viewer_version = 0  # changes when a viewer form or its items change
         self._last_release_poll = 0.0
         self._started_at: float | None = None
@@ -232,6 +253,13 @@ class OutputRuntime:
         """The "Next input" button: the current input hands over now, as if released."""
         self.skip_requested = True
 
+    def pause(self, on: bool) -> None:
+        """The Pause button: a "Paused" card instead of the input, the scheduler holds.
+        Resumed, the input plays on where it was (files, downloads, videos; a live
+        stream is live again). Carried out by the next tick."""
+        self.pause_wanted = on
+        self.on_change()
+
     def states(self, now: float) -> list[InputState]:
         result = []
         for inp in self.inputs.values():
@@ -261,6 +289,14 @@ class OutputRuntime:
             self._give_up_switch()
         if self.pending is not None:
             return  # a switch is in progress
+        if self.pause_wanted and self.paused is None:
+            await self._pause(now)
+            return
+        if not self.pause_wanted and self.paused is not None:
+            await self._resume(now)
+            return
+        if self.paused is not None:
+            return
         target = decide(self.states(now), self.on_air, now)
         self.skip_requested = False
         current = self.inputs.get(self.on_air.id) if self.on_air else None
@@ -312,6 +348,39 @@ class OutputRuntime:
             except (PluginError, TimeoutError):
                 inp.releasable = True
 
+    async def _pause(self, now: float) -> None:
+        inp = self.inputs.get(self.on_air.id) if self.on_air else None
+        if inp is None or self.on_air is None:
+            self.paused = Paused(None, None, 0.0, now, now)
+        else:
+            position = self.on_air_start_s + (now - self.on_air_started)
+            self.paused = Paused(inp.cfg.id, self.on_air_source, position, self.on_air.since, now)
+            log.info("Paused: %s at %.1f s", inp.cfg.name, position)
+        self.on_air, self.on_air_kind = None, "card"
+        self._send_overlay(NO_OVERLAY, again=False)
+        await self.worker.play(f"{PAUSE_ID}#{next(self.play_ids)}", "Paused", PAUSE_CARD)
+        self.on_change()
+
+    async def _resume(self, now: float) -> None:
+        paused, self.paused = self.paused, None
+        assert paused is not None
+        inp = self.inputs.get(paused.input_id) if paused.input_id else None
+        if inp is None or inp.retired or not paused.source:
+            # nothing to go back to (removed meanwhile): the scheduler decides afresh
+            log.info("Resumed")
+            await self.worker.clear()
+            self.on_change()
+            return
+        source = dict(paused.source)
+        if source.get("kind") == "uri":
+            source["start_s"] = max(0.0, paused.position_s - RESUME_BACK_S)
+        log.info("Resumed: %s", inp.cfg.name)
+        play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
+        self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
+        self.pending_source, self.pending_since = source, self.clock()
+        self.resume_since = paused.since + (now - paused.at)  # the pause does not count as air time
+        await self.worker.play(play_id, inp.cfg.name, source)
+
     async def _switch_to(self, inp: InputRuntime) -> None:
         assert inp.proc is not None
         try:
@@ -326,7 +395,8 @@ class OutputRuntime:
         inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
         self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
-        self.pending_since = self.clock()
+        self.pending_source, self.pending_since = source, self.clock()
+        self.resume_since = None
         inp.releasable = False  # until the plugin says otherwise
         await self.worker.play(play_id, inp.cfg.name, source)
 
@@ -354,6 +424,8 @@ class OutputRuntime:
         self.worker, self.worker_ok = worker, True
         self.pending, self.on_air, self.on_air_kind = None, None, ""
         self.overlay_text = NO_OVERLAY
+        if self.paused is not None:  # still paused: the card again
+            self._spawn(worker.play(f"{PAUSE_ID}#{next(self.play_ids)}", "Paused", PAUSE_CARD))
         self.on_change()
 
     # --- overlay (lower third) ----------------------------------------------------
@@ -396,6 +468,13 @@ class OutputRuntime:
 
     def on_worker_event(self, event: dict[str, Any]) -> None:
         kind, play_id = event.get("event"), str(event.get("id", ""))
+        if play_id.startswith(PAUSE_ID):
+            if self.pending and self.pending[0] == play_id:
+                self.pending = None
+            if kind == "switch_failed":
+                log.warning("The Paused card failed: %s", event.get("reason", ""))
+            self.on_change()
+            return
         inp = self._input_of(play_id) if play_id else None
         if inp is None and self.pending and self.pending[0] == play_id and kind in ("playing", "switch_failed"):
             # the input was removed during its switch: end the switch; if its source is
@@ -407,10 +486,17 @@ class OutputRuntime:
             return
         if kind == "playing" and self.pending and self.pending[0] == play_id and inp:
             self.pending = None
-            self.on_air = OnAir(inp.cfg.id, self.clock())
-            self.switches += 1
-            log.info("On air: %s", inp.cfg.name)
-            self._playback(inp, "started")
+            now = self.clock()
+            self.on_air_source, self.on_air_started = self.pending_source, now
+            self.on_air_start_s = float(self.pending_source.get("start_s") or 0)
+            if self.resume_since is not None:  # the same item again: the plugin knows it started
+                self.on_air, self.resume_since = OnAir(inp.cfg.id, self.resume_since), None
+                log.info("On air again: %s", inp.cfg.name)
+            else:
+                self.on_air = OnAir(inp.cfg.id, now)
+                self.switches += 1
+                log.info("On air: %s", inp.cfg.name)
+                self._playback(inp, "started")
             self.on_air_kind = self.pending_kind
             self._refresh_overlay(again=True)
         elif kind == "switch_failed" and inp:
@@ -510,6 +596,7 @@ class OutputRuntime:
             "current": on_air,
             "now": {key: meta.get(key) for key in ("title", "channel", "submitter", "thumbnail")},
             "viewer_version": self.viewer_version,
+            "paused": self.pause_wanted,
             "switches": self.switches,
             "failed_switches": self.failed_switches,
             "inputs": [i.status(on_air_id, now) for i in self.inputs.values()],

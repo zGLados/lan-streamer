@@ -16,6 +16,7 @@ Admin login (one password, session cookie):
 
 Admin (logged in):
     POST   /api/admin/next?output=<id>           "Next input": the input on air hands over
+    PUT    /api/admin/pause?output=<id>          pause or resume the output ({"paused": bool})
     GET    /api/admin/plugins                    installed plugins + settings schema
     PUT    /api/admin/plugins                    upload a plugin (.zip as the request body)
     PATCH  /api/admin/plugins/{id}               turn a plugin on or off ({"enabled": bool})
@@ -124,6 +125,7 @@ class Backend:
     updater: Any = None  # lanstreamer.updater.Updater
     local_page: Any = None  # lanstreamer.localpage.LocalPage (None: no desktop, e.g. the Linux service)
     images_dir: Path | None = None  # where uploaded pictures go (settings with format "image")
+    pause: Callable[[str | None, bool], None] | None = None  # output id, paused → Pause button
 
 
 # --- request bodies ---------------------------------------------------------------------
@@ -161,6 +163,10 @@ class OutputPatch(BaseModel):
 
 class PluginSwitch(BaseModel):
     enabled: bool
+
+
+class PauseSwitch(BaseModel):
+    paused: bool
 
 
 class OutputNew(BaseModel):
@@ -357,6 +363,15 @@ def create_app(backend: Backend) -> FastAPI:
     def next_input(output: str | None = None) -> None:
         try:
             backend.skip(output)
+        except KeyError as exc:
+            raise HTTPException(404, f"no output {output!r}") from exc
+
+    @app.put("/api/admin/pause", status_code=204, dependencies=[Depends(logged_in)])
+    def pause(body: PauseSwitch, output: str | None = None) -> None:
+        if backend.pause is None:
+            raise HTTPException(501, "pausing is not available")
+        try:
+            backend.pause(output, body.paused)
         except KeyError as exc:
             raise HTTPException(404, f"no output {output!r}") from exc
 
