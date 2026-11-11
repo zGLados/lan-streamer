@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Crackling at loud passages: the Opus encoder takes only 16-bit samples, and the peaks of a loud source above full scale (common after decoding and resampling) were cut off hard there. A soft limiter in front of the encoder now bends them down; quieter sound is not touched.
+
 ## [0.1.6] – 2026-10-30
 
 Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.
