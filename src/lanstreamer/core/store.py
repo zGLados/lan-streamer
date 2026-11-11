@@ -126,6 +126,11 @@ class Store:
     def close(self) -> None:
         self._db.close()
 
+    @property
+    def revision(self) -> int:
+        """Grows with every stored change (rows written since the start): pages reload then."""
+        return self._db.total_changes
+
     # --- read -----------------------------------------------------------------------
 
     def outputs(self) -> list[OutputConfig]:

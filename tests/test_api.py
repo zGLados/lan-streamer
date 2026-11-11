@@ -65,6 +65,40 @@ def test_websocket_pushes_status(setup):
         assert ws.receive_json()["state"] == "running"
 
 
+def test_the_status_says_when_the_configuration_changed(setup):
+    # the admin page reloads plugins, outputs and inputs when config_version grows
+    import io
+    import zipfile
+    from pathlib import Path
+
+    client, *_ = setup
+    login(client)
+
+    def version() -> int:
+        return client.get("/api/status").json()["config_version"]
+
+    first = version()
+    assert version() == first  # nothing changed
+    client.patch("/api/admin/plugins/playlist", json={"enabled": False})
+    second = version()
+    assert second > first
+    client.post("/api/admin/outputs/out1/inputs", json={"name": "Bars", "plugin": "test-pattern"})
+    third = version()
+    assert third > second
+    with client.websocket_connect("/api/ws") as ws:
+        assert ws.receive_json()["config_version"] == third
+
+    buffer = io.BytesIO()  # a plugin upload changes files, not the store
+    with zipfile.ZipFile(buffer, "w") as z:
+        for f in (Path(__file__).resolve().parents[1] / "examples" / "hello-plugin").iterdir():
+            z.write(f, f.name)
+    assert client.put("/api/admin/plugins", content=buffer.getvalue()).status_code == 201
+    fourth = version()
+    assert fourth > third
+    assert client.delete("/api/admin/plugins/hello").status_code == 204
+    assert version() > fourth
+
+
 def test_admin_needs_login(setup):
     client = setup[0]
     assert client.get("/api/admin/session").json() == {"password_set": False, "logged_in": False}

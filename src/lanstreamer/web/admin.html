@@ -328,9 +328,9 @@ async function start() {
 }
 async function reload() {
   outputs = await api("/api/admin/outputs");
-  if (!outputs.some((o) => o.id === selected)) selected = outputs[0].id;
+  if (!outputs.some((o) => o.id === selected)) { selected = outputs[0].id; outputDirty = false; }
   renderOutputs();
-  renderOutput();
+  if (!outputDirty) renderOutput();  // unsaved changes in the output form stay
   renderInputs();
 }
 
@@ -351,6 +351,7 @@ function renderOutputs() {
 }
 async function selectOutput(id) {
   selected = id;
+  outputDirty = false;
   history.replaceState(null, "", outputQuery());
   await reload();
   openSocket();
@@ -380,13 +381,42 @@ let socket = null;
 function openSocket() {
   const old = socket;
   const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws${outputQuery()}`);
-  ws.onmessage = (e) => { if (ws === socket) { status = JSON.parse(e.data); renderStatus(); } };
+  ws.onmessage = (e) => {
+    if (ws !== socket) return;
+    status = JSON.parse(e.data);
+    renderStatus();
+    configChanged(status.config_version);
+  };
   ws.onclose = () => {
     if (ws !== socket) return;  // replaced (another output was selected)
     $("dot").className = "dot bad";
     setTimeout(openSocket, 2000);
   };
   if (old) old.close();
+}
+// Changes made elsewhere (another admin, another tab, the installer's choices): the status
+// carries config_version, and the page reloads plugins, outputs and inputs when it grows -
+// but not into an open dialog or a field being edited; then a little later.
+let configVersion = null, configStale = false, configLoading = false, outputDirty = false;
+$("output-form").addEventListener("input", () => { outputDirty = true; });
+function userIsEditing() {
+  if (document.querySelector("dialog[open]")) return true;
+  const a = document.activeElement;
+  return Boolean(a && a.closest("#app") && a.matches("input:not([type=checkbox]), select, textarea"));
+}
+async function configChanged(version) {
+  if (version === undefined) return;
+  if (configVersion !== null && version !== configVersion) configStale = true;
+  configVersion = version;
+  if (!configStale || configLoading || userIsEditing()) return;
+  configStale = false; configLoading = true;
+  try {
+    await loadPlugins();
+    await reload();
+    loadUpdate();
+    loadLocalPage();
+  } catch { configStale = true; /* next status message tries again */ }
+  finally { configLoading = false; }
 }
 function renderStatus() {
   $("dot").className = "dot " + (status.state === "running" ? "ok" : status.state === "failed" ? "bad" : "");
@@ -700,6 +730,7 @@ $("output-form").onsubmit = async (e) => {
     const result = await api(`/api/admin/outputs/${encodeURIComponent(o.id)}`, { method: "PATCH", body: changes });
     $("output-note").hidden = !result.restart_required;
     toast("Output saved");
+    outputDirty = false;
     await reload();
   } catch (err) { toast(err.message, true); }
 };

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The admin page updates by itself when something changes elsewhere – another admin, another tab: plugins turned on or off, inputs, outputs and settings. An open dialog or a field being edited is not overwritten; the page updates after it.
+
 ## [0.1.6] – 2026-10-30
 
 Short-video submissions from YouTube work again, and a stuck yt-dlp update no longer stops an input. For plugin authors: the SDK on its own.
