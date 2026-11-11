@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - The admin page updates by itself when something changes elsewhere – another admin, another tab: plugins turned on or off, inputs, outputs and settings. An open dialog or a field being edited is not overwritten; the page updates after it.
+### Added
+
+- Playlist: YouTube video links play between files and other links (one per line, like any item). Each is looked up right before it plays; a video that cannot be played (removed, private) is skipped instead of holding up the playlist. New setting "Update yt-dlp", used only when the list has a YouTube link.
 
 ## [0.1.6] – 2026-10-30
 

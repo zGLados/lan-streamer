@@ -38,7 +38,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Restream:** on the admin page enter an RTMP URL with your stream key (YouTube, Twitch, …) under "Restream to" – the output is sent there as well.
 
-**YouTube:** add an input "YouTube" with a link: a channel's `/live` page (on air while it is live), a playlist, a channel or a single video (played one after another).
+**YouTube:** add an input "YouTube" with a link: a channel's `/live` page (on air while it is live), a playlist, a channel or a single video (played one after another). Single YouTube videos can also go into a playlist input, between files and other links.
 
 **Send from OBS:** add an input "RTMP/SRT ingest" on the admin page; it shows the server address and stream key to enter in OBS (RTMP or SRT). The installer (all users) allows lan-streamer through the Windows firewall on private and domain networks – if other PCs cannot connect, set the network to "Private" in the Windows settings.
 
