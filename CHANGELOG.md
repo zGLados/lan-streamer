@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.8] – 2026-11-12
+
+Pause and resume an output from the admin page; TikTok submissions download the easier H.264 file; more in the logs to find stuttering playback; no more OverflowError flood in `output.log` on Windows.
 
 ### Added
 
@@ -169,7 +171,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.7...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.8...HEAD
+[0.1.8]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.8
 [0.1.7]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.7
 [0.1.6]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.6
 [0.1.5]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.5
