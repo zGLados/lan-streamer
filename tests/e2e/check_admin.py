@@ -16,15 +16,27 @@ from __future__ import annotations
 
 import argparse
 import os
+import struct
 import sys
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
 PASSWORD = "ci-password-123"  # set by check_api.py
 EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "hello-plugin"
+
+
+def _png(width: int, height: int) -> bytes:
+    """A grey PNG."""
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    rows = b"".join(b"\x00" + b"\x80" * width * 3 for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))  # fmt: skip
 
 
 def step(text: str) -> None:
@@ -51,6 +63,20 @@ def main() -> int:
             expect(page.locator("#app")).to_be_visible(timeout=10_000)
             expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
             step("logged in, two inputs listed (Standby, Short-video submissions)")
+
+            # Standby: upload a picture in its settings, keep "auto" (small pictures centered)
+            page.locator('#inputs tr[data-id="standby"] button', has_text="Edit").click()
+            page.locator("#settings input[type=file]").set_input_files(
+                {"name": "logo.png", "mimeType": "image/png", "buffer": _png(512, 512)})  # fmt: skip
+            expect(page.locator("#settings")).to_contain_text("Uploaded logo.png (512×512)", timeout=10_000)
+            expect(page.locator("#settings select")).to_have_value("auto")
+            page.click("#input-save")
+            expect(page.locator("#input-dialog")).not_to_be_visible(timeout=10_000)
+            saved = page.evaluate("""async () => (await (await fetch('/api/admin/outputs')).json())""")
+            standby = next(i for o in saved for i in o["inputs"] if i["id"] == "standby")
+            assert standby["settings"]["image"].endswith(".png"), standby
+            assert standby["settings"]["size"] == "auto", standby
+            step("uploaded a standby picture (512×512) and saved it with size auto")
 
             toggle = page.locator('#plugins tr[data-plugin="test-pattern"] input[type="checkbox"]')
             expect(toggle).not_to_be_checked(timeout=10_000)

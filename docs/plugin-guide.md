@@ -171,7 +171,7 @@ Class attributes:
 | --- | --- |
 | `UriSource(uri, audio_uri="")` | anything GStreamer opens by URI: `http(s)://` MP4/WebM/MKV/HLS (`.m3u8`)/DASH, `rtsp://`, `srt://`, `file:///`. With `audio_uri` the picture comes from `uri` and the sound from `audio_uri` (e.g. YouTube's separate HD streams). |
 | `FileSource(path, cut=False, audio_path="")` | a local media file. `cut=True` switches to it without the 1 s crossfade, so nothing of its start is lost. With `audio_path` the picture comes from `path` and the sound from that file. |
-| `ImageSource(path)` | a PNG or JPEG with silence; never ends by itself. |
+| `ImageSource(path, size="fit")` | a PNG or JPEG with silence; never ends by itself. `size`: `"fit"` scales it to the screen with black bars, `"auto"` keeps a picture smaller than the screen at its size, centered (a larger one fits), `"fill"` covers the screen and cuts off the edges. `"auto"` and `"fill"` need SDK 1.2 / lan-streamer 0.1.7. |
 | `CardSource(title, heading="", subtitle="")` | a dark card with text and silence (e.g. "Up next" / title / "by Anna"); never ends by itself. |
 | `TestSource(pattern="smpte", freq=440)` | a generated test picture with a tone; `pattern` is any GStreamer `videotestsrc` pattern. |
 
@@ -194,10 +194,11 @@ class Settings(BaseModel):
     check_s: float = Field(10, ge=2, le=300, description="Check every … seconds")  # number with limits
     shuffle: bool = False                                           # check box
     channels: list[str] = Field(default_factory=list)               # one entry per line
+    logo: str = Field("", json_schema_extra={"format": "image"})    # path + "Upload picture…" button
 ```
 
 - `title` is the label (without it the field name is used, e.g. "Live Check S"), `description` is shown under the field. Give every field a default when you can – the admin then only fills in what matters.
-- Enumerations (`Literal`, `Enum`) become a drop-down, numbers with `ge`/`le` get limits, `bool` a check box, `list[str]` a text box with one entry per line; anything else is edited as JSON.
+- Enumerations (`Literal`, `Enum`) become a drop-down, numbers with `ge`/`le` get limits, `bool` a check box, `list[str]` a text box with one entry per line; anything else is edited as JSON. A `str` with `json_schema_extra={"format": "image"}` gets an "Upload picture…" button: the PNG or JPEG is stored on the lan-streamer PC and the field gets its path (give it to `ImageSource`).
 - The admin page validates the input in a short-lived plugin process before storing it, so your validators (`field_validator`, …) run and their messages are shown.
 - When the settings change, the input's process is restarted with the new settings.
 - Settings are visible to every admin and stored in plain text. Fine for API keys of LAN services; tell the admin in the description if a field holds a secret.

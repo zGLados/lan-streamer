@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - An update could stop with "MediaMTX could not be closed": a MediaMTX (or another program from the install folder) left running by the old version held its files. The installer now ends such leftovers before it installs, and lan-streamer always stops MediaMTX when it ends, even if stopping an output fails.
+### Added
+
+- Standby: upload the picture on the admin page ("Upload picture…") instead of typing a path on the streaming PC.
+- Standby: new setting "Size". *auto* (default) shows a picture smaller than the screen at its size, centered on black (e.g. a 512×512 logo), and a larger one full screen; *fit* always scales it to the screen as before; *fill* covers the whole screen and cuts off the edges.
+- SDK 1.2.0: `ImageSource(size=…)` with `"fit"` (default, as before), `"auto"` and `"fill"`; a settings field with `"format": "image"` gets an upload button on the admin page.
 
 ## [0.1.6] – 2026-10-30
 
