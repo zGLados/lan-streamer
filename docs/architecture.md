@@ -122,7 +122,7 @@ Rules, in order:
 4. On equal priority, the current input keeps playing until its minimum duration is over and its plugin's `can_release()` returns true, or until its maximum duration is reached (F-SCH-04, F-AKT-04).
 5. No active input: the fallback plays (F-SCH-02). The fallback input is always active with the lowest priority.
 
-An input that goes off air in the middle of a video remembers where (in `OutputRuntime`, until the app restarts); when it comes back with the same video – the same file, or for streaming links whose address changes with every lookup the same title, channel and submitter – it continues there, 1 s earlier. An ended video starts over.
+A "Video link" input that goes off air in the middle of a video remembers where (in `OutputRuntime`, until the app restarts); when it comes back with the same video – the same file, or for streaming links whose address changes with every lookup the same title, channel and submitter – it continues there, 1 s earlier. An ended video starts over; other inputs start their item over.
 
 Plugins push activity changes as events. The core also polls every few seconds (F-AKT-02) and debounces flapping activity before acting on it.
 

@@ -36,6 +36,7 @@ PAUSE_ID = "#pause"  # play id of the "Paused" card (no input has an id starting
 PAUSE_CARD = {"kind": "card", "heading": "", "title": "Paused", "subtitle": ""}
 RESUME_BACK_S = 1.0  # a resumed video starts this much before where it was paused
 RESUME_MIN_S = 5.0  # a video that went off air earlier than this starts over when it comes back
+RESUME_PLUGINS = {"youtube"}  # inputs whose video continues after a switch (owner: only "Video link")
 
 
 class Worker(Protocol):
@@ -419,11 +420,11 @@ class OutputRuntime:
         await self.worker.play(play_id, inp.cfg.name, source)
 
     def _leave_air(self, now: float) -> None:
-        """The input on air goes off air: it remembers where its video was, to
-        continue there when it comes back with the same video (until the app
-        restarts). A live stream is live again then (not seekable)."""
+        """The input on air goes off air: a Video link input remembers where its
+        video was, to continue there when it comes back with the same video (until
+        the app restarts). A live stream is live again then (not seekable)."""
         inp = self.inputs.get(self.on_air.id) if self.on_air else None
-        if inp is None or self.on_air_kind != "uri" or not self.on_air_source:
+        if inp is None or inp.cfg.plugin not in RESUME_PLUGINS or self.on_air_kind != "uri" or not self.on_air_source:
             return
         position = self.on_air_start_s + (now - self.on_air_started)
         if position >= RESUME_MIN_S:

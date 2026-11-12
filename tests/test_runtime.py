@@ -401,6 +401,7 @@ def _playlist_and_pattern(tmp_path, b_override="none", clips=("1.mp4", "2.mp4"))
 
 
 def test_a_video_continues_where_it_was_when_its_input_comes_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_PLUGINS", {"playlist"})  # Video link in the app; it needs the network
     monkeypatch.setattr(rt, "RESUME_BACK_S", 0.0)
     monkeypatch.setattr(rt, "RESUME_MIN_S", 0.2)
 
@@ -420,6 +421,7 @@ def test_a_video_continues_where_it_was_when_its_input_comes_back(tmp_path, monk
 
 
 def test_a_video_that_ended_off_air_starts_over(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_PLUGINS", {"playlist"})
     monkeypatch.setattr(rt, "RESUME_MIN_S", 0.2)
     one = {"clips": ("1.mp4",)}  # looped: the same video comes back
 
@@ -436,6 +438,21 @@ def test_a_video_that_ended_off_air_starts_over(tmp_path, monkeypatch):
     _, worker = asyncio.run(run(_playlist_and_pattern(tmp_path, **one), tmp_path, 0.0, during=away_ended_back))
     assert worker.plays[:3] == ["list", "b", "list"]
     assert worker.sources[2]["uri"].endswith("1.mp4") and "start_s" not in worker.sources[2]
+
+
+def test_only_video_link_inputs_continue_after_a_switch(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_MIN_S", 0.2)
+
+    async def away_and_back(runtime, worker):
+        await asyncio.sleep(0.6)
+        await runtime.apply(_playlist_and_pattern(tmp_path, b_override="force"))
+        await asyncio.sleep(0.4)
+        await runtime.apply(_playlist_and_pattern(tmp_path))
+        await asyncio.sleep(0.3)
+
+    _, worker = asyncio.run(run(_playlist_and_pattern(tmp_path), tmp_path, 0.0, during=away_and_back))
+    assert worker.plays[:3] == ["list", "b", "list"]
+    assert "start_s" not in worker.sources[2]  # a playlist starts its item over
 
 
 def test_the_same_video_is_told_by_its_title_for_streaming_links():

@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Videos continue where they were: when an input goes off air in the middle of a video (another input takes over) and comes back with the same video, it plays on from there instead of starting over – for files, playlists, Video link and submissions. Kept until lan-streamer restarts; a live stream is live again.
+- Video link inputs continue where they were: when one goes off air in the middle of a video (another input takes over) and comes back with the same video, it plays on from there instead of starting over. Kept until lan-streamer restarts; a live stream is live again. Other inputs start their item over, as before.
 - "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block); its video continues where it was.
 
 ## [0.1.11] – 2026-11-12
