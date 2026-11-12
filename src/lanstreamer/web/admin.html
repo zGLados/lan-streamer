@@ -489,7 +489,14 @@ function renderInputs() {
       el("option", { value: "force", textContent: "Force on air" }),
       el("option", { value: "block", textContent: "Block" }));
     override.value = input.override;
-    override.onchange = () => patch(input, { override: override.value });
+    override.onchange = async () => { await patch(input, { override: override.value }); renderInputs(); };
+    const blocked = input.override === "block";
+    const stop = el("button", {
+      className: "small" + (blocked ? " primary" : ""), textContent: blocked ? "Start" : "Stop",
+      title: blocked ? "The input may go on air again; a video continues where it was"
+        : "Takes the input off air until you press Start (sets Override to Block); a video continues where it was",
+    });
+    stop.onclick = async () => { await patch(input, { override: blocked ? "none" : "block" }); renderInputs(); };
     const edit = el("button", { className: "small", textContent: "Edit", onclick: () => openDialog(input) });
     const queue = el("button", { className: "small", textContent: "Queue", hidden: true, onclick: () => openQueue(input) });
     queue.dataset.queue = input.id;
@@ -507,7 +514,7 @@ function renderInputs() {
       el("td", {}, priority),
       el("td", {}, fallback),
       el("td", {}, override),
-      el("td", {}, el("div", { className: "actions" }, queue, edit, del)));
+      el("td", {}, el("div", { className: "actions" }, stop, queue, edit, del)));
     row.dataset.id = input.id;
     addDrag(row);
     body.append(row);

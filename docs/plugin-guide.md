@@ -113,7 +113,7 @@ get_source() ─► on_playback("started") ─► … ─► on_playback("ended"
 
 - After **"ended"** the input usually wants to show its next item: call `ctx.next_source()`. If the input is still the one to be on air, lan-streamer calls `get_source()` again at once (an input of the same priority whose `can_release()` turn has come may take over instead). If there is nothing left, report the input inactive.
 - After **"failed"** – or when `get_source()` raises – the input sits out for 30 s before it is tried again.
-- When a higher priority interrupts, there is **no** event. When the input returns, `get_source()` is called again, so return what should play *then* (e.g. the same queue entry from the start, or the live stream as it is now).
+- When a higher priority interrupts, there is **no** event. When the input returns, `get_source()` is called again, so return what should play *then* (e.g. the same queue entry, or the live stream as it is now). If it is the same video as before, lan-streamer continues it where it went off air (a live stream is live again). It tells the same video by its link (files) or, for streaming links, by the metadata's title, channel and submitter.
 - Images and cards never end by themselves: the plugin decides how long they stay (e.g. the playlist's image duration: a timer, then `ctx.next_source()`).
 
 ## The plugin class

@@ -35,6 +35,7 @@ NO_OVERLAY = ("", "")
 PAUSE_ID = "#pause"  # play id of the "Paused" card (no input has an id starting with "#")
 PAUSE_CARD = {"kind": "card", "heading": "", "title": "Paused", "subtitle": ""}
 RESUME_BACK_S = 1.0  # a resumed video starts this much before where it was paused
+RESUME_MIN_S = 5.0  # a video that went off air earlier than this starts over when it comes back
 
 
 class Worker(Protocol):
@@ -60,6 +61,7 @@ class InputRuntime:
     error: str = ""
     cooldown_until: float = 0.0
     restarts: int = 0
+    resume: tuple[str, float] | None = None  # (video, position): where it went off air
 
     def status(self, on_air_id: str | None, now: float) -> dict[str, Any]:
         if self.cfg.id == on_air_id:
@@ -88,6 +90,16 @@ class Paused:
     position_s: float  # how far into its source it was
     since: float  # when it went on air (OnAir.since)
     at: float  # when it was paused
+
+
+def _video_of(inp: InputRuntime, source: dict[str, Any]) -> str:
+    """Which video a source plays, to tell whether an input came back with the same
+    one. Streaming links (YouTube) change with every lookup, so by its title."""
+    uri = str(source.get("uri", ""))
+    meta = inp.metadata
+    if uri.startswith("file:") or not meta.get("title"):
+        return uri
+    return "\n".join(str(meta.get(key) or "") for key in ("title", "channel", "submitter"))
 
 
 class OutputRuntime:
@@ -307,6 +319,7 @@ class OutputRuntime:
         if target is None:
             if self.on_air is not None:
                 log.info("No input active – showing the background")
+                self._leave_air(now)
                 self.on_air = None
                 self._send_overlay(NO_OVERLAY, again=False)
                 await self.worker.clear()
@@ -392,6 +405,11 @@ class OutputRuntime:
             return
         if inp.retired or self.inputs.get(inp.cfg.id) is not inp:
             return  # removed or replaced while it answered: decide again on the next tick
+        if source.get("kind") == "uri" and inp.resume is not None:
+            (video, position), inp.resume = inp.resume, None
+            if video == _video_of(inp, source):
+                source = {**source, "start_s": max(0.0, position - RESUME_BACK_S)}
+                log.info("%s: continues at %.1f s", inp.cfg.name, position)
         inp.wants_next = False
         play_id = f"{inp.cfg.id}#{next(self.play_ids)}"
         self.pending, self.pending_kind = (play_id, inp.cfg.id), str(source.get("kind", ""))
@@ -399,6 +417,18 @@ class OutputRuntime:
         self.resume_since = None
         inp.releasable = False  # until the plugin says otherwise
         await self.worker.play(play_id, inp.cfg.name, source)
+
+    def _leave_air(self, now: float) -> None:
+        """The input on air goes off air: it remembers where its video was, to
+        continue there when it comes back with the same video (until the app
+        restarts). A live stream is live again then (not seekable)."""
+        inp = self.inputs.get(self.on_air.id) if self.on_air else None
+        if inp is None or self.on_air_kind != "uri" or not self.on_air_source:
+            return
+        position = self.on_air_start_s + (now - self.on_air_started)
+        if position >= RESUME_MIN_S:
+            inp.resume = (_video_of(inp, self.on_air_source), position)
+            log.info("%s: off air at %.1f s", inp.cfg.name, position)
 
     def _give_up_switch(self) -> None:
         """The worker never answered a play (CI 2026-10-27: its main loop hung).
@@ -487,6 +517,8 @@ class OutputRuntime:
         if kind == "playing" and self.pending and self.pending[0] == play_id and inp:
             self.pending = None
             now = self.clock()
+            if self.on_air is not None and self.on_air.id != inp.cfg.id:
+                self._leave_air(now)
             self.on_air_source, self.on_air_started = self.pending_source, now
             self.on_air_start_s = float(self.pending_source.get("start_s") or 0)
             if self.resume_since is not None:  # the same item again: the plugin knows it started
@@ -508,6 +540,7 @@ class OutputRuntime:
             self._playback(inp, "failed", event.get("reason", ""))
         elif kind == "ended" and inp:
             log.info("%s: the source ended", inp.cfg.name)
+            inp.resume = None
             self._playback(inp, "ended")
         elif kind == "failed" and inp:
             log.warning("%s: the source broke: %s", inp.cfg.name, event.get("reason", ""))

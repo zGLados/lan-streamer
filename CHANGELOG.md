@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Videos continue where they were: when an input goes off air in the middle of a video (another input takes over) and comes back with the same video, it plays on from there instead of starting over – for files, playlists, Video link and submissions. Kept until lan-streamer restarts; a live stream is live again.
+- "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block); its video continues where it was.
+
 ## [0.1.11] – 2026-11-12
 
 YouTube sign-in against "confirm you're not a bot"; picture and sound in step in YouTube videos over slower lines too; quieter logs.

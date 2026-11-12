@@ -388,3 +388,60 @@ def test_pause_with_nothing_on_air_and_resume_clears_the_card(tmp_path):
     runtime, worker = asyncio.run(run(cfg, tmp_path, 0.0, during=pause_and_resume))
     assert worker.sources[-1]["title"] == "Paused" and worker.clears == 1
     assert runtime.status()["paused"] is False
+
+
+def _playlist_and_pattern(tmp_path, b_override="none", clips=("1.mp4", "2.mp4")):
+    paths = [tmp_path / c for c in clips]
+    for path in paths:
+        path.write_bytes(b"")
+    return OutputConfig(inputs=[
+        InputConfig("list", "Playlist", "playlist", {"items": [str(p) for p in paths], "loop": True}),
+        pattern("b", priority=5, override=b_override),
+    ])  # fmt: skip
+
+
+def test_a_video_continues_where_it_was_when_its_input_comes_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_BACK_S", 0.0)
+    monkeypatch.setattr(rt, "RESUME_MIN_S", 0.2)
+
+    async def away_and_back(runtime, worker):
+        await asyncio.sleep(0.6)
+        await runtime.apply(_playlist_and_pattern(tmp_path, b_override="force"))
+        await asyncio.sleep(0.4)
+        await runtime.apply(_playlist_and_pattern(tmp_path))
+        await asyncio.sleep(0.3)
+
+    _, worker = asyncio.run(run(_playlist_and_pattern(tmp_path), tmp_path, 0.0, during=away_and_back))
+    assert worker.plays[:3] == ["list", "b", "list"]
+    assert "start_s" not in worker.sources[0]
+    back = worker.sources[2]
+    assert back["uri"].endswith("1.mp4")  # the same item
+    assert 0.3 < back["start_s"] < 1.5  # where it went off air, not where b ended
+
+
+def test_a_video_that_ended_off_air_starts_over(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "RESUME_MIN_S", 0.2)
+    one = {"clips": ("1.mp4",)}  # looped: the same video comes back
+
+    async def away_ended_back(runtime, worker):
+        await asyncio.sleep(0.6)
+        first = worker.last_id
+        await runtime.apply(_playlist_and_pattern(tmp_path, b_override="force", **one))
+        await asyncio.sleep(0.4)
+        runtime.on_worker_event({"event": "ended", "id": first})
+        await asyncio.sleep(0.1)
+        await runtime.apply(_playlist_and_pattern(tmp_path, **one))
+        await asyncio.sleep(0.3)
+
+    _, worker = asyncio.run(run(_playlist_and_pattern(tmp_path, **one), tmp_path, 0.0, during=away_ended_back))
+    assert worker.plays[:3] == ["list", "b", "list"]
+    assert worker.sources[2]["uri"].endswith("1.mp4") and "start_s" not in worker.sources[2]
+
+
+def test_the_same_video_is_told_by_its_title_for_streaming_links():
+    inp = rt.InputRuntime(pattern("a"), None, metadata={"title": "Cats", "channel": "@c"})
+    one = rt._video_of(inp, {"kind": "uri", "uri": "https://cdn/1?sig=a"})
+    assert one == rt._video_of(inp, {"kind": "uri", "uri": "https://cdn/2?sig=b"})
+    assert rt._video_of(inp, {"kind": "uri", "uri": "file:///v/1.mp4"}) == "file:///v/1.mp4"
+    inp.metadata = {"title": "Dogs", "channel": "@c"}
+    assert rt._video_of(inp, {"kind": "uri", "uri": "https://cdn/1?sig=a"}) != one

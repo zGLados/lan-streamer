@@ -131,13 +131,18 @@ def main() -> int:
             step("deleted the input")
 
             # Standby: with both test inputs blocked, the fallback goes on air
-            for input_id in ("bars", "ball"):
-                page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("block")
+            # (bars with the Stop button, ball in the override select)
+            bars = page.locator('#inputs tr[data-id="bars"]')
+            bars.get_by_role("button", name="Stop").click()
+            expect(bars.locator("select")).to_have_value("block", timeout=10_000)
+            page.locator('#inputs tr[data-id="ball"] select').select_option("block")
             expect(page.locator("#s-current")).to_have_text("Standby", timeout=20_000)
-            for input_id in ("bars", "ball"):
-                page.locator(f'#inputs tr[data-id="{input_id}"] select').select_option("none")
+            expect(page.locator('#inputs tr[data-id="ball"]').get_by_role("button", name="Start")).to_be_visible()
+            bars.get_by_role("button", name="Start").click()
+            expect(bars.locator("select")).to_have_value("none", timeout=10_000)
+            page.locator('#inputs tr[data-id="ball"] select').select_option("none")
             expect(page.locator("#s-current")).not_to_have_text("Standby", timeout=20_000)
-            step("blocked both test inputs: Standby went on air; unblocked again")
+            step("blocked both test inputs (Stop button and select): Standby went on air; started again")
             for input_id in ("bars", "ball"):
                 page.locator(f'#inputs tr[data-id="{input_id}"] button.danger').click()
             expect(page.locator("#inputs tr")).to_have_count(2, timeout=10_000)
