@@ -85,7 +85,9 @@ class Flow:
     """How fast a source delivers, measured where it enters its bin (before videorate):
     frames per second and seconds of sound per second. Below the output's frame
     rate or below 1.0 the source cannot keep up – the picture stutters, the
-    sound breaks up. Counted in the streaming threads, read in the main loop."""
+    sound breaks up. Counted in the streaming threads, read in the main loop.
+    fallbacksrc fills in black and silence while its source is down, and those
+    count too: its state (source_state) tells whether it is the real thing."""
 
     def __init__(self, ok) -> None:
         self.ok = ok  # Gst.PadProbeReturn.OK
@@ -112,6 +114,18 @@ class Flow:
         return result
 
 
+def source_state(status: str, statistics: str) -> str:
+    """One fallbacksrc for the log, e.g. "running, buffered 100 %, 2 retries (last: timeout)".
+    statistics is its "statistics" structure as text (Structure.get_value fails on
+    some types without overrides, see _report_caps)."""
+    fields = dict(re.findall(r"([\w-]+)=\([\w]+\)\"?([^,;\"]*)", statistics))
+    text = f"{status}, buffered {fields.get('buffering-percent', '?')} %"
+    retries = fields.get("num-retry", "0")
+    if retries != "0":
+        text += f", {retries} {'retry' if retries == '1' else 'retries'} (last: {fields.get('last-retry-reason', '?')})"
+    return text
+
+
 @dataclass
 class Slot:
     id: str
@@ -125,6 +139,8 @@ class Slot:
     cut: bool = False
     started: float = field(default_factory=time.monotonic)
     flow: Flow | None = None
+    sources: list = field(default_factory=list)  # (what, fallbacksrc) of a media input
+    status: dict = field(default_factory=dict)  # what -> its last logged status
 
 
 class Output:
@@ -352,7 +368,8 @@ class Output:
                 parts = [(source["uri"], heads)]
             start_s = float(source.get("start_s") or 0)
             for uri, wanted in parts:
-                src = Gst.ElementFactory.make("fallbacksrc", None)
+                what = "" if len(wanted) == 2 else "picture" if "video" in wanted else "sound"
+                src = Gst.ElementFactory.make("fallbacksrc", f"source {what}".strip())
                 src.set_property("uri", uri)
                 src.set_property("enable-video", "video" in wanted)
                 src.set_property("enable-audio", "audio" in wanted)
@@ -417,6 +434,11 @@ class Output:
         bin_.get_by_name("vin").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER, slot.flow.video)
         bin_.get_by_name("ain").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER, slot.flow.audio)
         bin_.connect("deep-element-added", lambda _bin, _sub, element: self._log_decoder(label, element))
+        for what in ("", "picture", "sound"):  # named in _source_bin (Gst.Iterator needs overrides)
+            element = bin_.get_by_name(f"source {what}".strip())
+            if element is not None:
+                slot.sources.append((what, element))
+                element.connect("notify::status", lambda src, _spec, what=what: self._log_status(slot, what, src))
         self.pipeline.add(bin_)
         vmix, amix = self.pipeline.get_by_name("vmix"), self.pipeline.get_by_name("amix")
         slot.video_pad = vmix.request_pad_simple("sink_%u")
@@ -627,8 +649,29 @@ class Output:
         slot = self.current
         if slot is not None and now - slot.flow.since >= FLOW_S:
             frames, sound = slot.flow.take()
-            log(f"input {slot.label!r} delivers {frames:.1f} frames/s, {sound:.2f} s of sound per second")
+            states = "; ".join(f"{what + ' ' if what else ''}source {self._source_state(src)}" for what, src in slot.sources)
+            log(f"input {slot.label!r} delivers {frames:.1f} frames/s, {sound:.2f} s of sound per second"
+                + (f"; {states}" if states else ""))  # fmt: skip
         return True
+
+    @staticmethod
+    def _source_state(src) -> str:
+        try:
+            return source_state(src.get_property("status").value_nick, src.get_property("statistics").to_string())
+        except Exception as exc:  # noqa: BLE001 – only diagnostics
+            return f"unknown ({exc})"
+
+    @staticmethod
+    def _log_status(slot: Slot, what: str, src) -> None:
+        # any thread: only a log line. Not "running": the input shows fallback black/silence.
+        # fallbacksrc notifies often without a change, so only changes are logged.
+        try:
+            status = src.get_property("status").value_nick
+        except Exception:  # noqa: BLE001
+            return
+        if slot.status.get(what) != status:
+            slot.status[what] = status
+            log(f"input {slot.label!r}{' ' + what if what else ''}: source {status}")
 
     @staticmethod
     def _log_decoder(label: str, element) -> None:

@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- More in `output.log` to find stuttering playback: when a media input's source starts buffering, retries or runs again, and with every "delivers …" line its state, how full its buffer is and how often it reconnected. While a source is down, the input plays black and silence, which the frames/sound numbers count too – the state shows whether it is the real picture and sound.
+
 ### Fixed
 
 - Choppy sound in YouTube videos and other media inputs: the sound mixer threw away sound that arrived a little late, so every short hiccup of a download or decoder became a gap. It now waits up to half a second for late sound (the output is that much later).
