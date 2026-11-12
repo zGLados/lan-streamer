@@ -9,6 +9,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Video link inputs continue where they were: when one goes off air in the middle of a video (another input takes over) and comes back with the same video, it plays on from there instead of starting over. Kept until lan-streamer restarts; a live stream is live again. Other inputs start their item over, as before.
 - "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block); its video continues where it was.
 
+### Fixed
+
+- YouTube videos (Video link, YouTube links in the playlist) buffered again and again and started slowly: YouTube throttles one long download to little more than the video's own bitrate. lan-streamer now downloads them in 10 MB pieces, like yt-dlp, at full speed (measured: 86 KB/s before, 6.7 MB/s now).
+- Resuming a YouTube video (Resume after a pause, or a Video link input coming back) took about 9 s and could stop the output on Linux: the video could not jump to the position. It now jumps there directly, about as fast as a normal start, wherever the position is.
+
 ## [0.1.11] – 2026-11-12
 
 YouTube sign-in against "confirm you're not a bot"; picture and sound in step in YouTube videos over slower lines too; quieter logs.

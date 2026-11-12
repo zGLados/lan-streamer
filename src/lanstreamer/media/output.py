@@ -42,18 +42,20 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
 
 from lanstreamer import images
-from lanstreamer.media import encoders, gst, loudness
+from lanstreamer.media import chunked, encoders, gst, loudness
 from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
 OVERLAY_FADE_S = 0.3
 OVERLAY_SHADING = 110  # textoverlay's shaded background at full opacity
 START_TIMEOUT_S = 15.0
+RESUME_BUFFER_BYTES = 64 * 1024 * 1024  # file buffer of a resumed YouTube source (_start_together)
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
 # opusenc takes only 16-bit integers: a decoded or resampled source often peaks above
@@ -173,6 +175,8 @@ class Output:
         self.tables_until: float | None = None
         self.reported_sent = False
         self.heartbeat = time.monotonic()  # the main loop's last sign of life
+        self.proxy = chunked.Proxy(log)  # YouTube's servers in pieces (chunked.py)
+        self.proxied: dict = {}  # input bin -> its proxy URLs, forgotten when it stops
         self.watching = False
         self.pipeline = self._build()
 
@@ -378,9 +382,12 @@ class Output:
             else:
                 parts = [(source["uri"], heads)]
             start_s = float(source.get("start_s") or 0)
-            sources = []
+            sources, proxied = [], []
             for uri, wanted in parts:
                 what = "" if len(wanted) == 2 else "picture" if "video" in wanted else "sound"
+                if chunked.wanted(uri):
+                    uri = self.proxy.url(uri)
+                    proxied.append(uri)
                 src = Gst.ElementFactory.make("fallbacksrc", f"source {what}".strip())
                 src.set_property("uri", uri)
                 src.set_property("enable-video", "video" in wanted)
@@ -390,8 +397,11 @@ class Output:
                 src.connect("pad-added", lambda _src, pad, wanted=wanted: _link_by_kind(pad, wanted))
                 for pad in src.srcpads:
                     _link_by_kind(pad, wanted)
+            if proxied:
+                self.proxied[bin_] = proxied
+                log(f"input {label!r}: {len(proxied)} of {len(parts)} downloads in pieces (chunked proxy)")
             if len(sources) > 1 or start_s > 0:
-                self._start_together(sources, start_s)
+                self._start_together(sources, start_s, download=bool(proxied))
         else:
             raise ValueError(f"unknown source kind {source['kind']!r}")
 
@@ -400,7 +410,7 @@ class Output:
             bin_.add_pad(Gst.GhostPad.new(name, target))
         return bin_
 
-    def _start_together(self, sources: list, start_s: float) -> None:
+    def _start_together(self, sources: list, start_s: float, download: bool = False) -> None:
         """Picture and sound from separate URIs (YouTube) start at the same moment, and a
         resumed input (after a pause) at start_s.
 
@@ -411,7 +421,14 @@ class Output:
         holds its output back (manual-unblock; live streams ignore it): once each has its
         decoder they are seeked if needed, once each decoder has data (from start_s on)
         and each buffer is full they are let go together. Not seekable (live): it starts where the stream is. A
-        source not ready after a while does not hold the others: they play anyway."""
+        source not ready after a while does not hold the others: they play anyway.
+
+        download (YouTube, through the chunked proxy): a resumed source fills a file buffer
+        (uridecodebin3 "download"), because qtdemux ignores seeks on fragmented MP4 while
+        data is pushed to it, and the file lets it pull. Without it the sound never came
+        again, the start waited for its timeout and the video aggregator then aborted the
+        worker (measured 2026-11-12). Not for other sources: a plain file buffered for
+        seconds after the start that way."""
         Gst, GLib = self.Gst, self.GLib
         decoders: dict = {}  # fallbacksrc -> its uridecodebin3, once it has an output
         arrived: set = set()  # decoders whose (seeked) data has come
@@ -483,12 +500,16 @@ class Output:
             if seekable:
                 state["seeking"] = True
                 arrived.clear()  # a flushing seek drops what came: count from the target on
+                failed = []
                 for decoder in seekable:
-                    for pad in decoder.srcpads:
-                        pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder, True)
-                    decoder.seek_simple(Gst.Format.TIME, flags, target)
-                arrived.update(d for d in decoders.values() if d not in seekable)
-                log(f"resuming at {start_s:.1f} s")
+                    probes = [(pad, pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder, True))
+                              for pad in decoder.srcpads]  # fmt: skip
+                    if not decoder.seek_simple(Gst.Format.TIME, flags, target):
+                        for pad, probe in probes:  # it plays on from where it is
+                            pad.remove_probe(probe)
+                        failed.append(decoder)
+                arrived.update(d for d in decoders.values() if d not in seekable or d in failed)
+                log(f"resuming at {start_s:.1f} s" + (f" ({len(failed)} of {len(seekable)} could not seek)" if failed else ""))
             GLib.timeout_add(int(START_TIMEOUT_S * 500), unblock, "timeout waiting for data")
             if all_arrived():
                 GLib.timeout_add(100, all_arrived)  # the buffers fill without telling
@@ -506,6 +527,10 @@ class Output:
             def added(_bin, _sub, element, src=src) -> None:
                 factory = element.get_factory()
                 if factory is not None and factory.get_name() == "uridecodebin3":
+                    if target and download:  # a file buffer, so that it can seek (see above)
+                        element.set_property("download", True)
+                        element.set_property("download-dir", tempfile.gettempdir())
+                        element.set_property("ring-buffer-max-size", RESUME_BUFFER_BYTES)
                     element.connect("pad-added", lambda _dec, pad, src=src: decoded(src, element, pad))
 
             def decoded(src, decoder, pad) -> None:  # streaming thread: watch it at once
@@ -654,6 +679,8 @@ class Output:
             bin_.set_state(self.Gst.State.NULL)
         except Exception as exc:  # noqa: BLE001 – only a dropped input
             log(f"input {label!r}: stopping failed: {exc}")
+        for url in self.proxied.pop(bin_, ()):
+            self.proxy.forget(url)
         took = time.monotonic() - began
         if took > 1.0:  # was the reason for the main loop stalls, see _drop
             log(f"input {label!r} took {took:.1f} s to stop")
