@@ -159,6 +159,7 @@ class Output:
         self.next_zorder = 1
         self.overlay_gen = 0  # counts overlay commands; older fades and timers stop
         self.frames = 0
+        self.dropping: set = set()  # input bins being stopped (_drop)
         self.muxed: set[str] = set()  # mux inputs that have delivered data
         self.muxed_all_at: float | None = None  # when the last one did
         self.tables = TableReader()  # diagnostics: which tracks MediaMTX gets
@@ -230,7 +231,11 @@ class Output:
         mux_src.add_probe(data, self._hold_mux_output)
         bus = pipeline.get_bus()
         bus.add_signal_watch()
-        bus.connect("message", self._on_message)
+        # only the messages used: PyGObject on Windows cannot read the type of the
+        # "extended" ones (stream collection, ... above 2**31, no C long) and printed an
+        # OverflowError for each, even when caught in _on_message (owner logs 0.1.8, 0.1.9)
+        for kind in ("error", "warning"):
+            bus.connect(f"message::{kind}", self._on_message)
         return pipeline
 
     def _on_mux_input(self, pad, _info):
@@ -367,18 +372,20 @@ class Output:
             else:
                 parts = [(source["uri"], heads)]
             start_s = float(source.get("start_s") or 0)
+            sources = []
             for uri, wanted in parts:
                 what = "" if len(wanted) == 2 else "picture" if "video" in wanted else "sound"
                 src = Gst.ElementFactory.make("fallbacksrc", f"source {what}".strip())
                 src.set_property("uri", uri)
                 src.set_property("enable-video", "video" in wanted)
                 src.set_property("enable-audio", "audio" in wanted)
-                if start_s > 0:
-                    self._start_at(src, start_s)
+                sources.append(src)
                 bin_.add(src)
                 src.connect("pad-added", lambda _src, pad, wanted=wanted: _link_by_kind(pad, wanted))
                 for pad in src.srcpads:
                     _link_by_kind(pad, wanted)
+            if len(sources) > 1 or start_s > 0:
+                self._start_together(sources, start_s)
         else:
             raise ValueError(f"unknown source kind {source['kind']!r}")
 
@@ -387,33 +394,87 @@ class Output:
             bin_.add_pad(Gst.GhostPad.new(name, target))
         return bin_
 
-    def _start_at(self, src, start_s: float) -> None:
-        """A resumed input (after a pause) starts at start_s: fallbacksrc holds its
-        output back (manual-unblock; live streams ignore it) until the decoder in it
-        has seeked. Not seekable (live): it starts where the stream is."""
+    def _start_together(self, sources: list, start_s: float) -> None:
+        """Picture and sound from separate URIs (YouTube) start at the same moment, and a
+        resumed input (after a pause) at start_s. Each fallbacksrc holds its output back
+        (manual-unblock; live streams ignore it) until every one has its decoder, then they
+        are seeked if needed and let go together. Let go one by one, each started when its
+        own server answered: a sound server 0.5 s slower put the sound 0.5 s behind the
+        picture for the whole video (measured 2026-11-12). Not seekable (live): it starts
+        where the stream is. No decoder after a while: it plays anyway."""
         Gst, GLib = self.Gst, self.GLib
-        src.set_property("manual-unblock", True)
+        decoders: dict = {}  # fallbacksrc -> its uridecodebin3, once it has an output
         done = []
+        # one demuxer seeks picture and sound together, to a keyframe; separate sources
+        # each seek on their own, so to the exact position, or the picture would start
+        # at an earlier keyframe than the sound
+        flags = Gst.SeekFlags.FLUSH | (Gst.SeekFlags.ACCURATE if len(sources) > 1 else Gst.SeekFlags.KEY_UNIT)
 
-        def go(decoder) -> bool:
+        def unblock(_reason=None) -> bool:
+            if len(done) == 1:  # once
+                done.append(True)
+                for src in sources:
+                    src.emit("unblock")
+            return False
+
+        def go(_reason=None) -> bool:
             if done:
                 return False
             done.append(True)
-            query = Gst.Query.new_seeking(Gst.Format.TIME)
-            if decoder is not None and decoder.query(query) and query.parse_seeking()[1]:
-                decoder.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT,
-                                    int(start_s * Gst.SECOND))  # fmt: skip
-                log(f"resuming at {start_s:.1f} s")
-            src.emit("unblock")
+            if len(decoders) < len(sources):
+                log(f"{len(sources) - len(decoders)} of {len(sources)} sources not ready after"
+                    f" {START_TIMEOUT_S / 2:.0f} s: started anyway")  # fmt: skip
+            seeking = []
+            for src in sources:
+                decoder = decoders.get(src)
+                query = Gst.Query.new_seeking(Gst.Format.TIME)
+                if start_s > 0 and decoder is not None and decoder.query(query) and query.parse_seeking()[1]:
+                    decoder.seek_simple(Gst.Format.TIME, flags, int(start_s * Gst.SECOND))
+                    seeking.append(decoder)
+            if not seeking:
+                return unblock()
+            log(f"resuming at {start_s:.1f} s")
+            # the seeked data reaches the decoders at different times (an accurate seek
+            # decodes from the keyframe before): let go once every one has some
+            arrived: set = set()
+
+            target = int(start_s * Gst.SECOND)
+
+            def first(_pad, info, decoder) -> object:
+                # a demuxer may land before the target even on an accurate seek (Ogg starts
+                # at the page before: the sound began 0.55 s early, measured 2026-11-12) –
+                # what ends before the target is dropped, so every source starts there
+                buffer = info.get_buffer()
+                duration = buffer.duration if 0 < buffer.duration < 10**10 else 0
+                if 0 <= buffer.pts < 10**18 and buffer.pts + duration <= target:
+                    return Gst.PadProbeReturn.DROP
+                arrived.add(decoder)
+                if len(arrived) == len(seeking):
+                    GLib.idle_add(unblock)
+                return Gst.PadProbeReturn.REMOVE
+
+            for decoder in seeking:
+                for pad in decoder.srcpads:
+                    pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder)
+            GLib.timeout_add(int(START_TIMEOUT_S * 500), unblock, "timeout")
             return False
 
-        def added(_bin, _sub, element) -> None:
-            factory = element.get_factory()
-            if factory is not None and factory.get_name() == "uridecodebin3":
-                element.connect("pad-added", lambda *_: GLib.idle_add(go, element))
+        def ready(src, decoder) -> bool:
+            decoders.setdefault(src, decoder)
+            if len(decoders) == len(sources):
+                go()
+            return False
 
-        src.connect("deep-element-added", added)
-        GLib.timeout_add(int(START_TIMEOUT_S * 500), go, None)  # no decoder after a while: play anyway
+        for src in sources:
+            src.set_property("manual-unblock", True)
+
+            def added(_bin, _sub, element, src=src) -> None:
+                factory = element.get_factory()
+                if factory is not None and factory.get_name() == "uridecodebin3":
+                    element.connect("pad-added", lambda *_: GLib.idle_add(ready, src, element))
+
+            src.connect("deep-element-added", added)
+        GLib.timeout_add(int(START_TIMEOUT_S * 500), go, "timeout")
 
     # --- switching ------------------------------------------------------------
 
@@ -535,11 +596,36 @@ class Output:
         self.GLib.timeout_add(20, fade)
 
     def _drop(self, slot: Slot) -> None:
-        slot.bin.set_state(self.Gst.State.NULL)
-        for ghost, mixer, pad in slot.pads:
-            ghost.unlink(pad)
+        """Takes an input out: out of the pipeline and off the mixers right away, stopped
+        (state NULL) in a thread. Stopping waits for its streaming threads – on the test
+        PC over 5 s at times (Windows decoder, a download), and in the main loop that
+        stalled the whole output until the watchdog restarted the worker (2026-11-12)."""
+        self.dropping.add(slot.bin)  # its last messages (e.g. "not linked") are no errors
+        self.pipeline.remove(slot.bin)  # also unlinks its ghost pads from the mixers
+        for _ghost, mixer, pad in slot.pads:
             mixer.release_request_pad(pad)
-        self.pipeline.remove(slot.bin)
+        # an input that failed while starting (e.g. a missing picture) left the pipeline
+        # waiting for it in PAUSED, and the next input then started paused too: on again
+        self.pipeline.set_state(self.Gst.State.PLAYING)
+        threading.Thread(target=self._stop_bin, args=(slot.bin, slot.label), daemon=True).start()
+
+    def _stop_bin(self, bin_, label: str) -> None:
+        began = time.monotonic()
+        try:
+            bin_.set_state(self.Gst.State.NULL)
+        except Exception as exc:  # noqa: BLE001 – only a dropped input
+            log(f"input {label!r}: stopping failed: {exc}")
+        took = time.monotonic() - began
+        if took > 1.0:  # was the reason for the main loop stalls, see _drop
+            log(f"input {label!r} took {took:.1f} s to stop")
+        self.GLib.idle_add(self.dropping.discard, bin_)
+
+    def _dropped(self, element) -> bool:
+        while element is not None:
+            if element in self.dropping:
+                return True
+            element = element.get_parent()
+        return False
 
     # --- lower third ------------------------------------------------------------
 
@@ -605,6 +691,9 @@ class Output:
             return
         if kind == Gst.MessageType.ERROR:
             error, debug = message.parse_error()
+            if self._dropped(message.src):
+                log(f"error from an input being taken out (ignored): {error.message}")
+                return
             slot = self._slot_of(message.src)
             if slot is not None:
                 log(f"input {slot.label!r} failed: {error.message} ({debug})")

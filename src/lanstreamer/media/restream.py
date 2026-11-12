@@ -87,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
 
     bus = pipeline.get_bus()
     bus.add_signal_watch()
-    bus.connect("message", on_message)
+    for kind in ("error", "eos"):  # only these: see output.py (OverflowError on Windows)
+        bus.connect(f"message::{kind}", on_message)
 
     def read_stdin() -> None:  # the parent closes stdin to stop us
         for _line in sys.stdin:
