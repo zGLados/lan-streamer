@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - "YouTube sign-in" on the admin page: when YouTube answers "Sign in to confirm you're not a bot", upload the cookies (cookies.txt) of a signed-in browser – best of a second Google account. Video link, the playlist and submissions then use them. They stay on the streaming PC and are never shown or sent back again.
 
+### Fixed
+
+- Picture and sound still about a second apart in YouTube videos: 0.1.10 started them together, but over a slower line the big picture stream was still filling its buffer while the sound already played. They now start once both have data and full buffers (measured with a picture line just above real time: within 30 ms; it was 0.2 s and more).
+
 ## [0.1.10] – 2026-11-12
 
 Picture and sound stay in step in YouTube videos; no more short hangs when inputs switch; the YouTube input is now "Video link" and plays any site yt-dlp reads (Twitch, ARD/ZDF Mediathek, …); a "Beta" update channel to try fixes before a release.

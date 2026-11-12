@@ -396,73 +396,102 @@ class Output:
 
     def _start_together(self, sources: list, start_s: float) -> None:
         """Picture and sound from separate URIs (YouTube) start at the same moment, and a
-        resumed input (after a pause) at start_s. Each fallbacksrc holds its output back
-        (manual-unblock; live streams ignore it) until every one has its decoder, then they
-        are seeked if needed and let go together. Let go one by one, each started when its
-        own server answered: a sound server 0.5 s slower put the sound 0.5 s behind the
-        picture for the whole video (measured 2026-11-12). Not seekable (live): it starts
-        where the stream is. No decoder after a while: it plays anyway."""
+        resumed input (after a pause) at start_s.
+
+        Each fallbacksrc maps its stream to the output's time when its first data passes,
+        so two of them let go one by one are as far apart as their data was: a sound
+        server 0.5 s slower put the sound 0.5 s behind the whole video, and a big picture
+        stream over a slower line put the sound ahead (measured 2026-11-12). So every one
+        holds its output back (manual-unblock; live streams ignore it): once each has its
+        decoder they are seeked if needed, once each decoder has data (from start_s on)
+        and each buffer is full they are let go together. Not seekable (live): it starts where the stream is. A
+        source not ready after a while does not hold the others: they play anyway."""
         Gst, GLib = self.Gst, self.GLib
         decoders: dict = {}  # fallbacksrc -> its uridecodebin3, once it has an output
-        done = []
+        arrived: set = set()  # decoders whose (seeked) data has come
+        state = {"seeked": False, "seeking": False, "free": False}
+        began = time.monotonic()
+        target = int(start_s * Gst.SECOND) if start_s > 0 else 0
         # one demuxer seeks picture and sound together, to a keyframe; separate sources
         # each seek on their own, so to the exact position, or the picture would start
         # at an earlier keyframe than the sound
         flags = Gst.SeekFlags.FLUSH | (Gst.SeekFlags.ACCURATE if len(sources) > 1 else Gst.SeekFlags.KEY_UNIT)
 
-        def unblock(_reason=None) -> bool:
-            if len(done) == 1:  # once
-                done.append(True)
-                for src in sources:
-                    src.emit("unblock")
+        def unblock(reason=None) -> bool:
+            if state["free"]:
+                return False
+            state["free"] = True
+            if len(sources) > 1:  # for output.log: how long the start waited, and why
+                log(f"picture and sound start together after {time.monotonic() - began:.1f} s"
+                    f" ({reason or 'all have data'})")  # fmt: skip
+            for src in sources:
+                src.emit("unblock")
             return False
 
-        def go(_reason=None) -> bool:
-            if done:
+        def buffered(src) -> bool:
+            # fallbacksrc buffers while held back (status stays "buffering" until let go),
+            # and after letting go it holds a source until its buffer is full: a picture
+            # still buffering would start later than the sound
+            try:
+                found = re.search(r"buffering-percent=\(int\)(-?\d+)", src.get_property("statistics").to_string())
+            except Exception:  # noqa: BLE001 – unknown: do not wait for it
+                return True
+            return found is None or int(found.group(1)) >= 100
+
+        def all_arrived() -> bool:
+            if state["free"]:
                 return False
-            done.append(True)
+            if state["seeked"] and len(arrived) >= len(decoders) and all(buffered(src) for src in decoders):
+                unblock()
+                return False
+            return state["seeked"]  # polled until then (every 100 ms, see seek)
+
+        def first(_pad, info, decoder, after_seek) -> object:
+            # streaming thread. A demuxer may land before the target even on an accurate
+            # seek (Ogg starts at the page before: the sound began 0.55 s early) – what
+            # ends before it is dropped, so every source starts there
+            if not after_seek and state["seeking"]:  # the seek's own probe counts instead
+                return Gst.PadProbeReturn.REMOVE
+            buffer = info.get_buffer()
+            duration = buffer.duration if 0 < buffer.duration < 10**10 else 0
+            if after_seek and 0 <= buffer.pts < 10**18 and buffer.pts + duration <= target:
+                return Gst.PadProbeReturn.DROP
+            arrived.add(decoder)
+            GLib.idle_add(lambda: all_arrived() and False)  # once; the 100 ms poll does the rest
+            return Gst.PadProbeReturn.REMOVE
+
+        def seek(reason=None) -> bool:
+            if state["seeked"]:
+                return False
+            state["seeked"] = True
             if len(decoders) < len(sources):
                 log(f"{len(sources) - len(decoders)} of {len(sources)} sources not ready after"
                     f" {START_TIMEOUT_S / 2:.0f} s: started anyway")  # fmt: skip
-            seeking = []
-            for src in sources:
-                decoder = decoders.get(src)
+            if not decoders:
+                return unblock(reason)
+            seekable = []
+            for decoder in decoders.values():
                 query = Gst.Query.new_seeking(Gst.Format.TIME)
-                if start_s > 0 and decoder is not None and decoder.query(query) and query.parse_seeking()[1]:
-                    decoder.seek_simple(Gst.Format.TIME, flags, int(start_s * Gst.SECOND))
-                    seeking.append(decoder)
-            if not seeking:
-                return unblock()
-            log(f"resuming at {start_s:.1f} s")
-            # the seeked data reaches the decoders at different times (an accurate seek
-            # decodes from the keyframe before): let go once every one has some
-            arrived: set = set()
-
-            target = int(start_s * Gst.SECOND)
-
-            def first(_pad, info, decoder) -> object:
-                # a demuxer may land before the target even on an accurate seek (Ogg starts
-                # at the page before: the sound began 0.55 s early, measured 2026-11-12) –
-                # what ends before the target is dropped, so every source starts there
-                buffer = info.get_buffer()
-                duration = buffer.duration if 0 < buffer.duration < 10**10 else 0
-                if 0 <= buffer.pts < 10**18 and buffer.pts + duration <= target:
-                    return Gst.PadProbeReturn.DROP
-                arrived.add(decoder)
-                if len(arrived) == len(seeking):
-                    GLib.idle_add(unblock)
-                return Gst.PadProbeReturn.REMOVE
-
-            for decoder in seeking:
-                for pad in decoder.srcpads:
-                    pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder)
-            GLib.timeout_add(int(START_TIMEOUT_S * 500), unblock, "timeout")
+                if target and decoder.query(query) and query.parse_seeking()[1]:
+                    seekable.append(decoder)
+            if seekable:
+                state["seeking"] = True
+                arrived.clear()  # a flushing seek drops what came: count from the target on
+                for decoder in seekable:
+                    for pad in decoder.srcpads:
+                        pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder, True)
+                    decoder.seek_simple(Gst.Format.TIME, flags, target)
+                arrived.update(d for d in decoders.values() if d not in seekable)
+                log(f"resuming at {start_s:.1f} s")
+            GLib.timeout_add(int(START_TIMEOUT_S * 500), unblock, "timeout waiting for data")
+            if all_arrived():
+                GLib.timeout_add(100, all_arrived)  # the buffers fill without telling
             return False
 
-        def ready(src, decoder) -> bool:
+        def has_decoder(src, decoder) -> bool:
             decoders.setdefault(src, decoder)
             if len(decoders) == len(sources):
-                go()
+                seek()
             return False
 
         for src in sources:
@@ -471,10 +500,14 @@ class Output:
             def added(_bin, _sub, element, src=src) -> None:
                 factory = element.get_factory()
                 if factory is not None and factory.get_name() == "uridecodebin3":
-                    element.connect("pad-added", lambda *_: GLib.idle_add(ready, src, element))
+                    element.connect("pad-added", lambda _dec, pad, src=src: decoded(src, element, pad))
+
+            def decoded(src, decoder, pad) -> None:  # streaming thread: watch it at once
+                pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder, False)
+                GLib.idle_add(has_decoder, src, decoder)
 
             src.connect("deep-element-added", added)
-        GLib.timeout_add(int(START_TIMEOUT_S * 500), go, "timeout")
+        GLib.timeout_add(int(START_TIMEOUT_S * 500), seek, "timeout waiting for decoders")
 
     # --- switching ------------------------------------------------------------
 
