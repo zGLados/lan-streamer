@@ -72,16 +72,16 @@ class Plugin(InputPlugin[Settings]):
         self.ctx.set_info(f"{state} · {self.addresses}")
 
     def _ask_mediamtx(self) -> list[str]:
-        """The tracks published on our path; [] while nobody publishes."""
-        url = f"{self.settings.api.rstrip('/')}/v3/paths/get/{urllib.parse.quote(self.path, safe='/')}"
-        try:
-            with urllib.request.urlopen(url, timeout=3) as response:
-                path = json.load(response)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:  # the path exists only while someone publishes
-                return []
-            raise
-        if not (path.get("ready") or path.get("available")):  # "available" in newer versions
+        """The tracks published on our path; [] while nobody publishes.
+
+        The list of paths, not /v3/paths/get/<path>: a path exists only while someone
+        publishes, and MediaMTX logged "ERR [API] path not found" for every ask (every
+        2 s) while nobody did (test PC, 2026-11-12)."""
+        url = f"{self.settings.api.rstrip('/')}/v3/paths/list?itemsPerPage=1000"
+        with urllib.request.urlopen(url, timeout=3) as response:
+            items = json.load(response).get("items") or []
+        path = next((p for p in items if p.get("name") == self.path), None)
+        if path is None or not (path.get("ready") or path.get("available")):  # "available" in newer versions
             return []
         return [str(t) for t in path.get("tracks") or []] or ["a stream"]
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import secrets
 import shutil
 import sys
@@ -29,6 +30,8 @@ from lanstreamer_sdk import Manifest, ManifestError, load_manifest
 MAX_ZIP_BYTES = 50 * 1024 * 1024
 MAX_UNPACKED_BYTES = 200 * 1024 * 1024
 DEPS = ".deps"
+
+log = logging.getLogger("lanstreamer.plugins")
 
 Pip = Callable[[list[str], Path], Awaitable[None]]
 
@@ -116,6 +119,19 @@ async def install_zip(
         return load_manifest(final)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+
+
+def remove_leftovers(plugins_dir: Path) -> None:
+    """Deletes work folders an earlier run could not (".old-…" of a replaced plugin whose
+    files Windows still had locked, an interrupted ".staging-…"). At the start, before
+    any plugin process runs, so nothing holds them any more."""
+    if not plugins_dir.is_dir():
+        return
+    for folder in plugins_dir.iterdir():
+        if folder.is_dir() and folder.name.startswith((".old-", ".staging-")):
+            shutil.rmtree(folder, ignore_errors=True)
+            if folder.exists():
+                log.warning("Could not delete %s (still in use?) – it is ignored", folder)
 
 
 def remove(plugins_dir: Path, plugin_id: str) -> None:

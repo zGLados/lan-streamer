@@ -37,7 +37,7 @@ from lanstreamer.core.store import NotFound, Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.localpage import LocalPage
 from lanstreamer.media import encoders
-from lanstreamer.plugins import choice
+from lanstreamer.plugins import choice, install
 from lanstreamer.plugins.registry import discover
 from lanstreamer.updater import Updater
 from lanstreamer.web.api import Backend, Changes, create_app
@@ -364,6 +364,7 @@ class App:
 
     async def start(self) -> None:
         log.info("lan-streamer %s – %d output(s)", BUILD, len(self.outputs))
+        await asyncio.to_thread(install.remove_leftovers, paths.plugins_dir())
         if self.args.simulate:
             log.info("Simulation: no video pipeline, no MediaMTX (local tests)")
         else:

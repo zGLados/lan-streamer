@@ -67,6 +67,12 @@ LIMITER = "audiodynamic mode=compressor characteristics=soft-knee threshold=0.8 
 # 2026-11-12); the test tone, made in the pipeline, never was late. This much
 # lateness is waited for instead; it adds to the output's delay.
 AUDIO_MIX_LATENCY_MS = 500
+# The muxer waits as long for a missing track (more than the mixer may be late): with
+# latency 0 it did not wait at all when its latency query failed at the start, created
+# its streams with the first picture and the sound still without caps – "Could not
+# create handler for stream" (Linux CI start flake, frequent since the mixer latency).
+# Both tracks flowing, it waits for nothing; the SRT sink does not sync to it.
+MUX_LATENCY_MS = 1000
 CARD_COLOR = 0xFF111217  # the standby picture's background
 HEARTBEAT_S = 0.5
 STALL_S = 5.0  # the main loop silent this long: report it (_watch)
@@ -190,7 +196,7 @@ class Output:
             f" ! {LIMITER} ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
             # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
             # after some seconds (GLib writev bug), SRT brings its own sockets.
-            f" mpegtsmux name=mux alignment=7 latency=0 pat-interval=9000 pmt-interval=9000"
+            f" mpegtsmux name=mux alignment=7 latency={MUX_LATENCY_MS * Gst.MSECOND} pat-interval=9000 pmt-interval=9000"
             # mpegtsmux puts a PAT/PMT copy into its caps ("streamheader") once,
             # possibly when only one track existed, and never updates it; srtsink
             # sends it before any data and MediaMTX keeps the first PMT it sees,

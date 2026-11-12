@@ -18,7 +18,8 @@ def discover(*folders: Path) -> dict[str, Manifest]:
     for folder in (BUILTIN, *folders):
         if not folder.is_dir():
             continue
-        for plugin_dir in sorted(p for p in folder.iterdir() if p.is_dir()):
+        # ".staging-…" and ".old-…" are install.py's work folders, not plugins
+        for plugin_dir in sorted(p for p in folder.iterdir() if p.is_dir() and not p.name.startswith(".")):
             try:
                 manifest = load_manifest(plugin_dir)
             except ManifestError as exc:

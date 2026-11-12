@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from lanstreamer.plugins.install import InstallError, install_zip, remove
+from lanstreamer.plugins.install import InstallError, install_zip, remove, remove_leftovers
 from lanstreamer.plugins.registry import BUILTIN, discover
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "hello-plugin"
@@ -109,3 +109,15 @@ def test_remove(tmp_path):
     assert "hello" not in discover(tmp_path) or discover(tmp_path)["hello"].path != tmp_path / "hello"
     with pytest.raises(InstallError):
         remove(tmp_path, "hello")
+
+
+def test_leftover_work_folders_are_no_plugins_and_go_at_the_start(tmp_path, caplog):
+    # Windows kept the replaced version's files locked: ".old-…" stayed (test PC, 2026-11-12)
+    install(zip_of(EXAMPLE), tmp_path)
+    for leftover in (".old-shorts-60c2d7c3", ".staging-1a2b3c4d"):
+        (tmp_path / leftover / "plugin").mkdir(parents=True)
+    with caplog.at_level("WARNING"):
+        assert set(discover(tmp_path)) == set(discover()) | {"hello"}
+    assert "Skipping plugin" not in caplog.text
+    remove_leftovers(tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["hello"]

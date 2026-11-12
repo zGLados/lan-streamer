@@ -16,12 +16,13 @@ class FakeMediaMTX(http.server.BaseHTTPRequestHandler):
     published: ClassVar[dict[str, list[str]]] = {}  # path → tracks
 
     def do_GET(self):
-        name = self.path.removeprefix("/v3/paths/get/")
-        if name not in self.published:
+        if not self.path.startswith("/v3/paths/list"):  # the only call it may need
             self.send_response(404)
             self.end_headers()
             return
-        body = json.dumps({"name": name, "ready": True, "tracks": self.published[name]}).encode()
+        items = [{"name": name, "ready": True, "tracks": tracks} for name, tracks in self.published.items()]
+        items.append({"name": "out1", "ready": True, "tracks": ["H264", "Opus"]})  # another path
+        body = json.dumps({"pageCount": 1, "itemCount": len(items), "items": items}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
