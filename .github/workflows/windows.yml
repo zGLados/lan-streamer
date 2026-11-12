@@ -466,3 +466,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  # A green full run on "ci": its installer replaces the pre-release "beta", which
+  # installs choosing the channel "beta" on the admin page get (updater.py). Windows
+  # only – the updater installs nothing itself on Linux. Deleted and created again,
+  # so the tag "beta" points at this commit; GITHUB_TOKEN's tag starts no workflow.
+  beta:
+    if: github.ref == 'refs/heads/ci' && needs.scope.outputs.full != 'false'
+    needs: [scope, test-install]
+    runs-on: ubuntu-24.04
+    concurrency: beta  # one replacement at a time
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lan-streamer-setup-${{ env.VERSION }}
+          path: dist
+
+      - name: Replace the beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          notes="Test build $VERSION of commit $GITHUB_SHA – passed the full tests on Windows ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Not a release: for trying out changes early (admin page → Updates → Channel \"Beta\"). What changed: CHANGELOG.md, \"Unreleased\"."
+          gh release delete beta --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create beta dist/lan-streamer-setup-*.exe --prerelease --latest=false \
+            --target "$GITHUB_SHA" --title "lan-streamer $VERSION (beta)" --notes "$notes" --repo "$GITHUB_REPOSITORY"

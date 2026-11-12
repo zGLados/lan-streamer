@@ -10,6 +10,10 @@
 # PowerShell, not the bundled Python: the installer replaces the program folder.
 # The release address can be changed only by an admin (HKLM\Software\lan-streamer,
 # value UpdateFeed - for tests), never by the user who starts the task.
+#
+# -Channel beta (the task "lan-streamer Update (beta)"): the pre-release "beta" instead
+# of the latest release (value UpdateFeedBeta for tests). Fixed in the task, too.
+param([ValidateSet('stable', 'beta')][string]$Channel = 'stable')
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'  # Invoke-WebRequest is slow with a progress bar
@@ -25,14 +29,22 @@ function Write-Result([bool]$ok, [string]$message, [string]$version) {
 
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $feed = (Get-ItemProperty 'HKLM:\Software\lan-streamer' -Name UpdateFeed -ErrorAction SilentlyContinue).UpdateFeed
-    if (-not $feed) { $feed = 'https://api.github.com/repos/zGLados/lan-streamer/releases/latest' }
+    if ($Channel -eq 'beta') {
+        $feed = (Get-ItemProperty 'HKLM:\Software\lan-streamer' -Name UpdateFeedBeta -ErrorAction SilentlyContinue).UpdateFeedBeta
+        if (-not $feed) { $feed = 'https://api.github.com/repos/zGLados/lan-streamer/releases/tags/beta' }
+    } else {
+        $feed = (Get-ItemProperty 'HKLM:\Software\lan-streamer' -Name UpdateFeed -ErrorAction SilentlyContinue).UpdateFeed
+        if (-not $feed) { $feed = 'https://api.github.com/repos/zGLados/lan-streamer/releases/latest' }
+    }
     $headers = @{ 'User-Agent' = 'lan-streamer-updater'; 'Accept' = 'application/vnd.github+json' }
     $release = Invoke-RestMethod -Uri $feed -Headers $headers -TimeoutSec 30
     $asset = $release.assets | Where-Object { $_.name -match '^lan-streamer-setup-[\w.\-]+\.exe$' } | Select-Object -First 1
     if (-not $asset) { throw 'the release has no Windows installer' }
     if ("$($asset.digest)" -notmatch '^sha256:([0-9a-fA-F]{64})$') { throw 'the release gives no SHA-256 for the installer' }
     $want = $Matches[1].ToLower()
+    # the version: the tag, or for the beta (tag "beta") the one in the installer's name
+    $version = "$($release.tag_name)"
+    if ($asset.name -match '^lan-streamer-setup-(.+)\.exe$' -and $version -notmatch '^v?\d') { $version = $Matches[1] }
 
     Get-ChildItem $work -Filter 'lan-streamer-setup-*.exe' | Remove-Item -Force
     $file = Join-Path $work $asset.name
@@ -46,7 +58,7 @@ try {
     $setup = Start-Process -FilePath $file -Wait -PassThru -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/WAITAPP=1', "/LOG=`"$log`"")
     if ($setup.ExitCode -ne 0) { throw "the installer ended with code $($setup.ExitCode) (log: $log)" }
-    Write-Result $true "installed $($release.tag_name)" "$($release.tag_name)"
+    Write-Result $true "installed $version" "$version"
 } catch {
     Write-Result $false "$($_.Exception.Message)" ''
     exit 1

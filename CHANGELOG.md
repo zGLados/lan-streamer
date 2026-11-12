@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Update channel "Beta" on the admin page (Updates → Channel): besides the releases it offers the newest Windows build that passed the full tests – to try out fixes before they are released. It moves back to the releases by itself once a newer release is out. Installs from before this version update to a release first.
+
 ### Changed
 
 - Releases build faster: the CI keeps GStreamer and the other build tools cached for release tags too, instead of downloading GStreamer (424 MB) again for every release.

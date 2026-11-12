@@ -187,12 +187,14 @@
     <h2>Updates</h2>
     <div class="status">
       <div class="item"><span>Installed</span><b id="u-current">–</b></div>
-      <div class="item"><span>Latest release</span><b id="u-latest">–</b></div>
+      <div class="item"><span id="u-latest-label">Latest release</span><b id="u-latest">–</b></div>
       <button id="u-check">Check now</button>
       <button class="primary" id="u-install" hidden>Install update</button>
     </div>
     <p class="muted" id="u-info"></p>
     <label style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="u-auto"> Check for updates automatically (twice a day, needs internet)</label>
+    <label>Channel <select id="u-channel"><option value="stable">Stable – releases only</option><option value="beta">Beta – the newest tested build</option></select></label>
+    <p class="muted">Beta: every build that passed the full tests, before it becomes a release – for trying out fixes early. It moves back to the releases by itself once a newer release is out.</p>
   </section>
 
   <section id="lp-section" hidden>
@@ -802,6 +804,8 @@ function renderUpdate(u) {
   $("u-current").textContent = u.current;
   $("u-latest").textContent = u.latest || "–";
   $("u-auto").checked = u.auto_check;
+  $("u-channel").value = u.channel || "stable";
+  $("u-latest-label").textContent = u.beta ? "Latest beta" : "Latest release";
   $("u-install").hidden = !(u.available && u.installable && u.state === "idle");
   $("u-check").disabled = u.state !== "idle";
   const info = $("u-info");
@@ -830,6 +834,12 @@ $("u-check").onclick = async () => {
 $("u-auto").onchange = async () => {
   try { renderUpdate(await api("/api/admin/update", { method: "PATCH", body: { auto_check: $("u-auto").checked } })); }
   catch (err) { toast(err.message, true); await loadUpdate(); }
+};
+$("u-channel").onchange = async () => {
+  try {
+    await api("/api/admin/update", { method: "PATCH", body: { channel: $("u-channel").value } });
+    renderUpdate(await api("/api/admin/update/check", { method: "POST" }));  // what the channel offers
+  } catch (err) { toast(err.message, true); await loadUpdate(); }
 };
 $("u-install").onclick = async () => {
   const latest = $("u-latest").textContent;

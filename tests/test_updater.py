@@ -55,13 +55,21 @@ def release(url="http://x/setup.exe", digest=None, tag="0.2.0"):
     }  # fmt: skip
 
 
-def make(tmp_path, answer, current="0.1.1", installed=True, task=False):
+def make(tmp_path, answer, current="0.1.1", installed=True, task=False, beta=None, tasks=(up.TASK, up.BETA_TASK)):
+    """answer: the latest release (or a function giving it); beta: the beta feed's answer."""
     launched, quits = [], []
+
+    def fetch(url):
+        given = beta if url == "http://beta" else answer
+        if isinstance(given, Exception):
+            raise given
+        return given() if callable(given) else given
+
     u = up.Updater(current, Store(tmp_path / "db"), tmp_path, lambda: quits.append(1), fps=30,
-                   feed="http://feed", fetch=lambda url: answer() if callable(answer) else answer,
+                   feed="http://feed", beta_feed="http://beta", fetch=fetch,
                    launch=lambda path, args, elevate: launched.append((path, args)),
-                   has_task=lambda: task,
-                   start_task=lambda root, relaunch, log: launched.append(("task", relaunch)))  # fmt: skip
+                   has_task=lambda name: task and name in tasks,
+                   start_task=lambda root, relaunch, log, name: launched.append(("task", relaunch, name)))  # fmt: skip
     u.root = tmp_path / "program" if installed else None
     return u, launched, quits
 
@@ -143,6 +151,9 @@ def test_api(tmp_path):
     assert client.get("/api/admin/update").json()["current"] == "0.1.1"
     assert client.post("/api/admin/update/check").json()["available"] is True
     assert client.patch("/api/admin/update", json={"auto_check": False}).json()["auto_check"] is False
+    changed = client.patch("/api/admin/update", json={"channel": "beta"}).json()
+    assert (changed["channel"], changed["auto_check"]) == ("beta", False)  # only what was sent changes
+    assert client.patch("/api/admin/update", json={"channel": "nightly"}).status_code == 422
     u.status.available = False
     assert client.post("/api/admin/update/install").status_code == 409
 
@@ -154,8 +165,9 @@ def test_an_install_for_all_users_goes_through_the_task(tmp_path, monkeypatch):
     asyncio.run(u.check())
     asyncio.run(u.install())
     assert not u.status.error and quits == [1]
-    kind, relaunch = launched[0]
+    kind, relaunch, task = launched[0]
     assert kind == "task" and relaunch[1:] == ["-m", "lanstreamer", "--tray", "--no-browser", "--fps", "30"]
+    assert task == up.TASK
     assert not (tmp_path / "updates").exists()
 
 
@@ -171,3 +183,74 @@ def test_a_failed_task_update_is_shown_after_the_restart(tmp_path):
     }), encoding="utf-8-sig")  # fmt: skip
     u._last_result()
     assert u.state()["error"] == "the last update failed: the installer ended with code 5"
+
+
+def beta_release(version="0.2.1-test.7"):
+    """The pre-release "beta" as GitHub gives it: tag "beta", the version in the installer's name."""
+    answer = release(tag=version)
+    answer["tag_name"] = "beta"
+    answer["html_url"] = "https://github.com/zGLados/lan-streamer/releases/tag/beta"
+    return answer
+
+
+def test_release_version_from_the_tag_or_the_installer_name():
+    assert up.release_version(release(tag="v0.2.0")) == "0.2.0"
+    assert up.release_version(beta_release("0.1.10-test.85")) == "0.1.10-test.85"
+    assert up.release_version({"tag_name": "beta", "assets": [{"name": "notes.txt"}]}) == ""
+
+
+def test_stable_channel_never_looks_at_the_beta(tmp_path):
+    u, _, _ = make(tmp_path, release(), beta=beta_release())
+    state = asyncio.run(u.check())
+    assert (state["channel"], state["latest"], state["beta"]) == ("stable", "0.2.0", False)
+
+
+def test_beta_channel_offers_the_newer_of_beta_and_release(tmp_path):
+    u, _, _ = make(tmp_path, release(), beta=beta_release("0.2.1-test.7"))
+    u.set_channel("beta")
+    state = asyncio.run(u.check())
+    assert (state["latest"], state["beta"], state["available"], state["installable"]) == ("0.2.1-test.7", True, True, True)
+    assert state["notes_url"].endswith("/beta")
+    # a release newer than the beta: back to the releases
+    u, _, _ = make(tmp_path, release(tag="0.2.1"), current="0.2.1-test.7", beta=beta_release("0.2.1-test.7"))
+    u.set_channel("beta")
+    state = asyncio.run(u.check())
+    assert (state["latest"], state["beta"], state["available"]) == ("0.2.1", False, True)
+
+
+def test_no_beta_still_finds_the_release(tmp_path):
+    u, _, _ = make(tmp_path, release(), beta=OSError("HTTP Error 404: Not Found"))
+    u.set_channel("beta")
+    state = asyncio.run(u.check())
+    assert (state["latest"], state["beta"], state["error"]) == ("0.2.0", False, "")
+
+
+def test_the_beta_is_installed_by_the_beta_task(tmp_path, monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    u, launched, quits = make(tmp_path, release(), task=True, beta=beta_release())
+    u.set_channel("beta")
+    asyncio.run(u.check())
+    asyncio.run(u.install())
+    assert not u.status.error and quits == [1] and launched[0][2] == up.BETA_TASK
+
+
+def test_an_install_without_the_beta_task_says_so(tmp_path, monkeypatch):
+    # installed by an installer before 0.1.10: only the release task exists
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    u, launched, quits = make(tmp_path, release(), task=True, beta=beta_release(), tasks=(up.TASK,))
+    u.set_channel("beta")
+    asyncio.run(u.check())
+    with pytest.raises(RuntimeError, match="no beta update task"):
+        asyncio.run(u.install())
+    assert not launched and not quits
+
+
+def test_channel_setting(tmp_path):
+    u, _, _ = make(tmp_path, release())
+    assert u.channel == "stable"
+    u.set_channel("beta")
+    assert u.state()["channel"] == "beta"
+    with pytest.raises(ValueError):
+        u.set_channel("nightly")
+    u.store.set_setting(up.CHANNEL, "something old")  # never trusted blindly
+    assert u.channel == "stable"

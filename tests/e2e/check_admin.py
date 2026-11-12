@@ -217,6 +217,18 @@ def main() -> int:
             expect(page.locator("#u-current")).not_to_have_text("–", timeout=10_000)
             step(f"updates section shows the installed version {page.locator('#u-current').text_content()}")
 
+            # the channel is saved and checked at once (asks GitHub; offline only shows an error)
+            expect(page.locator("#u-channel")).to_have_value("stable")
+            page.select_option("#u-channel", "beta")
+            expect(page.locator("#u-check")).to_be_enabled(timeout=40_000)  # the check is done
+            assert page.evaluate("fetch('/api/admin/update').then(r => r.json())")["channel"] == "beta"
+            page.reload()
+            expect(page.locator("#u-channel")).to_have_value("beta", timeout=10_000)
+            page.select_option("#u-channel", "stable")
+            expect(page.locator("#u-check")).to_be_enabled(timeout=40_000)
+            assert page.evaluate("fetch('/api/admin/update').then(r => r.json())")["channel"] == "stable"
+            step("update channel: set to beta, kept over a reload, set back")
+
             if page.locator("#lp-section").is_visible():  # hidden without a desktop (Linux service)
                 expect(page.locator("#lp-mode")).to_have_value("player")
                 page.select_option("#lp-mode", "fullscreen")

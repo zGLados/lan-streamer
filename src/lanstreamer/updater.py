@@ -17,8 +17,15 @@ ends, the installer starts it again (/LAUNCH, see lan-streamer.iss).
 
 Linux and repo checkouts: the update is only shown, with the link.
 
-LANSTREAMER_UPDATE_FEED replaces the GitHub address (tests, CI): a URL that
-answers like GitHub's "latest release" API.
+Channels (admin page): "stable" looks only at the latest release. "beta" also
+looks at the pre-release "beta", which the CI replaces after every green full
+test run (Windows installer only), and offers whichever of the two is newer –
+so a beta install moves back to the releases once a newer release is out. The
+installer registers a second task, "lan-streamer Update (beta)", that installs
+the beta: both tasks install only what the official releases offer.
+
+LANSTREAMER_UPDATE_FEED (and LANSTREAMER_UPDATE_FEED_BETA) replace the GitHub
+addresses (tests, CI): URLs that answer like GitHub's release API.
 """
 
 from __future__ import annotations
@@ -44,12 +51,16 @@ from lanstreamer import paths
 log = logging.getLogger("lanstreamer.updater")
 
 FEED = "https://api.github.com/repos/zGLados/lan-streamer/releases/latest"
+BETA_FEED = "https://api.github.com/repos/zGLados/lan-streamer/releases/tags/beta"
 FIRST_CHECK_S = 60.0  # after the start: the outputs come first
 CHECK_EVERY_S = 12 * 3600.0
 SETTING = "update_check"  # "on" / "off"
-INSTALLER = re.compile(r"^lan-streamer-setup-[\w.\-]+\.exe$")
+CHANNEL = "update_channel"  # "stable" / "beta"
+CHANNELS = ("stable", "beta")
+INSTALLER = re.compile(r"^lan-streamer-setup-([\w.\-]+)\.exe$")
 TIMEOUT_S = 30.0
 TASK = "lan-streamer Update"  # registered by the installer (update-task.ps1)
+BETA_TASK = "lan-streamer Update (beta)"  # the same for the beta (installers from 0.1.10 on)
 RESULT_FRESH_S = 3600.0  # a task result this old is still shown after the restart
 
 _VERSION = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?$")
@@ -71,6 +82,19 @@ def is_newer(candidate: str, current: str) -> bool:
     return version_key(candidate) > version_key(current)
 
 
+def release_version(release: dict[str, Any]) -> str:
+    """The version of a GitHub release: its tag, or for the beta (tag "beta") the
+    version in its installer's name (lan-streamer-setup-0.1.10-test.85.exe). "" if none."""
+    tag = str(release.get("tag_name", "")).removeprefix("v")
+    if version_key(tag) != (-1,):
+        return tag
+    for asset in release.get("assets", []):
+        match = INSTALLER.match(str(asset.get("name", "")))
+        if match and version_key(match.group(1)) != (-1,):
+            return match.group(1)
+    return ""
+
+
 @dataclass
 class UpdateState:
     current: str
@@ -82,6 +106,7 @@ class UpdateState:
     progress: int = 0  # download, percent
     error: str = ""
     installable: bool = False  # this install can update itself (Windows installer)
+    beta: bool = False  # the offered version is the beta (pre-release), not a release
     how: str = ""  # what the admin page says instead of the button
 
 
@@ -110,16 +135,16 @@ def download(url: str, target: Path, size: int, progress: Callable[[int], None])
     return digest.hexdigest()
 
 
-def task_exists() -> bool:
+def task_exists(task: str = TASK) -> bool:
     """Windows: is the update task there (install for all users)?"""
     if sys.platform != "win32":
         return False
-    result = subprocess.run(["schtasks.exe", "/Query", "/TN", TASK], check=False, capture_output=True,
+    result = subprocess.run(["schtasks.exe", "/Query", "/TN", task], check=False, capture_output=True,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # fmt: skip
     return result.returncode == 0
 
 
-def run_task(root: Path, relaunch: list[str], log_file: Path | None = None) -> None:
+def run_task(root: Path, relaunch: list[str], log_file: Path | None = None, task: str = TASK) -> None:
     """Windows: starts the update task (SYSTEM) and a relauncher in this session.
 
     The relauncher waits for the task's result file (a newer one than now), then
@@ -127,7 +152,7 @@ def run_task(root: Path, relaunch: list[str], log_file: Path | None = None) -> N
     It writes what it does to log_file (logs/relaunch.log).
     """
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    result = subprocess.run(["schtasks.exe", "/Run", "/TN", TASK], check=False, capture_output=True, text=True,
+    result = subprocess.run(["schtasks.exe", "/Run", "/TN", task], check=False, capture_output=True, text=True,
                             creationflags=flags)  # fmt: skip
     if result.returncode != 0:
         raise OSError(f"the update task could not be started: {(result.stdout + result.stderr).strip()}")
@@ -176,14 +201,16 @@ class Updater:
         feed: str | None = None,
         fetch: Callable[[str], dict[str, Any]] = fetch_json,
         launch: Callable[[Path, list[str], bool], None] = start_installer,
-        has_task: Callable[[], bool] = task_exists,
-        start_task: Callable[[Path, list[str], Path | None], None] = run_task,
+        has_task: Callable[[str], bool] = task_exists,
+        start_task: Callable[[Path, list[str], Path | None, str], None] = run_task,
+        beta_feed: str | None = None,
     ):
         self.store = store
         self.data_dir = data_dir
         self.quit_app = quit_app
         self.fps = fps  # relaunch with the same frame rate as the start menu entry
         self.feed = feed or os.environ.get("LANSTREAMER_UPDATE_FEED") or FEED
+        self.beta_feed = beta_feed or os.environ.get("LANSTREAMER_UPDATE_FEED_BETA") or BETA_FEED
         self.fetch = fetch
         self.launch = launch
         self.status = UpdateState(current=current)
@@ -217,8 +244,18 @@ class Updater:
     def set_auto_check(self, on: bool) -> None:
         self.store.set_setting(SETTING, "on" if on else "off")
 
+    @property
+    def channel(self) -> str:
+        channel = self.store.get_setting(CHANNEL) or "stable"
+        return channel if channel in CHANNELS else "stable"
+
+    def set_channel(self, channel: str) -> None:
+        if channel not in CHANNELS:
+            raise ValueError(f"unknown update channel {channel!r}")
+        self.store.set_setting(CHANNEL, channel)
+
     def state(self) -> dict[str, Any]:
-        return {**asdict(self.status), "auto_check": self.auto_check}
+        return {**asdict(self.status), "auto_check": self.auto_check, "channel": self.channel}
 
     async def run(self) -> None:
         """Checks now and then while lan-streamer runs."""
@@ -237,7 +274,16 @@ class Updater:
             tag = str(release.get("tag_name", ""))
             if version_key(tag) == (-1,):
                 raise ValueError(f"the latest release has no version tag ({tag!r})")
-            self.status.latest = tag.removeprefix("v")
+            beta = False
+            if self.channel == "beta":
+                try:  # no beta yet, or GitHub unreachable for it: the release still counts
+                    candidate = await asyncio.to_thread(self.fetch, self.beta_feed)
+                    if is_newer(release_version(candidate), tag):
+                        release, beta = candidate, True
+                except (OSError, ValueError) as exc:
+                    log.info("no beta to compare: %s", exc)
+            self.status.latest = release_version(release)
+            self.status.beta = beta
             self.status.notes_url = str(release.get("html_url", ""))
             self.status.available = is_newer(self.status.latest, self.status.current)
             self.asset = next((a for a in release.get("assets", []) if INSTALLER.match(str(a.get("name", "")))),
@@ -267,12 +313,16 @@ class Updater:
         relaunch = [str(self.root / "python" / "pythonw.exe"), "-m", "lanstreamer", "--tray", "--no-browser"]
         if self.fps:
             relaunch += ["--fps", str(self.fps)]
-        if await asyncio.to_thread(self.has_task):
+        task = BETA_TASK if self.status.beta else TASK
+        if await asyncio.to_thread(self.has_task, TASK):
             # install for all users: the SYSTEM task downloads, checks and installs it
+            if not await asyncio.to_thread(self.has_task, task):  # installed before there was a beta task
+                raise RuntimeError("this install has no beta update task yet – install the latest release first")
             self.status.state, self.status.error = "installing", ""
             try:
-                log.info("Installing %s through the update task, lan-streamer ends now", self.status.latest)
-                await asyncio.to_thread(self.start_task, self.root, relaunch, self.data_dir / "logs" / "relaunch.log")
+                log.info("Installing %s through the update task %r, lan-streamer ends now", self.status.latest, task)
+                await asyncio.to_thread(self.start_task, self.root, relaunch, self.data_dir / "logs" / "relaunch.log",
+                                        task)  # fmt: skip
             except OSError as exc:
                 self.status.state, self.status.error = "idle", f"update failed: {exc}"
                 log.warning("%s", self.status.error)

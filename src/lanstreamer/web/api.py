@@ -198,7 +198,8 @@ class Order(BaseModel):
 
 
 class UpdateSettings(BaseModel):
-    auto_check: bool
+    auto_check: bool | None = None
+    channel: Literal["stable", "beta"] | None = None
 
 
 class LocalPageSettings(BaseModel):
@@ -586,7 +587,10 @@ def create_app(backend: Backend) -> FastAPI:
 
     @app.patch("/api/admin/update", dependencies=[Depends(logged_in)])
     def update_settings(body: UpdateSettings) -> dict[str, Any]:
-        updater().set_auto_check(body.auto_check)
+        if body.auto_check is not None:
+            updater().set_auto_check(body.auto_check)
+        if body.channel is not None:
+            updater().set_channel(body.channel)
         return updater().state()
 
     @app.post("/api/admin/update/check", dependencies=[Depends(logged_in)])
