@@ -22,6 +22,9 @@ Admin (logged in):
     PATCH  /api/admin/plugins/{id}               turn a plugin on or off ({"enabled": bool})
     DELETE /api/admin/plugins/{id}               remove an uploaded plugin (not in use)
     PUT    /api/admin/images                     upload a picture (PNG/JPEG as the body) → its path
+    GET    /api/admin/youtube-cookies            whether YouTube cookies are stored (never the cookies)
+    PUT    /api/admin/youtube-cookies            upload them (cookies.txt as the body)
+    DELETE /api/admin/youtube-cookies            remove them
     GET    /api/admin/outputs                    outputs and their inputs
     POST   /api/admin/outputs                    add an output ({"name"}; starts with a Standby input)
     PATCH  /api/admin/outputs/{id}               output settings (format/encoder: restart)
@@ -67,7 +70,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
-from lanstreamer import images
+from lanstreamer import images, youtube_cookies
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import InputConfig, OutputConfig
 from lanstreamer.core.store import NotFound, Store
@@ -125,6 +128,7 @@ class Backend:
     updater: Any = None  # lanstreamer.updater.Updater
     local_page: Any = None  # lanstreamer.localpage.LocalPage (None: no desktop, e.g. the Linux service)
     images_dir: Path | None = None  # where uploaded pictures go (settings with format "image")
+    youtube_cookies: Path | None = None  # the uploaded YouTube cookies for yt-dlp (paths.youtube_cookies)
     pause: Callable[[str | None, bool], None] | None = None  # output id, paused → Pause button
 
 
@@ -455,6 +459,32 @@ def create_app(backend: Backend) -> FastAPI:
 
         await asyncio.to_thread(write)
         return {"path": str(target), "width": dimensions[0], "height": dimensions[1]}
+
+    # --- YouTube cookies for yt-dlp (youtube_cookies.py): stored, never sent back ----------
+
+    def cookies_file() -> Path:
+        if backend.youtube_cookies is None:
+            raise HTTPException(501, "YouTube cookies are not available")
+        return backend.youtube_cookies
+
+    @app.get("/api/admin/youtube-cookies", dependencies=[Depends(logged_in)])
+    async def cookies_state() -> dict[str, Any]:
+        return await asyncio.to_thread(youtube_cookies.state, cookies_file())
+
+    @app.put("/api/admin/youtube-cookies", dependencies=[Depends(logged_in)])
+    async def cookies_upload(request: Request) -> dict[str, Any]:
+        path = cookies_file()
+        if int(request.headers.get("content-length") or 0) > youtube_cookies.MAX_BYTES:
+            raise HTTPException(413, "the file is larger than 1 MB")
+        data = await request.body()
+        try:
+            return await asyncio.to_thread(youtube_cookies.save, path, data)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.delete("/api/admin/youtube-cookies", status_code=204, dependencies=[Depends(logged_in)])
+    async def cookies_remove() -> None:
+        await asyncio.to_thread(youtube_cookies.remove, cookies_file())
 
     @app.delete("/api/admin/plugins/{plugin_id}", status_code=204, dependencies=[Depends(logged_in)])
     async def remove_plugin(plugin_id: str) -> None:

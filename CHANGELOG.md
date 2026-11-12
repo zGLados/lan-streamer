@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- "YouTube sign-in" on the admin page: when YouTube answers "Sign in to confirm you're not a bot", upload the cookies (cookies.txt) of a signed-in browser – best of a second Google account. Video link, the playlist and submissions then use them. They stay on the streaming PC and are never shown or sent back again.
+
 ## [0.1.10] – 2026-11-12
 
 Picture and sound stay in step in YouTube videos; no more short hangs when inputs switch; the YouTube input is now "Video link" and plays any site yt-dlp reads (Twitch, ARD/ZDF Mediathek, …); a "Beta" update channel to try fixes before a release.

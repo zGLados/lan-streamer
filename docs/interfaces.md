@@ -143,6 +143,9 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `PUT /api/admin/outputs/<id>/order` | `{"ids": [every input id once]}` – order among equal priorities → 204 |
 | `PATCH /api/admin/inputs/<id>` | any of `name`, `settings`, `priority`, `fallback`, `min_duration_s`, `max_duration_s`, `override` (`none`, `force`, `block`) → the input |
 | `DELETE /api/admin/inputs/<id>` | → 204 |
+| `GET /api/admin/youtube-cookies` | → `{"set", "youtube_cookies" (how many for youtube.com), "updated_at"}` – never the cookies themselves |
+| `PUT /api/admin/youtube-cookies` | a Netscape `cookies.txt` as the body (max. 1 MB) → the state above; stored as `youtube-cookies.txt` in the data folder (Linux: mode 600) and given to yt-dlp (a copy per call) for Video link, playlist and submissions. 422 when it is no cookies.txt or has no youtube.com cookies |
+| `DELETE /api/admin/youtube-cookies` | → 204, removes them |
 | `PUT /api/admin/images` | a PNG or JPEG as the body (max. 20 MB) → 201, `{"path", "width", "height"}`; stored in `images/` of the data folder, named after its content. For settings with `"format": "image"` (the standby picture); 422 for other files |
 | `GET /api/admin/inputs/<id>/items` | → the input's `viewer_items()` |
 | `DELETE /api/admin/inputs/<id>/items/<item>` | the plugin's `remove_item()` → 204 |

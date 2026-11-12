@@ -149,6 +149,17 @@
     </div>
   </section>
 
+  <section id="yc-section">
+    <h2>YouTube sign-in</h2>
+    <p class="muted" style="margin-top:0">When YouTube answers "Sign in to confirm you're not a bot" (often on a network with many devices), the cookies of a signed-in browser get past it – for Video link, the playlist and submissions. Use a <b>second Google account</b>, not your own: YouTube may block accounts used like this. Export the cookies as <code>cookies.txt</code> (e.g. with the extension "Get cookies.txt LOCALLY") from a private window signed in on youtube.com, then close that window. They are as good as a login: lan-streamer keeps them on this PC and never shows them again.</p>
+    <div class="status">
+      <div class="item"><span>Cookies</span><b id="yc-state">–</b></div>
+      <button id="yc-upload">Upload cookies.txt…</button>
+      <button id="yc-remove" hidden>Remove</button>
+      <input type="file" id="yc-file" accept=".txt,text/plain" hidden>
+    </div>
+  </section>
+
   <section>
     <h2>Output</h2>
     <form id="output-form" class="row">
@@ -330,6 +341,7 @@ async function start() {
   await reload();
   loadUpdate();
   loadLocalPage();
+  loadCookies();
   openSocket();
   refreshLog();
 }
@@ -422,6 +434,7 @@ async function configChanged(version) {
     await reload();
     loadUpdate();
     loadLocalPage();
+    loadCookies();
   } catch { configStale = true; /* next status message tries again */ }
   finally { configLoading = false; }
 }
@@ -797,6 +810,39 @@ $("lp-mode").onchange = async () => {
 $("lp-open").onclick = async () => {
   try { renderLocalPage(await api("/api/admin/local-page/open", { method: "POST" })); }
   catch (err) { toast(err.message, true); }
+};
+
+// --- YouTube cookies: only whether there are any comes back, never the cookies -------------
+function renderCookies(c) {
+  $("yc-state").textContent = c.set
+    ? `${c.youtube_cookies} for YouTube, uploaded ${new Date(c.updated_at * 1000).toLocaleString()}`
+    : "none";
+  $("yc-remove").hidden = !c.set;
+}
+async function loadCookies() {
+  try { renderCookies(await api("/api/admin/youtube-cookies")); }
+  catch { $("yc-section").hidden = true; /* not available */ }
+}
+$("yc-upload").onclick = () => $("yc-file").click();
+$("yc-file").onchange = async () => {
+  const chosen = $("yc-file").files[0];
+  $("yc-file").value = "";
+  if (!chosen) return;
+  try {
+    const res = await fetch("/api/admin/youtube-cookies", { method: "PUT", headers: { "Content-Type": "text/plain" }, body: chosen });
+    const answer = await res.json();
+    if (!res.ok) throw new Error(answer.detail || res.statusText);
+    renderCookies(answer);
+    toast("YouTube cookies saved");
+  } catch (err) { toast(err.message, true); }
+};
+$("yc-remove").onclick = async () => {
+  if (!confirm("Remove the YouTube cookies from this PC?")) return;
+  try {
+    await api("/api/admin/youtube-cookies", { method: "DELETE" });
+    toast("YouTube cookies removed");
+  } catch (err) { toast(err.message, true); }
+  await loadCookies();
 };
 
 // --- updates of lan-streamer itself ---------------------------------------------------

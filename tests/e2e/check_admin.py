@@ -229,6 +229,19 @@ def main() -> int:
             assert page.evaluate("fetch('/api/admin/update').then(r => r.json())")["channel"] == "stable"
             step("update channel: set to beta, kept over a reload, set back")
 
+            # YouTube cookies: uploaded through the page, only "how many" comes back, removed again
+            secret = "e2e-not-a-real-session-value"
+            cookies = f"# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSAPISID\t{secret}\n"
+            expect(page.locator("#yc-state")).to_have_text("none", timeout=10_000)
+            page.set_input_files("#yc-file", files=[{"name": "cookies.txt", "mimeType": "text/plain",
+                                                     "buffer": cookies.encode()}])  # fmt: skip
+            expect(page.locator("#yc-state")).to_contain_text("1 for YouTube", timeout=10_000)
+            answer = page.evaluate("fetch('/api/admin/youtube-cookies').then(r => r.text())")
+            assert secret not in answer and secret not in page.content(), "the cookies came back"
+            page.click("#yc-remove")  # its confirm() is accepted by the handler above
+            expect(page.locator("#yc-state")).to_have_text("none", timeout=10_000)
+            step("YouTube cookies: uploaded, never shown again, removed")
+
             if page.locator("#lp-section").is_visible():  # hidden without a desktop (Linux service)
                 expect(page.locator("#lp-mode")).to_have_value("player")
                 page.select_option("#lp-mode", "fullscreen")

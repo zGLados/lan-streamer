@@ -47,6 +47,12 @@ def data_dir() -> Path:
     return path
 
 
+def youtube_cookies() -> Path:
+    """The YouTube cookies uploaded on the admin page (Netscape cookies.txt), for yt-dlp
+    when YouTube asks to sign in. Only in the data folder of the user lan-streamer runs as."""
+    return data_dir() / "youtube-cookies.txt"
+
+
 def plugins_dir() -> Path:
     """Uploaded plugins, one folder each (plugin.toml + code). Instance data lives in plugin-data/."""
     return data_dir() / "plugins"

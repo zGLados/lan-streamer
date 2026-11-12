@@ -5,6 +5,10 @@ version is downloaded in the background (pip into the instance's data folder)
 and used from the next start on – a running process never swaps the library
 under its feet, and nothing waits for the download. Offline, the version that
 came with lan-streamer keeps working.
+
+YouTube cookies (uploaded on the admin page, paths.youtube_cookies()) go to every
+call as a copy: yt-dlp writes the cookies back when it ends, and the processes of
+several inputs must not write into one file (locked on Windows) or change the upload.
 """
 
 from __future__ import annotations
@@ -13,9 +17,14 @@ import asyncio
 import os
 import shutil
 import sys
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from lanstreamer import paths
 
 FAKE = os.environ.get("LANSTREAMER_FAKE_DOWNLOADS") == "1"  # tests: no network, no yt-dlp
 
@@ -61,6 +70,32 @@ class YtDlp:
         if (current / "yt_dlp").is_dir():
             sys.path.insert(0, str(current))
         self._update_task = asyncio.create_task(self._update()) if auto_update and not FAKE else None
+
+    @contextmanager
+    def signed(self, options: dict[str, Any]) -> Iterator[dict[str, Any]]:
+        """options with a copy of the uploaded YouTube cookies, if there are any.
+        Blocking (file copy): call it in the worker thread."""
+        source = paths.youtube_cookies()
+        if not source.is_file():
+            yield options
+            return
+        copy = None
+        try:
+            self.folder.mkdir(parents=True, exist_ok=True)
+            handle, name = tempfile.mkstemp(prefix="cookies-", suffix=".txt", dir=self.folder)
+            os.close(handle)
+            copy = Path(name)
+            shutil.copyfile(source, copy)
+        except OSError as exc:
+            self.log.warning("YouTube cookies not used: %s", exc)
+            if copy is not None:
+                copy.unlink(missing_ok=True)
+            yield options
+            return
+        try:
+            yield {**options, "cookiefile": str(copy)}
+        finally:
+            copy.unlink(missing_ok=True)
 
     def _swap_in(self, current: Path, upcoming: Path) -> None:
         # Moved aside, not deleted: on Windows a file in use can stop a delete
@@ -121,8 +156,8 @@ class YtDlp:
         yt_dlp = await self.module()
 
         def run() -> dict[str, Any]:
-            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noprogress": True,
-                                   "noplaylist": True, "skip_download": True}) as ydl:  # fmt: skip
+            options = {"quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True, "skip_download": True}
+            with self.signed(options) as signed, yt_dlp.YoutubeDL(signed) as ydl:
                 return ydl.extract_info(link, download=False) or {}
 
         return await asyncio.wait_for(asyncio.to_thread(run), 60)
@@ -153,13 +188,13 @@ class YtDlp:
         def fetch(format_id: str, stem: str) -> Path:
             # looked up again: the download URLs only work with the session that got them
             target = {**options, "format": format_id, "outtmpl": str(folder / f"{stem}.%(ext)s")}
-            with yt_dlp.YoutubeDL(target) as ydl:
+            with self.signed(target) as signed, yt_dlp.YoutubeDL(signed) as ydl:
                 info = ydl.extract_info(link, download=True) or {}
                 downloads = info.get("requested_downloads") or [{}]
                 return Path(downloads[0].get("filepath") or ydl.prepare_filename(info))
 
         def run() -> tuple[Path, Path | None, list[dict[str, Any]]]:
-            with yt_dlp.YoutubeDL(chooser) as ydl:
+            with self.signed(chooser) as signed, yt_dlp.YoutubeDL(signed) as ydl:
                 info = ydl.extract_info(link, download=False) or {}
             parts = info.get("requested_formats") or [info]
             video = fetch(parts[0]["format_id"], name)
@@ -187,7 +222,7 @@ class YtDlp:
         }  # fmt: skip
 
         def run() -> Stream:
-            with yt_dlp.YoutubeDL(options) as ydl:
+            with self.signed(options) as signed, yt_dlp.YoutubeDL(signed) as ydl:
                 info = ydl.extract_info(link, download=False) or {}
             parts = info.get("requested_formats") or [info]
             video = next((f for f in parts if f.get("vcodec") not in (None, "none")), parts[0])
@@ -209,7 +244,8 @@ class YtDlp:
         yt_dlp = await self.module()
 
         def run() -> list[dict[str, str]]:
-            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": "in_playlist"}) as ydl:
+            flat = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist"}
+            with self.signed(flat) as signed, yt_dlp.YoutubeDL(signed) as ydl:
                 info = ydl.extract_info(link, download=False) or {}
             if info.get("_type") != "playlist":
                 return [{"url": link, "title": str(info.get("title") or link)}]
