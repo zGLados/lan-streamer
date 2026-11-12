@@ -42,6 +42,8 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Send from OBS:** add an input "RTMP/SRT ingest" on the admin page; it shows the server address and stream key to enter in OBS (RTMP or SRT). The installer (all users) allows lan-streamer through the Windows firewall on private and domain networks – if other PCs cannot connect, set the network to "Private" in the Windows settings.
 
+**Cast from a phone:** turn on "Cast from phones (DLNA)" (installer or admin page, off by default) and add the input. lan-streamer then shows up in the LAN like a smart TV: cast apps on a phone (BubbleUPnP, Web Video Caster, VLC, the gallery of many Android phones; "Cast to TV" apps on iOS) send it a video, a song, a picture or a link, and control it with play, stop and their queue (pause takes it off air, play then starts over). Only devices in the LAN may cast. It is not a Chromecast or AirPlay receiver (phones only cast to certified devices there), and it cannot mirror a phone's screen.
+
 **TV view:** `http://localhost:8080/tv` – only the stream in the full window, e.g. for a TV or a display PC (kiosk mode: see [docs/development.md](docs/development.md)).
 
 **Admin page:** `http://localhost:8080/admin` – on first start you choose the admin password, then you manage the outputs (add more, format, overlay), their inputs (add, priority, force/block, order) and the logs there.

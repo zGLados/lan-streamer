@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- "Cast from phones (DLNA)", a new built-in input (off by default; installer or admin page): lan-streamer shows up in the LAN like a smart TV, and cast apps on phones (BubbleUPnP, Web Video Caster, VLC, many Android galleries, "Cast to TV" apps on iOS) send it videos, music, pictures or links and control them (play, stop, the app's queue; pause stops, play starts over). Only devices in the LAN may cast. Not a Chromecast / AirPlay receiver and no screen mirroring; seeking from the phone is not supported.
 - "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block).
 
 ### Removed

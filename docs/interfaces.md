@@ -269,9 +269,12 @@ MediaMTX runs next to lan-streamer with its default ports. The Windows installer
 | 1935 / TCP | RTMP | senders (OBS) publish to `rtmp://<server>:1935/ingest` with the stream key |
 | 8554 / TCP | RTSP | ingest streams are read back from `rtsp://127.0.0.1:8554/ingest/<key>`; outputs are readable as `rtsp://<server>:8554/<output>` (e.g. VLC) |
 | 9997 / TCP | HTTP | MediaMTX API, **localhost only** – the ingest input asks it whether a stream arrives |
+| 1900 / UDP | SSDP | the DLNA cast input (when one is added): phones find it (M-SEARCH, multicast `239.255.255.250`) |
+| setting, or chosen once / TCP | HTTP (UPnP) | the DLNA cast input: device description `/description.xml`, services `/<service>.xml`, control (SOAP, by POST) at `/<service>/control`, events `SUBSCRIBE`/`UNSUBSCRIBE /<service>/event`; services AVTransport, RenderingControl, ConnectionManager; only private addresses (or the input's allowed networks) |
 
 - **Outputs:** path = output id (`out1`, …). Any WebRTC/WHEP, SRT or RTSP client can watch, not only the player page.
 - **Ingest** (built-in input): RTMP server `rtmp://<server>:1935/ingest`, stream key = the input's key; or SRT `srt://<server>:8890?streamid=publish:ingest/<key>`. H.264 or H.265 with AAC or Opus.
+- **DLNA cast** (built-in input `dlna`): a UPnP AV MediaRenderer; a phone sets an http(s) link with `SetAVTransportURI` (no `file:`, nothing on this PC) and controls it with Play, Pause (off air; Play starts over), Stop and `SetNextAVTransportURI`. Seek is answered with error 710; the volume is kept but not applied.
 - **Restream:** per output an RTMP(S) URL `rtmp(s)://server/app/stream-key`; a separate process reads the output over SRT and sends it on (H.264 as it is, Opus → AAC).
 
 ---

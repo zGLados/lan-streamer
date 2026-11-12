@@ -1,0 +1,6 @@
+id = "dlna"
+name = "Cast from phones (DLNA)"
+version = "1.0.0"
+api_version = 1
+entry = "dlna:Plugin"
+description = "Shows up in the LAN as a TV: cast apps on phones (BubbleUPnP, Web Video Caster, VLC, the gallery) send it videos, music, pictures or links; on air while something is cast."

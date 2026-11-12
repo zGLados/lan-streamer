@@ -75,7 +75,7 @@ requirements = ["requests>=2.32"]                   # optional: packages from Py
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Identifies the plugin. Uploading a zip with the same id replaces the old version. Built-in ids (`standby`, `playlist`, `submissions`, `youtube`, `ingest`, `test-pattern`) cannot be used. |
+| `id` | yes | Identifies the plugin. Uploading a zip with the same id replaces the old version. Built-in ids (`standby`, `playlist`, `submissions`, `youtube`, `ingest`, `dlna`, `test-pattern`) cannot be used. |
 | `name` | yes | Display name. |
 | `version` | yes | Free text; shown in the admin page. |
 | `api_version` | yes | Must be `1`. A lan-streamer that does not provide this API version refuses the plugin with a clear message. |

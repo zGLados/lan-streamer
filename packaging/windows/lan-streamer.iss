@@ -57,10 +57,12 @@ english.Inputs=Built-in inputs to turn on (Standby is always on; this can be cha
 english.Submissions=Short-video submissions – viewers submit TikTok, Shorts and Reels links on the player page
 english.Playlist=Playlist – plays files and links from a list
 english.TestPattern=Test pattern – colour bars and a tone, for tests
+english.Dlna=Cast from phones (DLNA) – phones send videos, music and pictures to lan-streamer like to a TV
 german.Inputs=Eingebaute Eingänge einschalten (Standby ist immer an; später auf der Admin-Seite änderbar):
 german.Submissions=Kurzvideo-Einreichungen – Zuschauer reichen TikTok-, Shorts- und Reels-Links auf der Player-Seite ein
 german.Playlist=Playlist – spielt Dateien und Links aus einer Liste
 german.TestPattern=Testbild – Farbbalken und Ton, für Tests
+german.Dlna=Vom Handy streamen (DLNA) – Handys senden Videos, Musik und Bilder an lan-streamer wie an einen Fernseher
 
 [Tasks]
 ; A reinstall preselects the previous answers. The app takes them over from
@@ -68,6 +70,7 @@ german.TestPattern=Testbild – Farbbalken und Ton, für Tests
 Name: "submissions"; Description: "{cm:Submissions}"; GroupDescription: "{cm:Inputs}"
 Name: "playlist"; Description: "{cm:Playlist}"; GroupDescription: "{cm:Inputs}"
 Name: "testpattern"; Description: "{cm:TestPattern}"; GroupDescription: "{cm:Inputs}"; Flags: unchecked
+Name: "dlna"; Description: "{cm:Dlna}"; GroupDescription: "{cm:Inputs}"; Flags: unchecked
 
 [INI]
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "submissions"; String: "on"; Tasks: submissions
@@ -76,6 +79,8 @@ Filename: "{app}\setup.ini"; Section: "plugins"; Key: "playlist"; String: "on"; 
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "playlist"; String: "off"; Tasks: not playlist
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "test-pattern"; String: "on"; Tasks: testpattern
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "test-pattern"; String: "off"; Tasks: not testpattern
+Filename: "{app}\setup.ini"; Section: "plugins"; Key: "dlna"; String: "on"; Tasks: dlna
+Filename: "{app}\setup.ini"; Section: "plugins"; Key: "dlna"; String: "off"; Tasks: not dlna
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
