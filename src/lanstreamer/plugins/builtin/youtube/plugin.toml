@@ -1,6 +1,6 @@
 id = "youtube"
-name = "YouTube"
+name = "Video link"
 version = "1.0.0"
 api_version = 1
 entry = "youtube:Plugin"
-description = "A YouTube live stream while it is live, or the videos of a playlist, channel or a single video one after another."
+description = "Any video or live stream link yt-dlp reads (YouTube, Twitch, ARD/ZDF Mediathek, Vimeo, …): a live stream while it is live, or the videos of a playlist, channel or a single video one after another."

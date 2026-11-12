@@ -1,4 +1,6 @@
-"""Built-in input: YouTube – a live stream, or videos one after another.
+"""Built-in input "Video link" (id "youtube", kept for existing configurations): any
+link yt-dlp reads – YouTube, Twitch, ARD/ZDF Mediathek, Vimeo, … – a live stream,
+or videos one after another.
 
 The link decides what it does:
 - a channel's live page (https://www.youtube.com/@name/live) or a live video:
@@ -29,7 +31,7 @@ TRIES = 3  # videos tried in a row before get_source gives up (removed, private,
 
 
 class Settings(BaseModel):
-    url: str = Field(..., title="Link", description="A video, playlist or channel link, or a channel's /live page")
+    url: str = Field(..., title="Link", description="A video, live stream, playlist or channel link (YouTube, Twitch, ARD/ZDF Mediathek, … – anything yt-dlp reads), or a YouTube channel's /live page")
     max_height: int = Field(1080, title="Max. height (pixels)", ge=360, le=1080, description="Highest resolution to fetch")
     shuffle: bool = Field(False, title="Shuffle", description="Play the videos in random order")
     live_check_s: int = Field(60, title="Live check every (s)", ge=15, le=3600, description="How often a live page is checked")

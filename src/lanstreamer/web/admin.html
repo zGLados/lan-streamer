@@ -188,13 +188,13 @@
     <div class="status">
       <div class="item"><span>Installed</span><b id="u-current">–</b></div>
       <div class="item"><span id="u-latest-label">Latest release</span><b id="u-latest">–</b></div>
+      <label class="item"><span>Channel</span><select id="u-channel" title="Stable: releases only. Beta: also the newest build that passed the full tests – back to the releases by itself once a newer release is out."><option value="stable">Stable</option><option value="beta">Beta</option></select></label>
       <button id="u-check">Check now</button>
       <button class="primary" id="u-install" hidden>Install update</button>
     </div>
     <p class="muted" id="u-info"></p>
     <label style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="u-auto"> Check for updates automatically (twice a day, needs internet)</label>
-    <label>Channel <select id="u-channel"><option value="stable">Stable – releases only</option><option value="beta">Beta – the newest tested build</option></select></label>
-    <p class="muted">Beta: every build that passed the full tests, before it becomes a release – for trying out fixes early. It moves back to the releases by itself once a newer release is out.</p>
+    <p class="muted">Channel Beta: also the newest build that passed the full tests, before it becomes a release – for trying out fixes early. It moves back to the releases by itself once a newer release is out.</p>
   </section>
 
   <section id="lp-section" hidden>

@@ -6,7 +6,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- The YouTube input is now called "Video link": it plays any link yt-dlp reads – YouTube, Twitch, ARD/ZDF Mediathek, Vimeo and many more – as before a live stream while it is live, or videos one after another. Existing inputs keep working unchanged.
 - Update channel "Beta" on the admin page (Updates → Channel): besides the releases it offers the newest Windows build that passed the full tests – to try out fixes before they are released. It moves back to the releases by itself once a newer release is out. Installs from before this version update to a release first.
+
+### Fixed
+
+- Picture and sound out of step in YouTube videos (and other sites that send them separately): each started when its own server answered, so a slower sound server left the sound behind for the whole video – half a second and more. They now start together (measured: within 10 ms). After a pause they resume at the same position too.
+- Short hangs when switching inputs: stopping the old input could block the output for several seconds on Windows until it restarted itself. The old input now stops in the background.
+- An input that failed while starting (e.g. a missing picture file) could stop the next input from starting, or end the output.
+- `output.log` on Windows no longer fills up with "OverflowError: Python int too large to convert to C long" (the fix in 0.1.8 did not catch every case).
 
 ### Changed
 
