@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.10] – 2026-11-12
+
+Picture and sound stay in step in YouTube videos; no more short hangs when inputs switch; the YouTube input is now "Video link" and plays any site yt-dlp reads (Twitch, ARD/ZDF Mediathek, …); a "Beta" update channel to try fixes before a release.
 
 ### Added
 
@@ -201,7 +203,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.9...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.10...HEAD
+[0.1.10]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.10
 [0.1.9]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.9
 [0.1.8]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.8
 [0.1.7]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.7
