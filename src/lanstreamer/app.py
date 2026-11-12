@@ -75,7 +75,6 @@ class Status:
     target_fps: int = 0
     fps: float = 0.0
     current: str = ""
-    paused: bool = False  # the admin paused it: a "Paused" card is on air
     now: dict[str, Any] = field(default_factory=dict)  # title, channel, submitter of what is on air
     viewer_version: int = 0  # changes when a viewer form or its items change (pages reload them)
     sources: list[str] = field(default_factory=list)
@@ -280,7 +279,6 @@ class Output:
             return
         snapshot = self.runtime.status()
         self.status.current = snapshot["current"]
-        self.status.paused = snapshot["paused"]
         self.status.now = snapshot["now"]
         self.status.viewer_version = snapshot["viewer_version"]
         self.status.switches = snapshot["switches"]
@@ -420,12 +418,6 @@ class App:
         if runtime:
             runtime.skip()
 
-    def pause(self, output_id: str | None, on: bool) -> None:
-        """The Pause / Resume button."""
-        runtime = self.output(output_id).runtime
-        if runtime:
-            runtime.pause(on)
-
     async def apply_config(self, output_id: str) -> None:
         """An admin change: the output takes over its stored configuration, a new
         output starts, a deleted one stops."""
@@ -472,7 +464,7 @@ class App:
         if LocalPage.available():
             self.local_page = LocalPage(store, f"http://localhost:{self.args.port}", paths.data_dir() / "kiosk-browser")
         return Backend(
-            status=self.status_dict, skip=self.skip, pause=self.pause, store=store, auth=Auth(store),
+            status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,

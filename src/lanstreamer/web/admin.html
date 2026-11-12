@@ -121,7 +121,6 @@
       <div class="item"><span>Encoded fps</span><b id="s-fps">–</b></div>
       <div class="item"><span>Switches</span><b id="s-switches">–</b></div>
       <div class="item"><span>Restream</span><b id="s-restream">–</b></div>
-      <button id="pause" title="Shows a &quot;Paused&quot; card; the input plays on where it was when you resume">Pause</button>
       <button id="next">Next input</button>
     </div>
   </section>
@@ -274,8 +273,6 @@ class ApiError extends Error {
     this.status = status; this.detail = detail;
   }
 }
-let paused = false; // the output's Pause state, from the status
-
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -441,11 +438,7 @@ async function configChanged(version) {
 function renderStatus() {
   $("dot").className = "dot " + (status.state === "running" ? "ok" : status.state === "failed" ? "bad" : "");
   $("version").textContent = status.version;
-  $("s-current").textContent = status.paused ? "Paused" : status.current || "–";
-  paused = !!status.paused;
-  $("pause").textContent = paused ? "Resume" : "Pause";
-  $("pause").classList.toggle("primary", paused);
-  $("next").disabled = paused;
+  $("s-current").textContent = status.current || "–";
   $("s-encoder").textContent = status.encoder || "–";
   $("s-format").textContent = `${status.resolution} @ ${status.target_fps}`;
   $("s-fps").textContent = status.fps ? status.fps.toFixed(1) : "–";
@@ -465,11 +458,6 @@ function renderStatus() {
     if (queue) queue.hidden = !input.viewer_form;
   }
 }
-$("pause").onclick = async () => {
-  try {
-    await api(`/api/admin/pause${outputQuery()}`, { method: "PUT", body: { paused: !paused } });
-  } catch (err) { toast(err.message, true); }
-};
 $("next").onclick = async () => {
   try { await api(`/api/admin/next${outputQuery()}`, { method: "POST" }); } catch (err) { toast(err.message, true); }
 };
@@ -493,8 +481,7 @@ function renderInputs() {
     const blocked = input.override === "block";
     const stop = el("button", {
       className: "small" + (blocked ? " primary" : ""), textContent: blocked ? "Start" : "Stop",
-      title: blocked ? "The input may go on air again; a video continues where it was"
-        : "Takes the input off air until you press Start (sets Override to Block); a video continues where it was",
+      title: blocked ? "The input may go on air again" : "Takes the input off air until you press Start (sets Override to Block)",
     });
     stop.onclick = async () => { await patch(input, { override: blocked ? "none" : "block" }); renderInputs(); };
     const edit = el("button", { className: "small", textContent: "Edit", onclick: () => openDialog(input) });

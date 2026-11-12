@@ -29,7 +29,6 @@ def setup(tmp_path):
     backend = Backend(
         status=status,
         skip=lambda output=None: skipped.append(output or 1),
-        pause=lambda output, on: skipped.append(("pause", output, on)),
         store=store,
         auth=Auth(store),
         plugins=lambda: discover(tmp_path / "plugins"),
@@ -59,8 +58,6 @@ def test_public_pages_and_status(setup):
     assert client.post("/api/admin/next").status_code == 401 and skipped == []
     login(client)
     assert client.post("/api/admin/next").status_code == 204 and skipped == [1]
-    assert client.put("/api/admin/pause?output=out1", json={"paused": True}).status_code == 204
-    assert skipped[-1] == ("pause", "out1", True)
 
 
 def test_websocket_pushes_status(setup):

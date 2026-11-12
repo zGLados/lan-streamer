@@ -6,8 +6,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Video link inputs continue where they were: when one goes off air in the middle of a video (another input takes over) and comes back with the same video, it plays on from there instead of starting over. Kept until lan-streamer restarts; a live stream is live again. Other inputs start their item over, as before.
-- "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block); its video continues where it was.
+- "Stop" / "Start" button for every input on the admin page: Stop takes the input off air until you press Start (it sets Override to Block).
+
+### Removed
+
+- The Pause / Resume button on the admin page (since 0.1.8), for now: resuming a YouTube video at its position was slow and unreliable. "Next input", and the new Stop / Start per input, remain.
 
 ## [0.1.11] – 2026-11-12
 

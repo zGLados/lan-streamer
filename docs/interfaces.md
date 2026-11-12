@@ -68,7 +68,7 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
   "version": "0.0.1-test.40", "state": "running",
   "output_id": "out1", "output_name": "Output 1",
   "encoder": "nvidia", "resolution": "1920x1080", "target_fps": 60, "fps": 59.9,
-  "current": "Short-video submissions", "paused": false,
+  "current": "Short-video submissions",
   "now": {"title": "Funny cat", "channel": "@cats", "submitter": "Anna", "thumbnail": "https://…"},
   "inputs": [
     {"id": "standby", "name": "Standby", "plugin": "standby", "priority": 0, "fallback": true,
@@ -86,7 +86,6 @@ Most endpoints take `?output=<id>`; without it they mean the first output.
 
 - `state` of the output: `starting`, `running`, `restarting` (its output worker hung or ended and starts again; `last_error` says why, `worker_restarts` counts it), `failed`, `stopping`.
 - `state` of an input: `on air`, `active`, `inactive`, `cooling down` (its source failed, it sits out 30 s), `error` (the plugin process failed; `error` says why).
-- `paused`: the admin paused the output (`current` is empty meanwhile).
 - `debug_clock`: the output shows the debug clock; the player page then shows its local clock next to it (the difference is the delay).
 - `viewer_version` grows whenever a viewer list changes – reload `/api/viewer` then.
 - `config_version` grows whenever the configuration changes (outputs, inputs, settings, plugins turned on or off, uploaded or removed) – from any admin or tab; the admin page reloads them then.
@@ -130,7 +129,6 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | Method and path | Body → answer |
 | --- | --- |
 | `POST /api/admin/next?output=` | "Next input": the input on air hands over → 204 |
-| `PUT /api/admin/pause?output=` | `{"paused": bool}` → 204; paused, the output shows a "Paused" card and no input switches; resumed, the input plays on where it was (a live stream live) |
 | `GET /api/admin/plugins` | → `[{"id", "name", "version", "description", "schema", "builtin", "requirements", "enabled", "always_on"}]`; `schema` = JSON Schema of the plugin's settings |
 | `PUT /api/admin/plugins` | the plugin `.zip` as the request body (max. 50 MB) → 201 `{"id", "name", "version"}`; inputs using it restart |
 | `PATCH /api/admin/plugins/<id>` | `{"enabled": bool}` – turn a plugin on/off (not Standby, not while inputs use it) |
