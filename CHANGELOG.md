@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.9] – 2026-11-12
+
+Short download or decoder hiccups no longer tear gaps into the sound of YouTube videos and other media; `output.log` shows whether an input's source is buffering, reconnecting or running.
 
 ### Changed
 
@@ -10,7 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
-- Choppy sound in YouTube videos and other media inputs: the sound mixer threw away sound that arrived a little late, so every short hiccup of a download or decoder became a gap. It now waits up to half a second for late sound (the output is that much later).
+- Gaps in the sound of YouTube videos and other media inputs: the sound mixer threw away sound that arrived a little late, so every short hiccup of a download or decoder became a gap. It now waits up to half a second for late sound (the output is that much later).
 
 ## [0.1.8] – 2026-11-12
 
@@ -181,7 +183,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.8...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.9...HEAD
+[0.1.9]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.9
 [0.1.8]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.8
 [0.1.7]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.7
 [0.1.6]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.6
