@@ -61,6 +61,12 @@ AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
 # (owner 2026-11-11). The mix is float; this soft knee bends what is above -2 dBFS
 # down instead, peaks up to about +4 dBFS stay below full scale.
 LIMITER = "audiodynamic mode=compressor characteristics=soft-knee threshold=0.8 ratio=0.25"
+# The mixers run live: sound that reaches audiomixer after its deadline is thrown
+# away. Media sources (fallbacksrc) release their buffers right on time, so every
+# hiccup of a download or decoder became a gap in the sound (YouTube, owner
+# 2026-11-12); the test tone, made in the pipeline, never was late. This much
+# lateness is waited for instead; it adds to the output's delay.
+AUDIO_MIX_LATENCY_MS = 500
 CARD_COLOR = 0xFF111217  # the standby picture's background
 HEARTBEAT_S = 0.5
 STALL_S = 5.0  # the main loop silent this long: report it (_watch)
@@ -162,7 +168,8 @@ class Output:
             f" ! videoconvert name=vconv n-threads=4"
             f" ! queue name=encq leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0"
             f" h264parse name=hparse config-interval=-1 ! queue ! mux."
-            f" audiomixer name=amix ignore-inactive-pads=true ! {AUDIO_CAPS}"
+            f" audiomixer name=amix ignore-inactive-pads=true latency={AUDIO_MIX_LATENCY_MS * Gst.MSECOND}"
+            f" ! {AUDIO_CAPS}"
             f" ! {LIMITER} ! audioconvert ! opusenc bitrate=128000 frame-size=10 ! queue ! mux."
             # SRT instead of RTSP: rtspclientsink's TCP writes fail on Windows
             # after some seconds (GLib writev bug), SRT brings its own sockets.

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Choppy sound in YouTube videos and other media inputs: the sound mixer threw away sound that arrived a little late, so every short hiccup of a download or decoder became a gap. It now waits up to half a second for late sound (the output is that much later).
+
 ## [0.1.8] – 2026-11-12
 
 Pause and resume an output from the admin page; TikTok submissions download the easier H.264 file; more in the logs to find stuttering playback; no more OverflowError flood in `output.log` on Windows.
