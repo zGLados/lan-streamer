@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Releases build faster: the CI keeps GStreamer and the other build tools cached for release tags too, instead of downloading GStreamer (424 MB) again for every release.
+
 ## [0.1.9] – 2026-11-12
 
 Short download or decoder hiccups no longer tear gaps into the sound of YouTube videos and other media; `output.log` shows whether an input's source is buffering, reconnecting or running.

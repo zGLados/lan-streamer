@@ -1,0 +1,92 @@
+# Keeps the build caches on main, so release tags find them.
+#
+# A run can only restore caches of its own branch or tag and of the default branch.
+# Pushes to main start no build (owner 2026-10-26), so main had none, and every
+# release tag downloaded GStreamer (424 MB, slow server, ~15-25 min) and built
+# gst-plugins-rs again. This workflow only fills the caches – no build, no tests.
+# Same paths, keys and versions as windows.yml and linux.yml (tests/test_ci.py).
+#
+# Runs when started by hand, once a week (GitHub drops caches not used for 7 days)
+# and when a push to main changes the workflows (e.g. a new GStreamer version).
+name: Caches
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"  # Mondays 03:17 UTC
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/caches.yml
+      - .github/workflows/windows.yml
+      - .github/workflows/linux.yml
+      - .github/scripts/**
+
+concurrency:
+  group: caches
+  cancel-in-progress: false
+
+env:
+  GST_VERSION: "1.28.6"
+  PYGOBJECT_VERSION: "3.50.2"
+  GST_ROOT: C:\gstreamer\1.0\msvc_x86_64
+  GST_PLUGINS_RS: "0.13"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/cache@v4
+        id: gst-cache
+        with:
+          path: C:\gstreamer
+          key: gstreamer-msvc-${{ env.GST_VERSION }}
+
+      - uses: actions/cache@v4
+        id: wheel-cache
+        with:
+          path: wheels
+          key: pygobject-${{ env.PYGOBJECT_VERSION }}-gst${{ env.GST_VERSION }}-cp313-win_amd64
+
+      - name: Install GStreamer
+        if: steps.gst-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: .github/scripts/install-gstreamer.ps1
+
+      - name: GStreamer environment
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          "$env:GST_ROOT\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          "PKG_CONFIG_PATH=$env:GST_ROOT\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
+
+      - name: Build PyGObject wheel
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: .github/scripts/build-pygobject.ps1
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        id: rs-cache
+        with:
+          path: rsplugins
+          key: gst-plugins-rs-${{ env.GST_PLUGINS_RS }}-ubuntu-24.04-v1
+
+      - name: Build fallbacksrc and audioloudnorm (gst-plugins-rs)
+        if: steps.rs-cache.outputs.cache-hit != 'true'
+        run: .github/scripts/build-rsplugins.sh

@@ -80,6 +80,7 @@ jobs:
           .venv/bin/pytest -q
 
       # The plugins only change with the gst-plugins-rs branch: cached.
+      # A tag run can only read main's caches (and its own): caches.yml fills those.
       - uses: actions/cache@v4
         id: rs-cache
         with:
@@ -88,17 +89,7 @@ jobs:
 
       - name: Build fallbacksrc and audioloudnorm (gst-plugins-rs)
         if: steps.rs-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
-          git clone --quiet --depth 1 --branch "$GST_PLUGINS_RS" https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs.git
-          cd gst-plugins-rs
-          # The 0.13 branch predates Rust 1.89, which made this lint an error (audioloudnorm)
-          RUSTFLAGS="-A dangerous_implicit_autorefs" \
-            cargo build --release --quiet -p gst-plugin-fallbackswitch -p gst-plugin-audiofx
-          mkdir -p ../rsplugins
-          cp target/release/libgstfallbackswitch.so target/release/libgstrsaudiofx.so ../rsplugins/
-          ls -la ../rsplugins
+        run: .github/scripts/build-rsplugins.sh
 
       - name: Build packages
         run: |
