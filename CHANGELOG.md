@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.11] – 2026-11-12
+
+YouTube sign-in against "confirm you're not a bot"; picture and sound in step in YouTube videos over slower lines too; quieter logs.
 
 ### Added
 
@@ -11,6 +13,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - Picture and sound still about a second apart in YouTube videos: 0.1.10 started them together, but over a slower line the big picture stream was still filling its buffer while the sound already played. They now start once both have data and full buffers (measured with a picture line just above real time: within 30 ms; it was 0.2 s and more).
+- MediaMTX no longer logs "ERR [API] path not found" every 2 s while an ingest input waits for OBS.
+- After a plugin update on Windows, leftover work folders (`.old-…`, `.staging-…`) no longer show up as "Skipping plugin" warnings; they are deleted at the next start.
+- An output could fail to start on Linux with "Could not create handler for stream" when its sound came a moment after the picture.
 
 ## [0.1.10] – 2026-11-12
 
@@ -213,7 +218,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.10...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.11...HEAD
+[0.1.11]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.11
 [0.1.10]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.10
 [0.1.9]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.9
 [0.1.8]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.8
