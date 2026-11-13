@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.12] – 2026-11-13
+
+Cast from phones: lan-streamer shows up in the LAN like a smart TV (DLNA); Stop / Start per input; the Pause / Resume button is gone for now.
 
 ### Added
 
@@ -230,7 +232,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.11...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.12...HEAD
+[0.1.12]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.12
 [0.1.11]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.11
 [0.1.10]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.10
 [0.1.9]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.9
