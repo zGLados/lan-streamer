@@ -49,6 +49,8 @@ The plugin SDK has its own version (`packaging/sdk/pyproject.toml`, major = plug
 
 Put that in the PC's autostart (`shell:startup`). Alt+F4 ends the kiosk mode.
 
+While the stream plays, the player page and /tv keep the screen on (Screen Wake Lock), so the TV behind the PC does not go to standby. Browsers allow that only on https or `localhost` – the streaming PC itself ("Page on this PC"). On another display PC that opens `http://<server>:8080/tv`, set "Turn off my screen" to "Never" in the Windows power settings. lan-streamer itself keeps the streaming PC out of sleep while it runs (Windows).
+
 ## Writing a plugin
 
 See the [plugin guide](plugin-guide.md). In short: `python -m lanstreamer_sdk new <folder>` or a copy of one of the [examples](../examples) (`web-stream`, `stream-queue`, `hello-plugin`), then `python -m lanstreamer_sdk check <folder>`, `pytest <folder>`, `python -m lanstreamer_sdk pack <folder>` and upload the zip in the admin page. The examples' tests run with the normal `pytest`; `tests/test_plugin_contract.py` pins the plugin API v1.

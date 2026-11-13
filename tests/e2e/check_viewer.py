@@ -22,6 +22,14 @@ import httpx
 from playwright.sync_api import expect, sync_playwright
 
 PASSWORD = "ci-password-123"
+# Counts the page's screen wake lock requests (the TV behind a display PC must stay on).
+WAKE_LOCK_SPY = """
+window.wakeLockRequests = 0;
+if (navigator.wakeLock) {
+  const request = navigator.wakeLock.request.bind(navigator.wakeLock);
+  navigator.wakeLock.request = (type) => { window.wakeLockRequests++; return request(type); };
+}
+"""
 STATS_JS = """async () => {
   if (typeof pc === "undefined" || !pc) return 0;
   let frames = 0;
@@ -91,6 +99,7 @@ def main() -> int:
 
         tv = browser.new_context(viewport={"width": 1280, "height": 720}).new_page()
         tv.on("pageerror", lambda exc: (errors.append(str(exc)), print(f"  [tv error] {exc}")))
+        tv.add_init_script(WAKE_LOCK_SPY)
         tv.goto(base + "/tv")
         expect(tv.locator("video")).to_be_visible(timeout=10_000)
         text = tv.evaluate("document.body.innerText.trim()")
@@ -103,6 +112,9 @@ def main() -> int:
                 frames = tv.evaluate(STATS_JS)
             assert frames >= 120, f"only {frames} frames on /tv"
             step(f"/tv shows only the video ({frames} frames decoded)")
+            if tv.evaluate("window.isSecureContext"):  # the wake lock exists only on https / localhost
+                assert tv.evaluate("window.wakeLockRequests") >= 1, "/tv did not ask to keep the screen on"
+                step("/tv asks to keep the screen on while it plays")
         else:
             step("/tv shows only the video element")
         tv.screenshot(path="tv.png")

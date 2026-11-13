@@ -373,6 +373,22 @@ function toggleFullscreen() {
 $("fullscreen").onclick = toggleFullscreen;
 document.querySelector(".player").ondblclick = toggleFullscreen;
 
+// Keep the screen on while the stream plays: a display PC's power plan turns the
+// screen off after a while, and the TV behind it goes to standby. Browsers allow
+// it only on https or localhost (the streaming PC itself) and drop the lock when
+// the page is hidden, so it is asked for again when the page shows again.
+let wakeLock = null;
+async function keepScreenOn() {
+  if (!("wakeLock" in navigator) || wakeLock || video.paused || document.visibilityState !== "visible") return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (e) { /* not allowed here, e.g. battery saver */ }
+}
+video.addEventListener("playing", keepScreenOn);
+video.addEventListener("pause", () => wakeLock?.release());
+document.addEventListener("visibilitychange", keepScreenOn);
+
 pollStatus().then(connect);
 openSocket();
 loadForms();

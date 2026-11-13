@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).
+
 ### Added
 
 - Playlist: "Viewers can add videos" (off by default). The player page then shows "Add a video": viewers paste a single YouTube video link, optionally with their name; the videos play one after another after the current item, then the playlist goes on where it was. Limits in the input's settings: max. length (15 min), videos per device (1), queue length (20); no playlists, channels or live streams. Viewers see the queue, the admin can remove entries; it survives a restart.

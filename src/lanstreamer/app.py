@@ -27,7 +27,7 @@ from typing import Any
 
 import uvicorn
 
-from lanstreamer import BUILD, paths, tray
+from lanstreamer import BUILD, paths, power, tray
 from lanstreamer.core.auth import Auth
 from lanstreamer.core.config import OutputConfig, demo_output
 from lanstreamer.core.restreamer import Restreamer
@@ -577,6 +577,8 @@ def run(args: argparse.Namespace) -> int:
     if args.tray:
         icon = tray.Tray(url, logs, lambda: f"On air: {app.first.status.current or '–'}", app.quit.set)
         icon.start()
+    if not args.smoke_test and power.keep_awake():  # this thread runs the app until it ends
+        log.info("The PC does not go to sleep while lan-streamer runs")
     with open(logs / "mediamtx.log", "w") as mediamtx_log:
         app.mediamtx_log = mediamtx_log
         try:
