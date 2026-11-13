@@ -34,7 +34,7 @@ The TV view (`/tv`) shows only the stream: [screenshot](docs/images/tv.png). The
 
 **Linux (Ubuntu 24.04 / Debian 13 or newer):** download the `.deb` or `.tar.gz` from the [releases](https://github.com/zGLados/lan-streamer/releases) (test builds: [Actions → Linux](https://github.com/zGLados/lan-streamer/actions/workflows/linux.yml)), then `sudo apt install ./lan-streamer_….deb` – or unpack the `.tar.gz` and run `sudo ./install.sh`. It runs as the systemd service `lan-streamer` (player page on port 8080); `lan-streamer selftest` shows which encoders work. Remove it with `sudo apt purge lan-streamer` (or `sudo ./install.sh --uninstall --purge`).
 
-**Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name.
+**Submit a video:** on the player page viewers paste a TikTok (or YouTube Shorts, Reels, …) link, optionally with their name. With "Viewers can add videos" in a playlist input's settings they can also queue single YouTube videos (up to 15 min by default); these play after the current item, then the playlist goes on.
 
 **Restream:** on the admin page enter an RTMP URL with your stream key (YouTube, Twitch, …) under "Restream to" – the output is sent there as well.
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from lanstreamer.plugins.process import PluginError, PluginProcess
+from lanstreamer.plugins.process import PluginError, PluginProcess, PluginRejected
 from lanstreamer_sdk import API_VERSION, ManifestError, load_manifest
 
 BUILTIN = Path(__file__).resolve().parents[1] / "src" / "lanstreamer" / "plugins" / "builtin"
@@ -168,6 +168,94 @@ def test_empty_playlist_is_inactive(tmp_path):
 
     active = asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, {"items": []}, steps))
     assert active[0]["value"] is False
+
+
+def test_playlist_has_no_viewer_form_unless_viewers_may_add_videos(tmp_path):
+    async def steps(proc, events):
+        schema = await proc.viewer_schema()
+        with pytest.raises(PluginRejected, match="takes no submissions"):
+            await proc.viewer_submit({"link": "https://youtu.be/abc"}, "dev-a", "10.0.0.2")
+        return schema
+
+    assert asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, {"items": []}, steps)) is None
+
+
+def test_viewers_add_youtube_videos_that_play_after_the_current_item(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    a.write_bytes(b"")
+    b.write_bytes(b"")
+    settings = {"items": [str(a), str(b)], "viewers_add": True, "viewer_per_device": 1}
+
+    async def steps(proc, events):
+        schema = await proc.viewer_schema()
+        assert schema["title"] == "Add a video" and set(schema["schema"]["properties"]) == {"link", "name"}
+        assert (await proc.get_source())["uri"] == a.resolve().as_uri()
+
+        msg = await proc.viewer_submit({"link": "https://www.youtube.com/shorts/one", "name": "Anna"}, "dev-a", "10.0.0.2")
+        assert msg == "Added – position 1 in the queue."
+        with pytest.raises(PluginRejected, match="already have 1 video waiting"):
+            await proc.viewer_submit({"link": "https://youtu.be/two"}, "dev-a", "10.0.0.2")
+        with pytest.raises(PluginRejected, match="already in the queue"):
+            await proc.viewer_submit({"link": "https://www.youtube.com/shorts/one"}, "dev-b", "10.0.0.3")
+        with pytest.raises(PluginRejected, match="must be a YouTube video link"):
+            await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/1"}, "dev-b", "10.0.0.3")
+        await proc.viewer_submit({"link": "https://youtu.be/two"}, "dev-b", "10.0.0.3")
+        assert [i["text"] for i in await proc.viewer_items()] == ["Video one", "Video two"]
+
+        await proc.playback("ended")  # a.mp4 ended: the viewer videos come first
+        await asyncio.sleep(0.2)
+        first = await proc.get_source()
+        meta = [e for e in events if e.get("event") == "metadata"][-1]["value"]
+        assert (first["uri"], meta["title"], meta["submitter"]) == ("https://fake.invalid/one/video", "Video one", "Anna")
+        assert await proc.can_release() is False
+        assert (await proc.viewer_items())[0]["detail"] == "by Anna · on air"
+
+        await proc.remove_item((await proc.viewer_items())[0]["id"])  # the admin removes the one on air
+        await asyncio.sleep(0.2)
+        assert (await proc.get_source())["uri"] == "https://fake.invalid/two/video"
+        await proc.playback("ended")
+        await asyncio.sleep(0.2)
+        assert await proc.viewer_items() == []
+        assert (await proc.get_source())["uri"] == b.resolve().as_uri()  # the list goes on where it was
+
+    asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, steps))
+
+
+def test_the_viewer_queue_survives_a_restart_and_skips_videos_that_cannot_play(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+    settings = {"items": [], "viewers_add": True, "viewer_per_device": 5}
+
+    async def add(proc, events):
+        for link in ("https://youtu.be/offline", "https://youtu.be/two"):
+            await proc.viewer_submit({"link": link}, "dev-a", "10.0.0.2")
+        await asyncio.sleep(1.5)  # the next activity poll
+        return (await wait_for(events, "active"))[-1]["value"]
+
+    async def play(proc, events):
+        active = (await wait_for(events, "active"))[0]["value"]
+        source = await proc.get_source()
+        await proc.playback("ended")
+        await asyncio.sleep(1.5)  # the next activity poll
+        return active, source, await proc.viewer_items(), [e["value"] for e in events if e.get("event") == "active"]
+
+    assert asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, add)) is True
+    active, source, items, changes = asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, play))
+    assert active is True and source["uri"] == "https://fake.invalid/two/video"  # "offline" was skipped
+    assert items == [] and changes[-1] is False  # empty list, no viewer videos: inactive again
+
+    async def schema(proc, events):
+        return await proc.viewer_schema(), await proc.viewer_items()
+
+    off = {"items": [], "viewers_add": False}
+    asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, add))
+    assert asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, off, schema)) == (None, [])  # turned off: queue gone
+
+
+def test_viewer_video_lengths_read_well():
+    from lanstreamer.plugins.builtin.playlist.playlist import span
+
+    assert [span(s) for s in (45, 900, 5400)] == ["45 s", "15 min", "1 h 30 min"]
 
 
 def test_invalid_settings_stop_the_plugin_with_a_message(tmp_path):

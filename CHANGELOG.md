@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Playlist: "Viewers can add videos" (off by default). The player page then shows "Add a video": viewers paste a single YouTube video link, optionally with their name; the videos play one after another after the current item, then the playlist goes on where it was. Limits in the input's settings: max. length (15 min), videos per device (1), queue length (20); no playlists, channels or live streams. Viewers see the queue, the admin can remove entries; it survives a restart.
+
 ## [0.1.12] – 2026-11-13
 
 Cast from phones: lan-streamer shows up in the LAN like a smart TV (DLNA); Stop / Start per input; the Pause / Resume button is gone for now.

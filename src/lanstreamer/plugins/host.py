@@ -92,12 +92,12 @@ async def serve(plugin: InputPlugin) -> None:
             elif method == "can_release":
                 result = bool(await plugin.can_release())
             elif method == "viewer_schema":
-                form = type(plugin).ViewerForm
+                form = plugin.ViewerForm  # the instance may turn its form off (e.g. a setting)
                 result = None if form is None else {
-                    "title": type(plugin).viewer_title, "schema": form.model_json_schema(),
+                    "title": plugin.viewer_title, "schema": form.model_json_schema(),
                 }  # fmt: skip
             elif method == "viewer_submit":
-                form_cls = type(plugin).ViewerForm
+                form_cls = plugin.ViewerForm
                 if form_cls is None:
                     raise Rejected("this input takes no submissions")
                 try:
