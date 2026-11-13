@@ -2,19 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.13] – 2026-11-13
+
+Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.
 
 ### Added
 
+- Playlist: "Viewers can add videos" (off by default). The player page then shows "Add a video": viewers paste a single YouTube video link, optionally with their name; the videos play one after another after the current item, then the playlist goes on where it was. Limits in the input's settings: max. length (15 min), videos per device (1), queue length (20); no playlists, channels or live streams. Viewers see the queue, the admin can remove entries; it survives a restart.
 - "This PC" on the admin page (Windows, the PC lan-streamer runs on): start lan-streamer automatically when Windows logs in; restart the PC (right away) or shut it down (with a Cancel while it counts down); and, off by default and behind an explicit switch, a box to run a command on the PC and see its output (or launch it and not wait). The command box runs with lan-streamer's rights from the admin page on the LAN, so it stays off until you turn it on, and every command that runs is written to the log.
 
 ### Fixed
 
 - The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).
-
-### Added
-
-- Playlist: "Viewers can add videos" (off by default). The player page then shows "Add a video": viewers paste a single YouTube video link, optionally with their name; the videos play one after another after the current item, then the playlist goes on where it was. Limits in the input's settings: max. length (15 min), videos per device (1), queue length (20); no playlists, channels or live streams. Viewers see the queue, the admin can remove entries; it survives a restart.
 
 ## [0.1.12] – 2026-11-13
 
@@ -246,7 +245,8 @@ First release: Windows installer, Linux packages (.deb, .tar.gz), plugin API 1 w
 - GPU encoders on a fresh Windows: the Visual C++ runtime is now bundled.
 - Output to MediaMTX broke after ~20 s with RTSP on Windows; now SRT.
 
-[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.12...HEAD
+[Unreleased]: https://github.com/zGLados/lan-streamer/compare/0.1.13...HEAD
+[0.1.13]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.13
 [0.1.12]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.12
 [0.1.11]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.11
 [0.1.10]: https://github.com/zGLados/lan-streamer/releases/tag/0.1.10
