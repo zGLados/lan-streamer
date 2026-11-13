@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- "This PC" on the admin page (Windows, the PC lan-streamer runs on): start lan-streamer automatically when Windows logs in; restart or shut the PC down (with a Cancel while it counts down); and, off by default and behind an explicit switch, a box to run a command on the PC and see its output (or launch it and not wait). The command box runs with lan-streamer's rights from the admin page on the LAN, so it stays off until you turn it on, and every command that runs is written to the log.
+- "This PC" on the admin page (Windows, the PC lan-streamer runs on): start lan-streamer automatically when Windows logs in; restart the PC (right away) or shut it down (with a Cancel while it counts down); and, off by default and behind an explicit switch, a box to run a command on the PC and see its output (or launch it and not wait). The command box runs with lan-streamer's rights from the admin page on the LAN, so it stays off until you turn it on, and every command that runs is written to the log.
 
 ### Fixed
 

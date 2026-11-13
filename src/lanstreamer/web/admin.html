@@ -857,15 +857,15 @@ $("pc-cmd-enable").onchange = async () => {
   try { renderPc(await api("/api/admin/pc", { method: "PATCH", body: { commands_enabled: $("pc-cmd-enable").checked } })); }
   catch (err) { toast(err.message, true); await loadPc(); }
 };
-async function pcPower(action, label) {
-  if (!confirm(`${label} this PC in 10 seconds?`)) return;
-  try { await api("/api/admin/pc/power", { method: "POST", body: { action, delay_s: 10 } });
-        toast(`${label} in 10 s – press Cancel to stop it`, true);
-        $("pc-cancel").hidden = false; }
+async function pcPower(action, label, delay) {
+  if (!confirm(delay > 2 ? `${label} this PC in ${delay} seconds?` : `${label} this PC now?`)) return;
+  try { await api("/api/admin/pc/power", { method: "POST", body: { action, delay_s: delay } });
+        if (delay > 2) { toast(`${label} in ${delay} s – press Cancel to stop it`, true); $("pc-cancel").hidden = false; }
+        else { toast(`${label}…`, true); } }
   catch (err) { toast(err.message, true); }
 }
-$("pc-restart").onclick = () => pcPower("restart", "Restart");
-$("pc-shutdown").onclick = () => pcPower("shutdown", "Shut down");
+$("pc-restart").onclick = () => pcPower("restart", "Restart", 1);
+$("pc-shutdown").onclick = () => pcPower("shutdown", "Shut down", 10);
 $("pc-cancel").onclick = async () => {
   try { await api("/api/admin/pc/power", { method: "POST", body: { action: "cancel" } });
         toast("Cancelled"); $("pc-cancel").hidden = true; }
