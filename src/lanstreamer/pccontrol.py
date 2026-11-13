@@ -11,6 +11,7 @@ by an explicit setting, and every command that runs is written to the log.
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import sys
@@ -23,6 +24,8 @@ log = logging.getLogger(__name__)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "lan-streamer"
 COMMANDS_SETTING = "pc_commands_enabled"
+SHORTCUTS_SETTING = "pc_shortcuts"  # named launch buttons, JSON [{"label", "command"}]
+MAX_SHORTCUTS = 20
 OUTPUT_LIMIT = 20_000  # characters of stdout/stderr returned to the admin page
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 DETACHED = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0  # DETACHED_PROCESS | NEW_PROCESS_GROUP
@@ -119,10 +122,7 @@ class PcControl:
             raise ValueError("no command given")
         log.warning("admin runs on this PC (wait=%s): %s", wait, command)
         if not wait:
-            proc = subprocess.Popen(command, shell=True, creationflags=DETACHED,
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, close_fds=True)  # fmt: skip
-            return {"started": True, "pid": proc.pid}
+            return self._spawn(command)
         try:
             done = subprocess.run(command, shell=True, capture_output=True, text=True, check=False,
                                   timeout=max(1, min(int(timeout_s), 600)), creationflags=NO_WINDOW)  # fmt: skip
@@ -132,6 +132,54 @@ class PcControl:
         return {"started": True, "returncode": done.returncode,
                 "stdout": _clip(done.stdout), "stderr": _clip(done.stderr)}  # fmt: skip
 
+    def _spawn(self, command: str) -> dict:
+        """Launches a command detached (left running) and returns its pid."""
+        proc = subprocess.Popen(command, shell=True, creationflags=DETACHED,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, close_fds=True)  # fmt: skip
+        return {"started": True, "pid": proc.pid}
+
+    # --- program buttons ----------------------------------------------------------------
+    # Named shortcuts the admin defines once (label + command), shown as buttons. Defining
+    # them needs the command switch on (same risk as the command box); once saved they can
+    # be launched by button even with the box off, as a fixed, admin-curated list.
+
+    def shortcuts(self) -> list[dict]:
+        raw = self.store.get_setting(SHORTCUTS_SETTING)
+        if not raw:
+            return []
+        try:
+            items = json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+        out = []
+        for it in items if isinstance(items, list) else []:
+            if isinstance(it, dict) and str(it.get("label", "")).strip() and str(it.get("command", "")).strip():
+                out.append({"label": str(it["label"]).strip(), "command": str(it["command"]).strip()})
+        return out[:MAX_SHORTCUTS]
+
+    def set_shortcuts(self, items: list[dict]) -> None:
+        if not self.commands_enabled():
+            raise PermissionError("turn on running commands to change the program buttons")
+        clean = []
+        for it in list(items)[:MAX_SHORTCUTS]:
+            label = str(it.get("label", "")).strip()
+            command = str(it.get("command", "")).strip()
+            if label and command:
+                clean.append({"label": label, "command": command})
+        self.store.set_setting(SHORTCUTS_SETTING, json.dumps(clean))
+        log.warning("admin set %d program button(s) on this PC", len(clean))
+
+    def run_shortcut(self, index: int) -> dict:
+        """Launches the stored shortcut at index (detached). Allowed without the command box."""
+        items = self.shortcuts()
+        if not 0 <= index < len(items):
+            raise IndexError("no such program button")
+        self._require_windows()
+        item = items[index]
+        log.warning("admin runs program button %r on this PC: %s", item["label"], item["command"])
+        return self._spawn(item["command"])
+
     # --- for the admin page -------------------------------------------------------------
 
     def state(self) -> dict:
@@ -140,6 +188,7 @@ class PcControl:
             "can_power": sys.platform == "win32",
             "autorun": self.autorun_enabled(),
             "commands_enabled": self.commands_enabled(),
+            "shortcuts": self.shortcuts(),
         }
 
 

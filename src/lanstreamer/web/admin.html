@@ -232,6 +232,7 @@
       <button class="danger" id="pc-shutdown">Shut down PC…</button>
       <button class="small" id="pc-cancel" hidden>Cancel</button>
     </div>
+    <div class="row" id="pc-apps" hidden></div>
     <details id="pc-commands">
       <summary>Run a command on this PC</summary>
       <p class="muted">Runs with lan-streamer's rights, from the admin page on the LAN. Off by default.</p>
@@ -245,6 +246,13 @@
           <button class="primary" id="pc-cmd-run">Run</button>
         </div>
         <pre id="pc-cmd-out" class="log" hidden></pre>
+        <hr>
+        <p class="muted">Program buttons – each becomes a button above that launches its command (left running).</p>
+        <div id="pc-apps-rows"></div>
+        <div class="row">
+          <button class="small" id="pc-apps-add" type="button">Add a button</button>
+          <button class="primary" id="pc-apps-save" type="button">Save buttons</button>
+        </div>
       </div>
     </details>
     <p class="muted" id="pc-info"></p>
@@ -838,12 +846,47 @@ $("lp-open").onclick = async () => {
 };
 
 // --- this PC (Windows): autorun, restart / shut down, run a command --------------------
+let pcShortcuts = [];  // the program buttons, edited in place before Save
 function renderPc(p) {
   $("pc-section").hidden = false;
   $("pc-autorun").checked = p.autorun;
   $("pc-power-row").hidden = !p.can_power;
   $("pc-cmd-enable").checked = p.commands_enabled;
   $("pc-cmd-box").hidden = !p.commands_enabled;
+  pcShortcuts = (p.shortcuts || []).map(s => ({ label: s.label, command: s.command }));
+  renderPcButtons();
+  renderPcEditor();
+}
+function renderPcButtons() {
+  const box = $("pc-apps");
+  box.innerHTML = "";
+  box.hidden = pcShortcuts.length === 0;
+  pcShortcuts.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "primary"; b.type = "button"; b.textContent = s.label;
+    b.onclick = () => runShortcut(i, s.label);
+    box.appendChild(b);
+  });
+}
+function renderPcEditor() {
+  const rows = $("pc-apps-rows");
+  rows.innerHTML = "";
+  pcShortcuts.forEach((s, i) => {
+    const div = document.createElement("div");
+    div.className = "row";
+    const name = document.createElement("input");
+    name.value = s.label; name.placeholder = "Button name";
+    name.oninput = () => { pcShortcuts[i].label = name.value; };
+    const cmd = document.createElement("input");
+    cmd.value = s.command; cmd.placeholder = "C:\\path\\to\\start.bat";
+    cmd.autocomplete = "off"; cmd.spellcheck = false;
+    cmd.oninput = () => { pcShortcuts[i].command = cmd.value; };
+    const del = document.createElement("button");
+    del.className = "small"; del.type = "button"; del.textContent = "Remove";
+    del.onclick = () => { pcShortcuts.splice(i, 1); renderPcEditor(); };
+    div.append(name, cmd, del);
+    rows.appendChild(div);
+  });
 }
 async function loadPc() {
   try { renderPc(await api("/api/admin/pc")); } catch { /* not Windows */ }
@@ -885,6 +928,19 @@ $("pc-cmd-run").onclick = async () => {
       .filter(Boolean).join("\n");
   } catch (err) { out.textContent = err.message; }
 };
+$("pc-apps-add").onclick = () => { pcShortcuts.push({ label: "", command: "" }); renderPcEditor(); };
+$("pc-apps-save").onclick = async () => {
+  const shortcuts = pcShortcuts
+    .map(s => ({ label: (s.label || "").trim(), command: (s.command || "").trim() }))
+    .filter(s => s.label && s.command);
+  try { renderPc(await api("/api/admin/pc/shortcuts", { method: "PUT", body: { shortcuts } })); toast("Saved"); }
+  catch (err) { toast(err.message, true); await loadPc(); }
+};
+async function runShortcut(index, label) {
+  try { const r = await api("/api/admin/pc/shortcuts/run", { method: "POST", body: { index } });
+        toast(`${label} started (pid ${r.pid})`); }
+  catch (err) { toast(err.message, true); }
+}
 
 // --- YouTube cookies: only whether there are any comes back, never the cookies -------------
 function renderCookies(c) {

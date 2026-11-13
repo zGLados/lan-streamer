@@ -158,6 +158,8 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `PATCH /api/admin/pc` | `{"autorun"?: bool, "commands_enabled"?: bool}` – autorun starts lan-streamer (tray) when Windows logs in; commands_enabled turns the command box below on or off (off by default) → the state above |
 | `POST /api/admin/pc/power` | `{"action": "restart" \| "shutdown" \| "cancel", "delay_s"?: 0–600}` – restarts or shuts the PC down after the delay (`shutdown`), or aborts one still in its delay (`cancel`); 202 |
 | `POST /api/admin/pc/run` | `{"command", "wait"?: bool, "timeout_s"?: 1–600}` – runs a command on the PC (only when `commands_enabled`; 403 otherwise). wait: capture → `{"returncode", "stdout", "stderr", "timed_out"?}`; otherwise launch detached → `{"started", "pid"}`. Every command is logged |
+| `PUT /api/admin/pc/shortcuts` | `{"shortcuts": [{"label", "command"}, …]}` – the named program buttons (max 20). Needs `commands_enabled` on (403 otherwise), since defining one is the same risk as the command box → the state above |
+| `POST /api/admin/pc/shortcuts/run` | `{"index": int}` – launches the stored program button detached (allowed even with the command box off) → `{"started", "pid"}`; 404 if there is no button at that index. Logged |
 | `GET /api/admin/logs/<name>?lines=300` | plain text, the last lines (max. 5000) of `lan-streamer.log`, `output.log`, `output-<id>.log` or `mediamtx.log` |
 
 An output from `GET /api/admin/outputs`:

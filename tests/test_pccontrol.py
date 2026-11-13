@@ -123,6 +123,50 @@ def test_long_output_is_clipped():
     assert clipped.endswith("cut off)") and len(clipped) < pccontrol.OUTPUT_LIMIT + 60
 
 
+# --- program buttons (shortcuts) ----------------------------------------------------
+
+
+def test_shortcuts_need_commands_enabled_to_change(tmp_path):
+    pc = make_control(tmp_path)
+    assert pc.shortcuts() == []
+    with pytest.raises(PermissionError, match="turn on running commands"):
+        pc.set_shortcuts([{"label": "TS3", "command": "start.bat"}])
+    pc.set_commands_enabled(True)
+    pc.set_shortcuts([
+        {"label": "TS3", "command": "start.bat"},
+        {"label": "  ", "command": "ignored"},  # dropped: no label
+        {"label": "no cmd", "command": "  "},    # dropped: no command
+    ])
+    assert pc.shortcuts() == [{"label": "TS3", "command": "start.bat"}]
+    assert pc.state()["shortcuts"] == [{"label": "TS3", "command": "start.bat"}]
+
+
+def test_shortcuts_survive_turning_commands_off(tmp_path):
+    pc = make_control(tmp_path)
+    pc.set_commands_enabled(True)
+    pc.set_shortcuts([{"label": "TS3", "command": "start.bat"}])
+    pc.set_commands_enabled(False)
+    assert pc.shortcuts() == [{"label": "TS3", "command": "start.bat"}]  # still shown and runnable
+
+
+def test_run_shortcut_bad_index_raises_before_touching_the_os(tmp_path):
+    pc = make_control(tmp_path)
+    with pytest.raises(IndexError, match="no such program button"):
+        pc.run_shortcut(0)
+
+
+def test_run_shortcut_launches_detached(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    launched = []
+    monkeypatch.setattr(pccontrol.PcControl, "_spawn",
+                        lambda self, command: launched.append(command) or {"started": True, "pid": 123})  # fmt: skip
+    pc = make_control(tmp_path)
+    pc.set_commands_enabled(True)
+    pc.set_shortcuts([{"label": "TS3", "command": "start.bat"}])
+    assert pc.run_shortcut(0) == {"started": True, "pid": 123}
+    assert launched == ["start.bat"]
+
+
 # --- the admin endpoints ------------------------------------------------------------
 
 
@@ -156,6 +200,22 @@ def test_endpoints_need_login_and_toggle_commands(client, monkeypatch):
     run = client.post("/api/admin/pc/run", json={"command": "echo hi", "wait": True}).json()
     assert run["returncode"] == 0 and "hi" in run["stdout"]
     assert client.post("/api/admin/pc/power", json={"action": "restart"}).status_code == 501
+
+
+def test_shortcut_endpoints(client, monkeypatch):
+    launched = []
+    monkeypatch.setattr(pccontrol.PcControl, "autorun_enabled", lambda self: False)  # no winreg here
+    monkeypatch.setattr(pccontrol.PcControl, "_require_windows", lambda self: None)
+    monkeypatch.setattr(pccontrol.PcControl, "_spawn",
+                        lambda self, command: launched.append(command) or {"started": True, "pid": 7})  # fmt: skip
+    body = {"shortcuts": [{"label": "TS3", "command": "start.bat"}]}
+    assert client.put("/api/admin/pc/shortcuts", json=body).status_code == 403  # commands off
+    client.patch("/api/admin/pc", json={"commands_enabled": True})
+    state = client.put("/api/admin/pc/shortcuts", json=body).json()
+    assert state["shortcuts"] == [{"label": "TS3", "command": "start.bat"}]
+    assert client.post("/api/admin/pc/shortcuts/run", json={"index": 0}).json()["pid"] == 7
+    assert launched == ["start.bat"]
+    assert client.post("/api/admin/pc/shortcuts/run", json={"index": 9}).status_code == 404
 
 
 def test_pc_endpoints_are_501_without_the_control(tmp_path):

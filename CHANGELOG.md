@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- "This PC" (Windows): program buttons. Under "Run a command", you can save named buttons, each with a command (e.g. a button "Start TS3 server" that runs `C:\…\start.bat`). The buttons show in the "This PC" section and launch their command (left running) on a click. Defining them needs "Allow running commands" on, as it is the same as the command box; once saved, the buttons keep working and can be clicked even with the command box switched off again.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.

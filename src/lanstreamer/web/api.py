@@ -222,6 +222,19 @@ class PcCommand(BaseModel):
     timeout_s: int = Field(30, ge=1, le=600)
 
 
+class PcShortcut(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    command: str = Field(min_length=1, max_length=4000)
+
+
+class PcShortcuts(BaseModel):
+    shortcuts: list[PcShortcut] = Field(default_factory=list, max_length=20)
+
+
+class PcShortcutRun(BaseModel):
+    index: int = Field(ge=0)
+
+
 # --- app --------------------------------------------------------------------------------
 
 
@@ -712,6 +725,26 @@ def create_app(backend: Backend) -> FastAPI:
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
         except (ValueError, OSError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.put("/api/admin/pc/shortcuts", dependencies=[Depends(logged_in)])
+    def pc_set_shortcuts(body: PcShortcuts) -> dict[str, Any]:
+        pc = pc_control()
+        try:
+            pc.set_shortcuts([s.model_dump() for s in body.shortcuts])
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        return pc.state()
+
+    @app.post("/api/admin/pc/shortcuts/run", dependencies=[Depends(logged_in)])
+    def pc_run_shortcut(body: PcShortcutRun) -> dict[str, Any]:
+        try:
+            return pc_control().run_shortcut(body.index)
+        except IndexError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(501, str(exc)) from exc
+        except OSError as exc:
             raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
