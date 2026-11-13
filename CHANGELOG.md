@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Playlist ("Viewers can add videos") and Short-video submissions: the limits max. length, videos per device and queue length can be set to 0 for no limit.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.

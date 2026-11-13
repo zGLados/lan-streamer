@@ -81,6 +81,18 @@ def test_too_long_videos_are_refused(tmp_path, monkeypatch):
     asyncio.run(with_plugin(tmp_path, {"max_length_s": 5}, steps))
 
 
+def test_zero_means_no_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+
+    async def steps(proc, events):
+        for n in range(3):
+            await proc.viewer_submit({"link": f"https://example.com/v{n}.mp4"}, "d", "1.2.3.4")
+        return len(await proc.viewer_items())
+
+    settings = {"max_length_s": 0, "per_device": 0, "max_queue": 0}
+    assert asyncio.run(with_plugin(tmp_path, settings, steps)) == 3
+
+
 def test_the_queue_survives_a_restart(tmp_path, monkeypatch):
     monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
 
