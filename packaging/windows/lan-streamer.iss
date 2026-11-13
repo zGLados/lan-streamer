@@ -58,11 +58,13 @@ english.Submissions=Short-video submissions – viewers submit TikTok, Shorts an
 english.Playlist=Playlist – plays files and links from a list
 english.TestPattern=Test pattern – colour bars and a tone, for tests
 english.Dlna=Cast from phones (DLNA) – phones send videos, music and pictures to lan-streamer like to a TV
+english.BouncingLogo=Bouncing logo – a picture bounces around the screen like the DVD logo
 german.Inputs=Eingebaute Eingänge einschalten (Standby ist immer an; später auf der Admin-Seite änderbar):
 german.Submissions=Kurzvideo-Einreichungen – Zuschauer reichen TikTok-, Shorts- und Reels-Links auf der Player-Seite ein
 german.Playlist=Playlist – spielt Dateien und Links aus einer Liste
 german.TestPattern=Testbild – Farbbalken und Ton, für Tests
 german.Dlna=Vom Handy streamen (DLNA) – Handys senden Videos, Musik und Bilder an lan-streamer wie an einen Fernseher
+german.BouncingLogo=Hüpfendes Logo – ein Bild prallt wie das DVD-Logo von den Bildschirmrändern ab
 
 [Tasks]
 ; A reinstall preselects the previous answers. The app takes them over from
@@ -71,6 +73,7 @@ Name: "submissions"; Description: "{cm:Submissions}"; GroupDescription: "{cm:Inp
 Name: "playlist"; Description: "{cm:Playlist}"; GroupDescription: "{cm:Inputs}"
 Name: "testpattern"; Description: "{cm:TestPattern}"; GroupDescription: "{cm:Inputs}"; Flags: unchecked
 Name: "dlna"; Description: "{cm:Dlna}"; GroupDescription: "{cm:Inputs}"; Flags: unchecked
+Name: "bouncinglogo"; Description: "{cm:BouncingLogo}"; GroupDescription: "{cm:Inputs}"; Flags: unchecked
 
 [INI]
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "submissions"; String: "on"; Tasks: submissions
@@ -81,6 +84,8 @@ Filename: "{app}\setup.ini"; Section: "plugins"; Key: "test-pattern"; String: "o
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "test-pattern"; String: "off"; Tasks: not testpattern
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "dlna"; String: "on"; Tasks: dlna
 Filename: "{app}\setup.ini"; Section: "plugins"; Key: "dlna"; String: "off"; Tasks: not dlna
+Filename: "{app}\setup.ini"; Section: "plugins"; Key: "bouncing-logo"; String: "on"; Tasks: bouncinglogo
+Filename: "{app}\setup.ini"; Section: "plugins"; Key: "bouncing-logo"; String: "off"; Tasks: not bouncinglogo
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

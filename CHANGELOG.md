@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- "Bouncing logo", a new built-in input (off by default; installer or admin page): a picture you upload bounces around a black screen like the DVD logo, with a new random color at every bounce. Settings: size, speed, random color on/off.
+- SDK 1.3.0: `BounceSource(path, size, speed, change_color)`; `bouncing-logo` is a built-in plugin id now (`check` and `pack` refuse it).
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.

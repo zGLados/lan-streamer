@@ -12,7 +12,7 @@ from lanstreamer_sdk.plugin import API_VERSION
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}$")
 _ENTRY = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 # the plugins inside lan-streamer; an upload with one of these ids is refused
-BUILTIN_IDS = frozenset({"dlna", "ingest", "playlist", "standby", "submissions", "test-pattern", "youtube"})
+BUILTIN_IDS = frozenset({"bouncing-logo", "dlna", "ingest", "playlist", "standby", "submissions", "test-pattern", "youtube"})
 
 
 class ManifestError(ValueError):

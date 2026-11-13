@@ -11,7 +11,7 @@ def setup_ini(path, **plugins):
 def test_first_start_without_installer(tmp_path):
     store = Store(tmp_path / "db")
     choice.on_start(store, None)
-    assert choice.disabled(store) == {"test-pattern", "dlna"}
+    assert choice.disabled(store) == {"test-pattern", "dlna", "bouncing-logo"}
     assert [(i.name, i.plugin) for i in store.output("out1").inputs] == [
         ("Standby", "standby"), ("Short-video submissions", "submissions")]  # fmt: skip
     choice.on_start(store, None)  # a second start adds nothing
@@ -22,7 +22,7 @@ def test_the_installer_answers_are_taken_over(tmp_path):
     store = Store(tmp_path / "db")
     ini = setup_ini(tmp_path / "setup.ini", submissions=False, playlist=True, test_pattern=True, standby=False)
     choice.on_start(store, ini)
-    assert choice.disabled(store) == {"submissions", "dlna"}  # standby stays on; dlna: not asked
+    assert choice.disabled(store) == {"submissions", "dlna", "bouncing-logo"}  # standby stays on; not asked
     assert [i.plugin for i in store.output("out1").inputs] == ["standby"]
 
 
@@ -32,10 +32,10 @@ def test_installed_again_with_other_answers(tmp_path):
     choice.on_start(store, ini)
     choice.set_enabled(store, "playlist", False)  # changed in the admin page
     choice.on_start(store, ini)  # same installer answers: the admin's change stays
-    assert choice.disabled(store) == {"test-pattern", "playlist", "dlna"}
+    assert choice.disabled(store) == {"test-pattern", "playlist", "dlna", "bouncing-logo"}
     setup_ini(ini, submissions=False, playlist=False, test_pattern=True)  # reinstalled
     choice.on_start(store, ini)
-    assert choice.disabled(store) == {"playlist", "dlna"}  # submissions is in use, stays on
+    assert choice.disabled(store) == {"playlist", "dlna", "bouncing-logo"}  # submissions is in use, stays on
 
 
 def test_in_use_and_always_on(tmp_path):
