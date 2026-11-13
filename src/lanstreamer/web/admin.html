@@ -221,6 +221,35 @@
     <p class="muted" id="lp-info"></p>
   </section>
 
+  <section id="pc-section" hidden>
+    <h2>This PC</h2>
+    <p class="muted">Controls for the Windows PC lan-streamer runs on.</p>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="pc-autorun"> Start lan-streamer when this PC starts</label>
+    </div>
+    <div class="row" id="pc-power-row">
+      <button class="danger" id="pc-restart">Restart PC…</button>
+      <button class="danger" id="pc-shutdown">Shut down PC…</button>
+      <button class="small" id="pc-cancel" hidden>Cancel</button>
+    </div>
+    <details id="pc-commands">
+      <summary>Run a command on this PC</summary>
+      <p class="muted">Runs with lan-streamer's rights, from the admin page on the LAN. Off by default.</p>
+      <label class="check"><input type="checkbox" id="pc-cmd-enable"> Allow running commands</label>
+      <div id="pc-cmd-box" hidden>
+        <label class="wide">Command
+          <input id="pc-cmd" placeholder="e.g. C:\\path\\to\\script.bat" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="pc-cmd-wait" checked> Wait and show the output</label>
+          <button class="primary" id="pc-cmd-run">Run</button>
+        </div>
+        <pre id="pc-cmd-out" class="log" hidden></pre>
+      </div>
+    </details>
+    <p class="muted" id="pc-info"></p>
+  </section>
+
   <section>
     <h2>Admin password</h2>
     <form id="pw-form" class="row">
@@ -338,6 +367,7 @@ async function start() {
   await reload();
   loadUpdate();
   loadLocalPage();
+  loadPc();
   loadCookies();
   openSocket();
   refreshLog();
@@ -431,6 +461,7 @@ async function configChanged(version) {
     await reload();
     loadUpdate();
     loadLocalPage();
+    loadPc();
     loadCookies();
   } catch { configStale = true; /* next status message tries again */ }
   finally { configLoading = false; }
@@ -804,6 +835,55 @@ $("lp-mode").onchange = async () => {
 $("lp-open").onclick = async () => {
   try { renderLocalPage(await api("/api/admin/local-page/open", { method: "POST" })); }
   catch (err) { toast(err.message, true); }
+};
+
+// --- this PC (Windows): autorun, restart / shut down, run a command --------------------
+function renderPc(p) {
+  $("pc-section").hidden = false;
+  $("pc-autorun").checked = p.autorun;
+  $("pc-power-row").hidden = !p.can_power;
+  $("pc-cmd-enable").checked = p.commands_enabled;
+  $("pc-cmd-box").hidden = !p.commands_enabled;
+}
+async function loadPc() {
+  try { renderPc(await api("/api/admin/pc")); } catch { /* not Windows */ }
+}
+$("pc-autorun").onchange = async () => {
+  try { renderPc(await api("/api/admin/pc", { method: "PATCH", body: { autorun: $("pc-autorun").checked } }));
+        toast($("pc-autorun").checked ? "Autorun on" : "Autorun off"); }
+  catch (err) { toast(err.message, true); await loadPc(); }
+};
+$("pc-cmd-enable").onchange = async () => {
+  try { renderPc(await api("/api/admin/pc", { method: "PATCH", body: { commands_enabled: $("pc-cmd-enable").checked } })); }
+  catch (err) { toast(err.message, true); await loadPc(); }
+};
+async function pcPower(action, label) {
+  if (!confirm(`${label} this PC in 10 seconds?`)) return;
+  try { await api("/api/admin/pc/power", { method: "POST", body: { action, delay_s: 10 } });
+        toast(`${label} in 10 s – press Cancel to stop it`, true);
+        $("pc-cancel").hidden = false; }
+  catch (err) { toast(err.message, true); }
+}
+$("pc-restart").onclick = () => pcPower("restart", "Restart");
+$("pc-shutdown").onclick = () => pcPower("shutdown", "Shut down");
+$("pc-cancel").onclick = async () => {
+  try { await api("/api/admin/pc/power", { method: "POST", body: { action: "cancel" } });
+        toast("Cancelled"); $("pc-cancel").hidden = true; }
+  catch (err) { toast(err.message, true); }
+};
+$("pc-cmd-run").onclick = async () => {
+  const command = $("pc-cmd").value.trim();
+  if (!command) return;
+  const wait = $("pc-cmd-wait").checked;
+  const out = $("pc-cmd-out");
+  out.hidden = false; out.textContent = "Running…";
+  try {
+    const r = await api("/api/admin/pc/run", { method: "POST", body: { command, wait } });
+    if (!wait) { out.textContent = `Started (pid ${r.pid}).`; return; }
+    const head = r.timed_out ? "Timed out and was stopped." : `Exit code ${r.returncode}.`;
+    out.textContent = [head, r.stdout && `\n[output]\n${r.stdout}`, r.stderr && `\n[errors]\n${r.stderr}`]
+      .filter(Boolean).join("\n");
+  } catch (err) { out.textContent = err.message; }
 };
 
 // --- YouTube cookies: only whether there are any comes back, never the cookies -------------

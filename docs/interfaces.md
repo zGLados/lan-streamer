@@ -154,6 +154,10 @@ curl -b cookies -X POST "http://server:8080/api/admin/next?output=out1"
 | `GET /api/admin/local-page` | → `{"mode" (player, fullscreen, off), "modes", "edge", "kiosk_open"}` – what lan-streamer opens on its own PC when it starts (not after an update); 501 without a desktop (Linux service) |
 | `PATCH /api/admin/local-page` | `{"mode": "player" \| "fullscreen" \| "off"}` – fullscreen = only the stream (/tv) in Microsoft Edge's kiosk mode, with sound |
 | `POST /api/admin/local-page/open` | opens it now as set (a kiosk window opened before is closed first) → the state above plus `"message"` |
+| `GET /api/admin/pc` | → `{"platform", "can_power", "autorun", "commands_enabled"}` – the controls for the Windows PC lan-streamer runs on; 501 when not on Windows |
+| `PATCH /api/admin/pc` | `{"autorun"?: bool, "commands_enabled"?: bool}` – autorun starts lan-streamer (tray) when Windows logs in; commands_enabled turns the command box below on or off (off by default) → the state above |
+| `POST /api/admin/pc/power` | `{"action": "restart" \| "shutdown" \| "cancel", "delay_s"?: 0–600}` – restarts or shuts the PC down after the delay (`shutdown`), or aborts one still in its delay (`cancel`); 202 |
+| `POST /api/admin/pc/run` | `{"command", "wait"?: bool, "timeout_s"?: 1–600}` – runs a command on the PC (only when `commands_enabled`; 403 otherwise). wait: capture → `{"returncode", "stdout", "stderr", "timed_out"?}`; otherwise launch detached → `{"started", "pid"}`. Every command is logged |
 | `GET /api/admin/logs/<name>?lines=300` | plain text, the last lines (max. 5000) of `lan-streamer.log`, `output.log`, `output-<id>.log` or `mediamtx.log` |
 
 An output from `GET /api/admin/outputs`:

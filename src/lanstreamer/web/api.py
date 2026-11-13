@@ -51,6 +51,7 @@ import hashlib
 import json
 import re
 import secrets
+import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from importlib import resources
@@ -126,6 +127,7 @@ class Backend:
     viewer: Any = None  # the running outputs: viewer_forms(output), viewer_submit, items, remove_item
     updater: Any = None  # lanstreamer.updater.Updater
     local_page: Any = None  # lanstreamer.localpage.LocalPage (None: no desktop, e.g. the Linux service)
+    pc_control: Any = None  # lanstreamer.pccontrol.PcControl (None: not Windows)
     images_dir: Path | None = None  # where uploaded pictures go (settings with format "image")
     youtube_cookies: Path | None = None  # the uploaded YouTube cookies for yt-dlp (paths.youtube_cookies)
 
@@ -202,6 +204,22 @@ class UpdateSettings(BaseModel):
 
 class LocalPageSettings(BaseModel):
     mode: str
+
+
+class PcSettings(BaseModel):
+    autorun: bool | None = None
+    commands_enabled: bool | None = None
+
+
+class PcPower(BaseModel):
+    action: Literal["restart", "shutdown", "cancel"]
+    delay_s: int = Field(5, ge=0, le=600)
+
+
+class PcCommand(BaseModel):
+    command: str = Field(min_length=1, max_length=4000)
+    wait: bool = True
+    timeout_s: int = Field(30, ge=1, le=600)
 
 
 # --- app --------------------------------------------------------------------------------
@@ -647,6 +665,54 @@ def create_app(backend: Backend) -> FastAPI:
     def local_page_open() -> dict[str, Any]:
         page = local_page()
         return {**page.state(), "message": page.open()}
+
+    # --- the PC lan-streamer runs on (Windows) ------------------------------------------
+
+    def pc_control() -> Any:
+        if backend.pc_control is None:
+            raise HTTPException(501, "these controls work only on the Windows PC lan-streamer runs on")
+        return backend.pc_control
+
+    @app.get("/api/admin/pc", dependencies=[Depends(logged_in)])
+    def pc_state() -> dict[str, Any]:
+        return pc_control().state()
+
+    @app.patch("/api/admin/pc", dependencies=[Depends(logged_in)])
+    def pc_settings(body: PcSettings) -> dict[str, Any]:
+        pc = pc_control()
+        try:
+            if body.autorun is not None:
+                pc.set_autorun(body.autorun)
+            if body.commands_enabled is not None:
+                pc.set_commands_enabled(body.commands_enabled)
+        except (RuntimeError, OSError) as exc:
+            raise HTTPException(500, str(exc)) from exc
+        return pc.state()
+
+    @app.post("/api/admin/pc/power", status_code=202, dependencies=[Depends(logged_in)])
+    def pc_power(body: PcPower) -> dict[str, str]:
+        pc = pc_control()
+        try:
+            if body.action == "restart":
+                pc.restart(body.delay_s)
+            elif body.action == "shutdown":
+                pc.shutdown(body.delay_s)
+            else:
+                pc.cancel()
+        except RuntimeError as exc:
+            raise HTTPException(501, str(exc)) from exc
+        except subprocess.CalledProcessError as exc:
+            raise HTTPException(500, f"the PC could not {body.action}: {exc}") from exc
+        return {"action": body.action}
+
+    @app.post("/api/admin/pc/run", dependencies=[Depends(logged_in)])
+    def pc_run(body: PcCommand) -> dict[str, Any]:
+        try:
+            return pc_control().run(body.command, wait=body.wait, timeout_s=body.timeout_s)
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/admin/logs/{name}", response_class=PlainTextResponse,
              dependencies=[Depends(logged_in)])  # fmt: skip

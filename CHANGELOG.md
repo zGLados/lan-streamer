@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- "This PC" on the admin page (Windows, the PC lan-streamer runs on): start lan-streamer automatically when Windows logs in; restart or shut the PC down (with a Cancel while it counts down); and, off by default and behind an explicit switch, a box to run a command on the PC and see its output (or launch it and not wait). The command box runs with lan-streamer's rights from the admin page on the LAN, so it stays off until you turn it on, and every command that runs is written to the log.
+
 ### Fixed
 
 - The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).

@@ -37,6 +37,7 @@ from lanstreamer.core.store import NotFound, Store
 from lanstreamer.core.worker import OutputWorker, WorkerError
 from lanstreamer.localpage import LocalPage
 from lanstreamer.media import encoders
+from lanstreamer.pccontrol import PcControl
 from lanstreamer.plugins import choice, install
 from lanstreamer.plugins.registry import discover
 from lanstreamer.updater import Updater
@@ -346,6 +347,7 @@ class App:
         self._tasks: set[asyncio.Task] = set()
         self.updater: Updater | None = None  # made with the web backend
         self.local_page: LocalPage | None = None  # likewise
+        self.pc_control: PcControl | None = None  # likewise (Windows only)
 
     @property
     def first(self) -> Output:
@@ -463,13 +465,15 @@ class App:
         self.updater = Updater(BUILD, store, paths.data_dir(), self.quit.set, fps=self.args.fps)
         if LocalPage.available():
             self.local_page = LocalPage(store, f"http://localhost:{self.args.port}", paths.data_dir() / "kiosk-browser")
+        if PcControl.available():
+            self.pc_control = PcControl(store)
         return Backend(
             status=self.status_dict, skip=self.skip, store=store, auth=Auth(store),
             plugins=lambda: discover(paths.plugins_dir()), apply=self.apply_config,
             logs=paths.data_dir() / "logs", changes=self.changes,
             plugins_dir=paths.plugins_dir(), plugins_changed=self.plugin_changed,
             viewer=_Viewers(self), updater=self.updater, local_page=self.local_page,
-            images_dir=paths.data_dir() / "images",
+            pc_control=self.pc_control, images_dir=paths.data_dir() / "images",
             youtube_cookies=paths.youtube_cookies(),
         )  # fmt: skip
 
