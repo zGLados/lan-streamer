@@ -243,7 +243,9 @@ function formField(name, raw, root) {
   if (s.enum) input = make("select", {}, ...s.enum.map((v) => make("option", { value: v, textContent: v })));
   else if (s.type === "boolean") input = make("input", { type: "checkbox" });
   else if (s.type === "integer" || s.type === "number") input = make("input", { type: "number" });
-  else input = make("input", { type: /link|url/i.test(name) ? "url" : "text" });
+  // links: not type=url, it refuses "youtu.be/…" without https:// before the input sees it
+  else if (/link|url/i.test(name)) input = make("input", { type: "text", inputMode: "url", autocapitalize: "off", spellcheck: false });
+  else input = make("input", { type: "text" });
   input.name = name;
   if (s.default !== undefined && s.type !== "boolean") input.value = s.default;
   if (s.maxLength) input.maxLength = s.maxLength;
