@@ -158,7 +158,7 @@ class OutputRuntime:
                 log.info("Input changed, restarting: %s", icfg.name)
                 await self._retire(inp)
                 inp = InputRuntime(icfg, self.plugins.get(icfg.plugin))
-                self._spawn(self._start_plugin(inp))
+                self._spawn(self._start_plugin(inp, replay=True))
             else:
                 inp.cfg = icfg
             updated[icfg.id] = inp  # keeps the configured order (rotation, ties)
@@ -180,7 +180,7 @@ class OutputRuntime:
             await self._retire(inp)
             fresh = InputRuntime(inp.cfg, plugins.get(plugin_id))
             self.inputs[input_id] = fresh
-            self._spawn(self._start_plugin(fresh))
+            self._spawn(self._start_plugin(fresh, replay=True))
         self.on_change()
 
     async def _retire(self, inp: InputRuntime) -> None:
@@ -189,7 +189,9 @@ class OutputRuntime:
         if inp.proc:
             await inp.proc.stop()
 
-    async def _start_plugin(self, inp: InputRuntime) -> None:
+    async def _start_plugin(self, inp: InputRuntime, replay: bool = False) -> None:
+        """replay: the input restarted with new settings; if it is on air, it plays its
+        source again (otherwise the output kept showing the old one, e.g. the old picture)."""
         if inp.plugin_dir is None:
             inp.error = f"plugin {inp.cfg.plugin!r} is not installed"
             log.error("Input %s: %s", inp.cfg.name, inp.error)
@@ -201,6 +203,8 @@ class OutputRuntime:
         try:
             await inp.proc.start()
             inp.error = ""
+            if replay and self.on_air is not None and self.on_air.id == inp.cfg.id:
+                inp.wants_next = True
             inp.viewer = await inp.proc.viewer_schema()
             if inp.viewer is not None:
                 self.viewer_version += 1
