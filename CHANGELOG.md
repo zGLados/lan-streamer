@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- An input on air that is set to "Force" kept showing its old source after its settings were saved (for example the old picture after uploading a new one): it restarted with the new settings, but nothing played them. Now an input on air plays again with its new settings right after the restart.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.
@@ -13,7 +19,6 @@ Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autor
 
 ### Fixed
 
-- An input on air that is set to "Force" kept showing its old source after its settings were saved (for example the old picture after uploading a new one): it restarted with the new settings, but nothing played them. Now an input on air plays again with its new settings right after the restart.
 - The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).
 
 ## [0.1.12] – 2026-11-13
