@@ -131,6 +131,29 @@ def test_playlist_plays_youtube_links_and_skips_one_that_cannot_be_played(tmp_pa
     assert titles == ["a.mp4", "Video abc", "Video def", "a.mp4"]
 
 
+def test_playlist_knows_youtube_links_in_all_their_forms(tmp_path, monkeypatch):
+    from lanstreamer.plugins.builtin.playlist.playlist import youtube_url
+
+    for link in ("https://www.youtube.com/watch?v=a", "http://m.youtube.com/watch?v=a", "https://music.youtube.com/watch?v=a",
+                 "https://youtu.be/a?si=x", "HTTPS://WWW.YOUTUBE.COM/shorts/a", "https://www.youtube-nocookie.com/embed/a",
+                 "https://gaming.youtube.com/watch?v=a"):  # fmt: skip
+        assert youtube_url(link) == link
+    assert youtube_url(" youtube.com/watch?v=a ") == "https://youtube.com/watch?v=a"  # typed without https://
+    assert youtube_url("www.youtube.com/shorts/a") == "https://www.youtube.com/shorts/a"
+    assert youtube_url("youtu.be/a") == "https://youtu.be/a"
+    for other in ("https://notyoutube.com/x", "https://youtube.com.example.org/x", "rtsp://youtube.com/x",
+                  "https://x/live.m3u8", r"C:\Videos\youtube.com.mp4", "D:/youtube.com/a.mp4", "folder", "https://[::1/x"):  # fmt: skip
+        assert youtube_url(other) is None
+
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+
+    async def steps(proc, events):
+        return await proc.get_source()
+
+    source = asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, {"items": ["youtu.be/abc"]}, steps))
+    assert source["uri"] == "https://fake.invalid/abc/video"
+
+
 def test_playlist_without_youtube_links_does_not_load_yt_dlp(tmp_path):
     clip = tmp_path / "a.mp4"
     clip.write_bytes(b"")
@@ -198,6 +221,8 @@ def test_viewers_add_youtube_videos_that_play_after_the_current_item(tmp_path, m
             await proc.viewer_submit({"link": "https://youtu.be/two"}, "dev-a", "10.0.0.2")
         with pytest.raises(PluginRejected, match="already in the queue"):
             await proc.viewer_submit({"link": "https://www.youtube.com/shorts/one"}, "dev-b", "10.0.0.3")
+        with pytest.raises(PluginRejected, match="already in the queue"):  # typed without https://
+            await proc.viewer_submit({"link": "www.youtube.com/shorts/one"}, "dev-b", "10.0.0.3")
         with pytest.raises(PluginRejected, match="must be a YouTube video link"):
             await proc.viewer_submit({"link": "https://www.tiktok.com/@a/video/1"}, "dev-b", "10.0.0.3")
         await proc.viewer_submit({"link": "https://youtu.be/two"}, "dev-b", "10.0.0.3")

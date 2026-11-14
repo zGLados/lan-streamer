@@ -13,6 +13,7 @@ Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autor
 
 ### Fixed
 
+- Playlist: some YouTube links were not taken for YouTube videos – links typed without `https://` (`youtube.com/watch?v=…`, `youtu.be/…`) and other YouTube addresses such as `youtube-nocookie.com` or `gaming.youtube.com`. In the list they failed to play, and "Add a video" refused them. Now all of them are recognized. When YouTube does not play a video a viewer adds, the message no longer says "no YouTube video".
 - The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).
 
 ## [0.1.12] – 2026-11-13
