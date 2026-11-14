@@ -39,9 +39,11 @@ from lanstreamer_sdk import (
 
 
 class Settings(BaseModel):
-    max_length_s: int = Field(180, title="Max. video length (s)", ge=5, le=3600, description="Longer videos are refused")
-    per_device: int = Field(3, title="Videos per device", ge=1, le=50, description="Videos one device may have waiting at once")
-    max_queue: int = Field(50, title="Max. queue length", ge=1, le=500, description="Videos waiting at most")
+    max_length_s: int = Field(180, title="Max. video length (s)", ge=0, le=3600,
+                              description="Longer videos are refused (0: no limit)")  # fmt: skip
+    per_device: int = Field(3, title="Videos per device", ge=0, le=50,
+                            description="Videos one device may have waiting at once (0: no limit)")  # fmt: skip
+    max_queue: int = Field(50, title="Max. queue length", ge=0, le=500, description="Videos waiting at most (0: no limit)")
     auto_update: bool = Field(True, title="Update yt-dlp", description="Update yt-dlp on start (needs internet)")
     card_s: float = Field(2.0, title="\"Up next\" card (s)", ge=0, le=10, description="How long the \"Up next\" card shows "
                           "before the first video (0: no card)")  # fmt: skip
@@ -116,10 +118,10 @@ class Plugin(InputPlugin[Settings]):
 
     async def on_viewer_submit(self, form: SubmitForm, viewer: Viewer) -> str:
         who = viewer.device or viewer.ip
-        if sum(1 for e in self.queue if e["who"] == who) >= self.settings.per_device:
+        if self.settings.per_device and sum(1 for e in self.queue if e["who"] == who) >= self.settings.per_device:
             raise Rejected(f"You already have {self.settings.per_device} videos waiting – "
                            "wait until one has played.")  # fmt: skip
-        if len(self.queue) >= self.settings.max_queue:
+        if self.settings.max_queue and len(self.queue) >= self.settings.max_queue:
             raise Rejected("The queue is full – try again later.")
         if any(e["link"] == form.link for e in self.queue):
             raise Rejected("This video is already in the queue.")
@@ -129,7 +131,7 @@ class Plugin(InputPlugin[Settings]):
             self.ctx.log.info("probe failed for %s: %s", form.link, exc)
             raise Rejected("This link cannot be played (not a video yt-dlp can read).") from exc
         duration = info.get("duration")
-        if duration and duration > self.settings.max_length_s:
+        if duration and self.settings.max_length_s and duration > self.settings.max_length_s:
             raise Rejected(f"Too long: {int(duration)} s (at most {self.settings.max_length_s} s).")
         entry = {
             "id": secrets.token_hex(4), "link": form.link, "name": form.name, "who": who,

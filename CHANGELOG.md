@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - "This PC" (Windows): program buttons. Under "Run a command", you can save named buttons, each with a command (e.g. a button "Start TS3 server" that runs `C:\…\start.bat`). The buttons show in the "This PC" section and launch their command (left running) on a click. Defining them needs "Allow running commands" on, as it is the same as the command box; once saved, the buttons keep working and can be clicked even with the command box switched off again.
 
+### Changed
+
+- Playlist ("Viewers can add videos") and Short-video submissions: the limits max. length, videos per device and queue length can be set to 0 for no limit.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.

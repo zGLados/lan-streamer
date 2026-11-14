@@ -222,6 +222,18 @@ def test_viewers_add_youtube_videos_that_play_after_the_current_item(tmp_path, m
     asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, steps))
 
 
+def test_viewer_limits_of_zero_mean_no_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
+    settings = {"items": [], "viewers_add": True, "viewer_max_length_s": 0, "viewer_per_device": 0, "viewer_max_queue": 0}
+
+    async def steps(proc, events):
+        for n in range(3):
+            await proc.viewer_submit({"link": f"https://youtu.be/v{n}"}, "dev-a", "10.0.0.2")
+        return len(await proc.viewer_items())
+
+    assert asyncio.run(run_plugin(BUILTIN / "playlist", tmp_path, settings, steps)) == 3
+
+
 def test_the_viewer_queue_survives_a_restart_and_skips_videos_that_cannot_play(tmp_path, monkeypatch):
     monkeypatch.setenv("LANSTREAMER_FAKE_DOWNLOADS", "1")
     settings = {"items": [], "viewers_add": True, "viewer_per_device": 5}

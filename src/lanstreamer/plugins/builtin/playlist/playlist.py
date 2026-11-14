@@ -51,12 +51,12 @@ class Settings(BaseModel):
                               "(needs internet)")  # fmt: skip
     viewers_add: bool = Field(False, title="Viewers can add videos", description="Viewers add YouTube videos on the "
                               "player page; they play after the current item")  # fmt: skip
-    viewer_max_length_s: int = Field(900, title="Viewer videos: max. length (s)", ge=10, le=14400,
-                                     description="Longer videos are refused")  # fmt: skip
-    viewer_per_device: int = Field(1, title="Viewer videos per device", ge=1, le=20,
-                                   description="Videos one device may have waiting at once")  # fmt: skip
-    viewer_max_queue: int = Field(20, title="Viewer videos: max. queue length", ge=1, le=200,
-                                  description="Videos waiting at most")  # fmt: skip
+    viewer_max_length_s: int = Field(900, title="Viewer videos: max. length (s)", ge=0, le=14400,
+                                     description="Longer videos are refused (0: no limit)")  # fmt: skip
+    viewer_per_device: int = Field(1, title="Viewer videos per device", ge=0, le=20,
+                                   description="Videos one device may have waiting at once (0: no limit)")  # fmt: skip
+    viewer_max_queue: int = Field(20, title="Viewer videos: max. queue length", ge=0, le=200,
+                                  description="Videos waiting at most (0: no limit)")  # fmt: skip
 
 
 class AddForm(BaseModel):
@@ -142,10 +142,10 @@ class Plugin(InputPlugin[Settings]):
     async def on_viewer_submit(self, form: AddForm, viewer: Viewer) -> str:
         who = viewer.device or viewer.ip
         per_device = self.settings.viewer_per_device
-        if sum(1 for e in self.queue if e["who"] == who) >= per_device:
+        if per_device and sum(1 for e in self.queue if e["who"] == who) >= per_device:
             raise Rejected(f"You already have {per_device} video{'s' if per_device > 1 else ''} waiting – "
                            "wait until it has played.")  # fmt: skip
-        if len(self.queue) >= self.settings.viewer_max_queue:
+        if self.settings.viewer_max_queue and len(self.queue) >= self.settings.viewer_max_queue:
             raise Rejected("The queue is full – try again later.")
         if any(e["link"] == form.link for e in self.queue):
             raise Rejected("This video is already in the queue.")
@@ -159,7 +159,7 @@ class Plugin(InputPlugin[Settings]):
         if info.get("is_live") or info.get("live_status") == "is_upcoming":
             raise Rejected("Live streams cannot be added.")
         duration = info.get("duration")
-        if duration and duration > self.settings.viewer_max_length_s:
+        if duration and self.settings.viewer_max_length_s and duration > self.settings.viewer_max_length_s:
             raise Rejected(f"Too long: {span(duration)} (at most {span(self.settings.viewer_max_length_s)}).")
         self.queue.append({
             "id": secrets.token_hex(4), "link": form.link, "name": form.name, "who": who,
