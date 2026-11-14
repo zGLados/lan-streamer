@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - Picture and sound drifted apart during YouTube videos (and other sources that send them separately, such as viewer submissions): when the sound or the picture download ran dry for a moment, that one paused until its buffer was full again and then played on behind – for the rest of the video (measured: an 8 s hiccup of the sound left it 3.6 s late). Now lan-streamer checks the two all the time and holds the one that is ahead back until both match again (within 20 ms): after a hiccup the picture stands still or the sound pauses a moment longer, but they stay in step. Large gaps close in steps of 2 s.
+- Going back from a beta to the releases: with a beta installed and the update channel set back to Stable, nothing was offered until the next release came out, because the latest release has a lower version than the beta. Now the admin page offers "Back to the release" right away (it installs the latest release; inputs and settings stay).
+- An update or a step back left files of the other version in the program folder (for example a built-in input that only the beta has still showed up after going back). The installer now replaces lan-streamer's own files completely, and the update from the admin page (install for all users) removes such leftovers after installing – also when going back to a release from before this fix.
 
 ## [0.1.13] – 2026-11-13
 

@@ -22,7 +22,9 @@ looks at the pre-release "beta", which the CI replaces after every green full
 test run (Windows installer only), and offers whichever of the two is newer –
 so a beta install moves back to the releases once a newer release is out. The
 installer registers a second task, "lan-streamer Update (beta)", that installs
-the beta: both tasks install only what the official releases offer.
+the beta: both tasks install only what the official releases offer. A beta
+installed and the channel back on "stable": the latest release is offered right
+away, although its version is lower ("back to the release", see is_back).
 
 LANSTREAMER_UPDATE_FEED (and LANSTREAMER_UPDATE_FEED_BETA) replace the GitHub
 addresses (tests, CI): URLs that answer like GitHub's release API.
@@ -82,6 +84,20 @@ def is_newer(candidate: str, current: str) -> bool:
     return version_key(candidate) > version_key(current)
 
 
+def is_prerelease(version: str) -> bool:
+    """0.1.14-test.101 (a beta or test build), not 0.1.14."""
+    key = version_key(version)
+    return len(key) > 3 and key[3] == 0
+
+
+def is_back(candidate: str, current: str) -> bool:
+    """Channel "stable" on a beta: the latest release is the way back, even when it is
+    older (beta 0.1.14-test.101 → release 0.1.13); otherwise the beta stayed installed
+    until the next release came out."""
+    return (is_prerelease(current) and not is_prerelease(candidate)
+            and version_key(candidate) != (-1,) and candidate != current)
+
+
 def release_version(release: dict[str, Any]) -> str:
     """The version of a GitHub release: its tag, or for the beta (tag "beta") the
     version in its installer's name (lan-streamer-setup-0.1.10-test.85.exe). "" if none."""
@@ -107,6 +123,7 @@ class UpdateState:
     error: str = ""
     installable: bool = False  # this install can update itself (Windows installer)
     beta: bool = False  # the offered version is the beta (pre-release), not a release
+    back: bool = False  # the offered release is older than the installed beta (is_back)
     how: str = ""  # what the admin page says instead of the button
 
 
@@ -285,7 +302,9 @@ class Updater:
             self.status.latest = release_version(release)
             self.status.beta = beta
             self.status.notes_url = str(release.get("html_url", ""))
-            self.status.available = is_newer(self.status.latest, self.status.current)
+            self.status.back = (self.channel == "stable" and not is_newer(self.status.latest, self.status.current)
+                                and is_back(self.status.latest, self.status.current))  # fmt: skip
+            self.status.available = is_newer(self.status.latest, self.status.current) or self.status.back
             self.asset = next((a for a in release.get("assets", []) if INSTALLER.match(str(a.get("name", "")))),
                               None)  # fmt: skip
             self.status.installable = self.root is not None and self.asset is not None

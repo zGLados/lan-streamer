@@ -27,6 +27,30 @@ function Write-Result([bool]$ok, [string]$message, [string]$version) {
         ConvertTo-Json | Set-Content -Path $result -Encoding UTF8
 }
 
+# After a successful install: files in lan-streamer's own package folders that the
+# installer did not write (its log lists every file) are from another version - back
+# from a beta to a release whose installer does not clear those folders yet (before
+# 0.1.14), the beta's new built-in input still showed up. Only those folders, and
+# nothing when the log has no file list.
+function Remove-Leftovers([string]$installLog) {
+    $written = @{}
+    foreach ($line in Get-Content -LiteralPath $installLog) {
+        if ($line -match 'Dest filename: (.+)$') { $written[$Matches[1].Trim().ToLower()] = $true }
+    }
+    if ($written.Count -eq 0) { return }
+    $site = Join-Path $PSScriptRoot 'python\Lib\site-packages'
+    $ours = Get-ChildItem -LiteralPath $site -Directory |
+        Where-Object { $_.Name -match '^(lanstreamer|lanstreamer_sdk|lanstreamer-[\w.\-]+\.dist-info)$' }
+    foreach ($dir in $ours) {
+        Get-ChildItem -LiteralPath $dir.FullName -Recurse -File |
+            Where-Object { -not $written.ContainsKey($_.FullName.ToLower()) } | Remove-Item -Force
+        # emptied folders, deepest first (a whole old .dist-info, a built-in plugin)
+        Get-ChildItem -LiteralPath $dir.FullName -Recurse -Directory | Sort-Object { $_.FullName.Length } -Descending |
+            Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force) } | Remove-Item -Force
+        if (-not (Get-ChildItem -LiteralPath $dir.FullName -Force)) { Remove-Item -LiteralPath $dir.FullName -Force }
+    }
+}
+
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     if ($Channel -eq 'beta') {
@@ -58,6 +82,7 @@ try {
     $setup = Start-Process -FilePath $file -Wait -PassThru -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/WAITAPP=1', "/LOG=`"$log`"")
     if ($setup.ExitCode -ne 0) { throw "the installer ended with code $($setup.ExitCode) (log: $log)" }
+    try { Remove-Leftovers $log } catch { }  # installed already: a leftover is no failure
     Write-Result $true "installed $version" "$version"
 } catch {
     Write-Result $false "$($_.Exception.Message)" ''

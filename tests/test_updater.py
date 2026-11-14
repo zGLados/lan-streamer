@@ -254,3 +254,28 @@ def test_channel_setting(tmp_path):
         u.set_channel("nightly")
     u.store.set_setting(up.CHANNEL, "something old")  # never trusted blindly
     assert u.channel == "stable"
+
+
+def test_stable_on_a_beta_offers_the_way_back_to_the_release(tmp_path, monkeypatch):
+    # beta 0.2.1-test.7 installed, channel back to stable: the older release 0.2.0 is offered
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    u, launched, quits = make(tmp_path, release(), current="0.2.1-test.7", task=True, beta=beta_release())
+    state = asyncio.run(u.check())
+    assert (state["latest"], state["available"], state["back"], state["beta"]) == ("0.2.0", True, True, False)
+    asyncio.run(u.install())  # by the release task, not the beta one
+    assert not u.status.error and quits == [1] and launched[0][2] == up.TASK
+
+
+def test_the_way_back_only_from_a_beta_on_the_stable_channel(tmp_path):
+    cases = [
+        ("0.2.1-test.7", "beta", "0.2.0", False),  # the beta channel keeps the beta
+        ("0.2.1", "stable", "0.2.0", False),  # a release is never replaced by an older one
+        ("0.2.0", "stable", "0.2.0", False),
+        ("0.2.0-test.3", "stable", "0.2.0", False),  # the release is newer: a normal update
+    ]
+    for current, channel, latest, back in cases:
+        u, _, _ = make(tmp_path, release(tag=latest), current=current, beta=beta_release(current))
+        u.set_channel(channel)
+        state = asyncio.run(u.check())
+        assert state["back"] is back, (current, channel)
+    assert up.is_back("0.1.13", "0.1.14-test.101") and not up.is_back("nightly", "0.1.14-test.101")
