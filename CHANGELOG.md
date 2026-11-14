@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Playlist ("Viewers can add videos") and Short-video submissions: the limits max. length, videos per device and queue length can be set to 0 for no limit.
 
+### Fixed
+
+- Picture and sound drifted apart during YouTube videos (and other sources that send them separately, such as viewer submissions): when the sound or the picture download ran dry for a moment, that one paused until its buffer was full again and then played on behind – for the rest of the video (measured: an 8 s hiccup of the sound left it 3.6 s late). Now lan-streamer checks the two all the time and holds the one that is ahead back until both match again (within 20 ms): after a hiccup the picture stands still or the sound pauses a moment longer, but they stay in step. Large gaps close in steps of 2 s.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.

@@ -95,7 +95,7 @@ A plugin resolves *what* to play; the output worker does the decoding. The plugi
 
 | Source | Example | Played via |
 | --- | --- | --- |
-| `UriSource(url, audio_uri="")` | Direct HLS/MP4 URL from yt-dlp; YouTube HD with picture and sound as two URLs | `fallbacksrc` (two of them – video only / audio only – when `audio_uri` is set; they hold their output back until both have a decoder and start together, so picture and sound stay in step) |
+| `UriSource(url, audio_uri="")` | Direct HLS/MP4 URL from yt-dlp; YouTube HD with picture and sound as two URLs | `fallbacksrc` (two of them – video only / audio only – when `audio_uri` is set; they hold their output back until both have a decoder and start together; while they play, the worker compares their timing and holds the one that runs ahead back after a hiccup, so picture and sound stay in step) |
 | `PipeSource(argv)` | `streamlink --stdout twitch.tv/x best` (handles token refresh and ads) | Process stdout → `fdsrc` |
 | `FileSource(path)` | Fallback playlist, downloaded TikTok clip | `filesrc` |
 | `UriSource("rtspt://127.0.0.1:8554/ingest/<key>")` | OBS stream arriving at MediaMTX (built-in `ingest`) | RTSP over TCP from MediaMTX |
