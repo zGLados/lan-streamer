@@ -38,7 +38,7 @@ from lanstreamer_sdk import (
 
 VIDEO = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".ts", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".flac"}
 IMAGE = {".png", ".jpg", ".jpeg"}
-YOUTUBE = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+YOUTUBE = ("youtube.com", "youtu.be", "youtube-nocookie.com")  # with any subdomain (www., m., music., ...)
 TRIES = 5  # YouTube links tried in a row before get_source gives up (removed, private, ...)
 
 
@@ -66,10 +66,10 @@ class AddForm(BaseModel):
     @field_validator("link")
     @classmethod
     def youtube_link(cls, value: str) -> str:
-        value = value.strip()
-        if not is_youtube(value):
+        link = youtube_url(value)
+        if link is None:
             raise ValueError("must be a YouTube video link (https://www.youtube.com/… or https://youtu.be/…)")
-        return value
+        return link
 
     @field_validator("name")
     @classmethod
@@ -102,9 +102,24 @@ def is_image(entry: str) -> bool:
     return "://" not in entry and Path(entry).suffix.lower() in IMAGE
 
 
+def youtube_url(entry: str) -> str | None:
+    """The link as https://… if it is a YouTube link, else None. Also takes links
+    typed without https:// ("youtube.com/watch?v=…", "youtu.be/…")."""
+    entry = entry.strip()
+    if "://" not in entry:
+        entry = "https://" + entry.removeprefix("//")
+    try:
+        url = urlparse(entry)
+        host = (url.hostname or "").lower().rstrip(".")
+    except ValueError:  # e.g. a broken IPv6 address
+        return None
+    if url.scheme.lower() not in ("http", "https") or not any(host == d or host.endswith("." + d) for d in YOUTUBE):
+        return None
+    return entry
+
+
 def is_youtube(entry: str) -> bool:
-    url = urlparse(entry.strip())
-    return url.scheme in ("http", "https") and (url.hostname or "").lower() in YOUTUBE
+    return youtube_url(entry) is not None
 
 
 class Plugin(InputPlugin[Settings]):
@@ -153,7 +168,7 @@ class Plugin(InputPlugin[Settings]):
             info = await self.ytdlp.probe(form.link)
         except Exception as exc:
             self.ctx.log.info("probe failed for %s: %s", form.link, exc)
-            raise Rejected("This link cannot be played (no YouTube video).") from exc
+            raise Rejected("YouTube does not play this video here (removed, private, age-restricted or blocked?).") from exc
         if info.get("_type") in ("playlist", "multi_video"):
             raise Rejected("Only single videos, no playlists or channels.")
         if info.get("is_live") or info.get("live_status") == "is_upcoming":
@@ -226,7 +241,7 @@ class Plugin(InputPlugin[Settings]):
             self.item_ended = False
             if is_youtube(entry):
                 try:
-                    stream = await self.ytdlp.stream(entry.strip())
+                    stream = await self.ytdlp.stream(youtube_url(entry))
                 except Exception as exc:  # noqa: BLE001 – skip videos that cannot be played
                     self.ctx.log.warning("skipping %s: %s", entry, (str(exc).splitlines() or [repr(exc)])[0][:200])
                     self._skip()

@@ -233,7 +233,7 @@ class Plugin(InputPlugin[Settings]):
         self.ctx.changed()
 ```
 
-- Fields: `title` is the label, `description` the hint inside the empty field, `max_length` limits the input; text, numbers, check boxes (`bool`) and drop-downs (`Literal`) work. A field whose name contains "name" is filled with the name the viewer used last; one whose name contains "url" or "link" is a URL field.
+- Fields: `title` is the label, `description` the hint inside the empty field, `max_length` limits the input; text, numbers, check boxes (`bool`) and drop-downs (`Literal`) work. A field whose name contains "name" is filled with the name the viewer used last; one whose name contains "url" or "link" is a link field (URL keyboard on phones; links without `https://` reach the plugin, it decides).
 - The form is validated against the model before `on_viewer_submit()` is called; validation errors go back to the viewer as they are.
 - Return a short message for the viewer, or `raise Rejected("…")` – its text is shown as it is, so write it for viewers.
 - `viewer` identifies the sender: `viewer.device` is a long-lived id of the browser (cookie), `viewer.ip` the LAN address. Use it for limits per device. It is not an authentication – anyone in the LAN can open the page.
