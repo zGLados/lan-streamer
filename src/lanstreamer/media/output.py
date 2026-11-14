@@ -54,6 +54,15 @@ FADE_S = 1.0
 OVERLAY_FADE_S = 0.3
 OVERLAY_SHADING = 110  # textoverlay's shaded background at full opacity
 START_TIMEOUT_S = 15.0
+# Picture and sound from separate URIs further apart than this are put back in step
+# (_keep_in_step). A step holds the stream that is ahead back by at most SYNC_STEP_S and
+# lets it play as long before the next one: fallbacksrc switches to its fallback after
+# 5 s without data and maps the stream anew; held 8 s at a stretch, the two swung back
+# and forth (measured 2026-11-14). A 15 s stall left them 11 s apart; a gap above
+# SYNC_MAX_S is no hiccup (a source started over).
+SYNC_TOLERANCE_S = 0.02
+SYNC_STEP_S = 2.0
+SYNC_MAX_S = 60.0
 MUX_HOLD_S = 1.0  # see _hold_mux_output
 AUDIO_CAPS = "audio/x-raw,rate=48000,channels=2"
 # opusenc takes only 16-bit integers: a decoded or resampled source often peaks above
@@ -377,7 +386,7 @@ class Output:
                 parts = [(source["uri"], {"video": heads["video"]}), (source["audio_uri"], {"audio": heads["audio"]})]
             else:
                 parts = [(source["uri"], heads)]
-            sources = []
+            sources, heads_of = [], []
             for uri, wanted in parts:
                 what = "" if len(wanted) == 2 else "picture" if "video" in wanted else "sound"
                 src = Gst.ElementFactory.make("fallbacksrc", f"source {what}".strip())
@@ -385,12 +394,13 @@ class Output:
                 src.set_property("enable-video", "video" in wanted)
                 src.set_property("enable-audio", "audio" in wanted)
                 sources.append(src)
+                heads_of.append(next(iter(wanted.values())))
                 bin_.add(src)
                 src.connect("pad-added", lambda _src, pad, wanted=wanted: _link_by_kind(pad, wanted))
                 for pad in src.srcpads:
                     _link_by_kind(pad, wanted)
             if len(sources) > 1:
-                self._start_together(sources)
+                self._start_together(sources, heads_of)
         else:
             raise ValueError(f"unknown source kind {source['kind']!r}")
 
@@ -399,7 +409,7 @@ class Output:
             bin_.add_pad(Gst.GhostPad.new(name, target))
         return bin_
 
-    def _start_together(self, sources: list) -> None:
+    def _start_together(self, sources: list, heads: list) -> None:
         """Picture and sound from separate URIs (YouTube) start at the same moment.
 
         Each fallbacksrc maps its stream to the output's time when its first data passes,
@@ -408,12 +418,14 @@ class Output:
         stream over a slower line put the sound ahead (measured 2026-11-12). So every one
         holds its output back (manual-unblock; live streams ignore it): once each decoder
         has data and each buffer is full they are let go together. A source not ready
-        after a while does not hold the others: they play anyway."""
+        after a while does not hold the others: they play anyway. While they play,
+        _keep_in_step keeps them together."""
         Gst, GLib = self.Gst, self.GLib
         decoders: dict = {}  # fallbacksrc -> its uridecodebin3, once it has an output
         arrived: set = set()  # decoders whose data has come
         state = {"ready": False, "free": False}
         began = time.monotonic()
+        decoded_by = self._keep_in_step(sources, heads, state)
 
         def unblock(reason=None) -> bool:
             if state["free"]:
@@ -479,10 +491,96 @@ class Output:
 
             def decoded(src, decoder, pad) -> None:  # streaming thread: watch it at once
                 pad.add_probe(Gst.PadProbeType.BUFFER, first, decoder)
+                decoded_by(src, pad)
                 GLib.idle_add(has_decoder, src, decoder)
 
             src.connect("deep-element-added", added)
         GLib.timeout_add(int(START_TIMEOUT_S * 500), ready, "timeout waiting for decoders")
+
+    def _keep_in_step(self, sources: list, heads: list, state: dict):
+        """Puts picture and sound from separate URIs back in step whenever they drift apart.
+
+        When a fallbacksrc's buffer runs dry it holds its stream until the buffer is full
+        again and then maps it to the output's time anew – later by the time it waited.
+        The other fallbacksrc played on, so after every such hiccup one of them stayed
+        behind for the rest of the video (sound stalled 8 s: 3.6 s late, measured
+        2026-11-14). Where each stream enters this input (heads: one pad per source), its
+        running time minus its stream time is the same for both while they are in step.
+        The one ahead is held back by the difference: a pad offset on its decoder's output,
+        where fallbacksrc shifts its stream too, in front of its clock sync (held behind it,
+        fallbacksrc took the picture's frames for late and dropped them: 0.4 frames/s).
+        It pauses a moment – the picture stands still or the sound has a gap – then both
+        go on together. Only while both sources play their own data: a source that is
+        down sends black or silence with a time of its own. Returns the function that
+        _start_together calls with each decoder output (a restarted source has a new one)."""
+        Gst, GLib = self.Gst, self.GLib
+        TIME, NONE = Gst.Format.TIME, Gst.CLOCK_TIME_NONE
+        shift: dict = {}  # head pad -> its running time minus stream time (ns)
+        decoder_pads: dict = {}  # fallbacksrc -> its decoder's current output pad
+        names = [src.get_name().removeprefix("source ") for src in sources]
+
+        def watch(pad, info) -> object:  # streaming thread
+            buffer, event = info.get_buffer(), pad.get_sticky_event(Gst.EventType.SEGMENT, 0)
+            if buffer is not None and buffer.pts != NONE and event is not None:
+                segment = event.parse_segment()
+                running, stream = segment.to_running_time(TIME, buffer.pts), segment.to_stream_time(TIME, buffer.pts)
+                if segment.format == TIME and running != NONE and stream != NONE:
+                    shift[pad] = running + pad.get_offset() - stream
+            return Gst.PadProbeReturn.OK
+
+        def running(src) -> bool:
+            try:
+                return src.get_property("status").value_nick == "running"
+            except Exception:  # noqa: BLE001 – unknown: do not act on it
+                return False
+
+        def check() -> bool:
+            in_pipeline = sources[0].get_parent() is not None and sources[0].get_parent().get_parent() is not None
+            if not in_pipeline:  # not added yet (play), or taken out (_drop): then stop
+                return not state.get("placed")
+            state["placed"] = True
+            now = time.monotonic()
+            if not all(running(src) for src in sources):
+                shift.clear()  # what came meanwhile may be the fallback's black or silence
+                state["since"] = None
+                return True
+            if state.get("since") is None:
+                state["since"] = now
+            if not state["free"] or not all(head in shift for head in heads) or now < state.get("next", 0):
+                return True
+            a, b = shift[heads[0]], shift[heads[1]]
+            gap = abs(a - b) / Gst.SECOND
+            # act only on a gap seen twice in a row, both sources playing for a second:
+            # right after a source comes back, its first buffers can still be the fallback's
+            last, state["last"] = state.get("last"), b - a
+            if gap <= SYNC_TOLERANCE_S or last is None or abs(last - (b - a)) > SYNC_TOLERANCE_S * Gst.SECOND:
+                return True
+            if now - state["since"] < 1.0:
+                return True
+            ahead, behind = (0, 1) if a < b else (1, 0)
+            if gap > SYNC_MAX_S:
+                if not state.get("too_far"):
+                    log(f"picture and sound {gap:.1f} s apart: not put back in step (a source started over?)")
+                    state["too_far"] = True
+                return True
+            state["too_far"] = False
+            out = decoder_pads.get(sources[ahead])
+            if out is None:
+                return True
+            hold = min(gap, SYNC_STEP_S)
+            out.set_offset(out.get_offset() + int(hold * Gst.SECOND))
+            state["next"], state["last"] = now + hold + SYNC_STEP_S, None
+            del shift[heads[ahead]]  # measured anew with its next buffer
+            log(f"picture and sound {gap:.2f} s apart ({names[behind]} behind): {names[ahead]} held back {hold:.2f} s")
+            return True
+
+        def decoded_by(src, pad) -> None:  # streaming thread
+            decoder_pads[src] = pad
+
+        for head in heads:
+            head.add_probe(Gst.PadProbeType.BUFFER, watch)
+        GLib.timeout_add(250, check)
+        return decoded_by
 
     # --- switching ------------------------------------------------------------
 
