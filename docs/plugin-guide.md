@@ -159,7 +159,7 @@ Class attributes:
 | `Settings` | `NoSettings` | the settings model (Pydantic) |
 | `poll_interval_s` | `5.0` | how often the default `watch_active()` calls `is_active()` |
 | `ViewerForm` | `None` | a Pydantic model for a form on the player page |
-| `viewer_title` | `""` | heading of the form and its list |
+| `viewer_title` | `""` | heading of the form and its list, after the input's name ("Party – Add a video"; empty: the name alone) |
 
 `self.settings` is the validated settings object, `self.ctx` the [context](#the-context-logging-storage-metadata). Keep `__init__` as it is – set up in `start()`.
 

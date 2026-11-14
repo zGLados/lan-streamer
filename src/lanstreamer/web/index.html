@@ -300,7 +300,9 @@ function renderForm(f) {
       msg.textContent = err.message;
     } finally { submit.disabled = false; }
   };
-  const section = make("section", {}, make("h2", { textContent: f.title }), form,
+  // the input's name too: several playlists each have their own "Add a video"
+  const heading = f.title === f.name ? f.name : `${f.name} – ${f.title}`;
+  const section = make("section", {}, make("h2", { textContent: heading }), form,
     make("h2", { textContent: "Up next", style: "margin-top:14px" }), make("ol", { id: `items-${f.input_id}` }));
   section.dataset.input = f.input_id;
   return section;
