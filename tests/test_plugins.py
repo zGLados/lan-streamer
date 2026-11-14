@@ -339,6 +339,23 @@ def test_standby_shows_the_built_in_slate_or_a_given_picture(tmp_path):
         asyncio.run(proc.start())
 
 
+def test_bouncing_logo_bounces_the_icon_or_a_given_picture(tmp_path):
+    async def steps(proc, events):
+        return await proc.get_source()
+
+    source = asyncio.run(run_plugin(BUILTIN / "bouncing_logo", tmp_path, {}, steps))
+    assert source["kind"] == "bounce" and source["path"].endswith("icon.png")
+    assert (source["size"], source["speed"], source["change_color"]) == (20, 240, True)
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(b"png")
+    settings = {"image": str(logo), "size": 30, "speed": 500, "change_color": False}
+    source = asyncio.run(run_plugin(BUILTIN / "bouncing_logo", tmp_path, settings, steps))
+    assert source == {"kind": "bounce", "path": str(logo.resolve()), "size": 30, "speed": 500, "change_color": False}
+    proc = PluginProcess("x", BUILTIN / "bouncing_logo", tmp_path, {"image": "/nope.png"}, lambda *_: None)
+    with pytest.raises(PluginError, match="file not found"):
+        asyncio.run(proc.start())
+
+
 def test_a_plugin_that_prints_does_not_break_the_channel(tmp_path):
     code = (
         "from lanstreamer_sdk import InputPlugin, TestSource\n"

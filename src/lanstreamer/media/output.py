@@ -15,6 +15,7 @@ Protocol, one JSON object per line ("id" identifies one play command):
     stdin:  {"cmd": "play", "id": "7", "label": "...", "source": {"kind": "test", "pattern": "smpte"}}
             {"cmd": "play", "id": "8", "label": "...", "source": {"kind": "uri", "uri": "https://..."}}
             {"cmd": "play", "id": "9", "label": "...", "source": {"kind": "card", "heading": "...", "title": "...", "subtitle": "..."}}
+            {"cmd": "play", "id": "10", "label": "...", "source": {"kind": "bounce", "path": "...", "size": 20, "speed": 240, "change_color": true}}
             a source with "cut": true replaces the current one at its first frame, without fading
             {"cmd": "clear"}   fade out to the background
             {"cmd": "overlay", "title": "...", "subtitle": "...", "duration_s": 8}
@@ -47,7 +48,7 @@ import time
 from dataclasses import dataclass, field
 
 from lanstreamer import images
-from lanstreamer.media import encoders, gst, loudness
+from lanstreamer.media import bounce, encoders, gst, loudness
 from lanstreamer.media.mpegts import TableReader
 
 FADE_S = 1.0
@@ -170,6 +171,7 @@ class Output:
         self.muxed_all_at: float | None = None  # when the last one did
         self.tables = TableReader()  # diagnostics: which tracks MediaMTX gets
         self.clock_on = False  # debug clock in the picture (debug_clock)
+        self.logo_cache: tuple | None = None  # the bouncing picture's pixels (_logo_pixels)
         self.tables_until: float | None = None
         self.reported_sent = False
         self.heartbeat = time.monotonic()  # the main loop's last sign of life
@@ -350,6 +352,8 @@ class Output:
                 f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
             )
             bin_ = Gst.parse_bin_from_description(desc, False)
+        elif source["kind"] == "bounce":
+            bin_ = self._bounce_bin(source, video_tail, audio_tail)
         elif source["kind"] == "card":
             desc = (
                 f"videotestsrc is-live=true pattern=solid-color foreground-color={CARD_COLOR}"
@@ -398,6 +402,107 @@ class Output:
             target = bin_.get_by_name(element).get_static_pad("src")
             bin_.add_pad(Gst.GhostPad.new(name, target))
         return bin_
+
+    def _bounce_bin(self, source: dict, video_tail: str, audio_tail: str):
+        """The bouncing picture (BounceSource): its own compositor moves it over black.
+
+        The picture is decoded once to RGBA (_logo_pixels) and handed to imagefreeze
+        through an appsrc; a new color is a new buffer there (allow-replace). The
+        position comes from each frame's time, set on the picture's compositor pad
+        just before the frame is mixed, so it moves smoothly at the output's rate."""
+        Gst, a = self.Gst, self.args
+        screen = (a.width, a.height)
+        picture = images.file_size(source["path"])
+        if picture is None:
+            raise ValueError(f"not a PNG or JPEG picture: {source['path']}")
+        width, height = bounce.fit(picture, screen, float(source.get("size", 20)))
+        pixels = self._logo_pixels(str(source["path"]), width, height)
+        frame = f"width={a.width},height={a.height},framerate={a.fps}/1,pixel-aspect-ratio=1/1"
+        desc = (
+            f"videotestsrc is-live=true pattern=black ! video/x-raw,format=AYUV,{frame}"
+            # AYUV, not I420: the picture's transparency is mixed in here
+            f" ! compositor name=bmix background=black ! video/x-raw,format=AYUV,{frame}"
+            f" ! {video_tail}"
+            f" appsrc name=logo format=time block=false"
+            f' caps="video/x-raw,format=RGBA,width={width},height={height},framerate=0/1,pixel-aspect-ratio=1/1,interlace-mode=progressive"'
+            f" ! imagefreeze is-live=true allow-replace=true ! video/x-raw,framerate={a.fps}/1"
+            f" ! videoconvert name=logoconv ! bmix."
+            f" audiotestsrc is-live=true wave=silence ! {audio_tail}"
+        )
+        bin_ = Gst.parse_bin_from_description(desc, False)
+        appsrc = bin_.get_by_name("logo")
+        pad = bin_.get_by_name("logoconv").get_static_pad("src").get_peer()
+        pad.set_property("zorder", 1)
+        path = bounce.Bounce((width, height), screen, float(source.get("speed", 240)) * a.height / 1080)
+        recolor = bool(source.get("change_color", True))
+        state = {"t0": None, "bounces": 0, "color": None}
+
+        def show(colored: bool) -> None:
+            data = pixels
+            if colored:
+                state["color"] = bounce.next_color(state["color"], path.rng)
+                data = bounce.tint(pixels, state["color"])
+            appsrc.emit("push-buffer", Gst.Buffer.new_wrapped(data))
+
+        def place(t: float) -> int:
+            x, y, bounces = path.at(t)
+            pad.set_property("xpos", x)
+            pad.set_property("ypos", y)
+            return bounces
+
+        def move(_pad, info):
+            # streaming thread: must never raise (see _report_caps)
+            try:
+                pts = info.get_buffer().pts
+                if pts >= Gst.CLOCK_TIME_NONE:
+                    return Gst.PadProbeReturn.OK
+                if state["t0"] is None:
+                    state["t0"] = pts
+                bounces = place((pts - state["t0"]) / Gst.SECOND)
+                if recolor and bounces != state["bounces"]:
+                    show(True)
+                state["bounces"] = bounces
+            except Exception as exc:  # noqa: BLE001
+                log(f"cannot move the bouncing picture: {exc}")
+                return Gst.PadProbeReturn.REMOVE
+            return Gst.PadProbeReturn.OK
+
+        place(0.0)
+        show(recolor)
+        pad.add_probe(Gst.PadProbeType.BUFFER, move)
+        return bin_
+
+    def _logo_pixels(self, path: str, width: int, height: int) -> bytes:
+        """The picture scaled to width × height as RGBA bytes. The last one is kept:
+        an input usually shows the same picture again. Decoding a small picture
+        takes milliseconds; it runs in the main loop, so it may take 3 s at most."""
+        Gst = self.Gst
+        try:
+            changed = os.stat(path).st_mtime_ns
+        except OSError as exc:
+            raise ValueError(f"cannot read the picture: {exc}") from exc
+        key = (path, changed, width, height)
+        if self.logo_cache is not None and self.logo_cache[0] == key:
+            return self.logo_cache[1]
+        location = path.replace("\\", "/").replace('"', "")
+        decoder = Gst.parse_launch(
+            f'filesrc location="{location}" ! decodebin ! videoconvert ! videoscale'
+            f" ! video/x-raw,format=RGBA,width={width},height={height},pixel-aspect-ratio=1/1"
+            f" ! appsink name=sink sync=false max-buffers=1"
+        )
+        try:
+            decoder.set_state(Gst.State.PLAYING)
+            sample = decoder.get_by_name("sink").emit("try-pull-sample", 3 * Gst.SECOND)
+            if sample is None:
+                raise ValueError(f"cannot decode the picture: {path}")
+            buffer = sample.get_buffer()
+            data = buffer.extract_dup(0, buffer.get_size())
+        finally:
+            decoder.set_state(Gst.State.NULL)
+        if len(data) != width * height * 4:
+            raise ValueError(f"unexpected picture data: {len(data)} bytes for {width}x{height}")
+        self.logo_cache = (key, data)
+        return data
 
     def _start_together(self, sources: list) -> None:
         """Picture and sound from separate URIs (YouTube) start at the same moment.

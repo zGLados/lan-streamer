@@ -75,7 +75,7 @@ requirements = ["requests>=2.32"]                   # optional: packages from Py
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Identifies the plugin. Uploading a zip with the same id replaces the old version. Built-in ids (`standby`, `playlist`, `submissions`, `youtube`, `ingest`, `dlna`, `test-pattern`) cannot be used. |
+| `id` | yes | Identifies the plugin. Uploading a zip with the same id replaces the old version. Built-in ids (`standby`, `playlist`, `submissions`, `youtube`, `ingest`, `dlna`, `bouncing-logo`, `test-pattern`) cannot be used. |
 | `name` | yes | Display name. |
 | `version` | yes | Free text; shown in the admin page. |
 | `api_version` | yes | Must be `1`. A lan-streamer that does not provide this API version refuses the plugin with a clear message. |
@@ -173,6 +173,7 @@ Class attributes:
 | `FileSource(path, cut=False, audio_path="")` | a local media file. `cut=True` switches to it without the 1 s crossfade, so nothing of its start is lost. With `audio_path` the picture comes from `path` and the sound from that file. |
 | `ImageSource(path, size="fit")` | a PNG or JPEG with silence; never ends by itself. `size`: `"fit"` scales it to the screen with black bars, `"auto"` keeps a picture smaller than the screen at its size, centered (a larger one fits), `"fill"` covers the screen and cuts off the edges. `"auto"` and `"fill"` need SDK 1.2 / lan-streamer 0.1.7. |
 | `CardSource(title, heading="", subtitle="")` | a dark card with text and silence (e.g. "Up next" / title / "by Anna"); never ends by itself. |
+| `BounceSource(path, size=20, speed=240, change_color=True)` | a PNG or JPEG that moves over a black screen and bounces off its edges, like the DVD logo; with silence, never ends by itself. `size`: its width in percent of the screen; `speed`: pixels per second on a 1080p screen; `change_color`: a new random color at every bounce (the pixels are multiplied with it – a white logo on a transparent background takes the color exactly). Needs SDK 1.3 / lan-streamer 0.1.14. |
 | `TestSource(pattern="smpte", freq=440)` | a generated test picture with a tone; `pattern` is any GStreamer `videotestsrc` pattern. |
 
 Every source is scaled to the output's format (1080p, 60 or 30 fps) and switched to with a crossfade. Live sources that stall are retried by lan-streamer itself; when they cannot recover, the plugin gets `"failed"`.
@@ -198,7 +199,7 @@ class Settings(BaseModel):
 ```
 
 - `title` is the label (without it the field name is used, e.g. "Live Check S"), `description` is shown under the field. Give every field a default when you can – the admin then only fills in what matters.
-- Enumerations (`Literal`, `Enum`) become a drop-down, numbers with `ge`/`le` get limits, `bool` a check box, `list[str]` a text box with one entry per line; anything else is edited as JSON. A `str` with `json_schema_extra={"format": "image"}` gets an "Upload picture…" button: the PNG or JPEG is stored on the lan-streamer PC and the field gets its path (give it to `ImageSource`).
+- Enumerations (`Literal`, `Enum`) become a drop-down, numbers with `ge`/`le` get limits, `bool` a check box, `list[str]` a text box with one entry per line; anything else is edited as JSON. A `str` with `json_schema_extra={"format": "image"}` gets an "Upload picture…" button: the PNG or JPEG is stored on the lan-streamer PC and the field gets its path (give it to `ImageSource` or `BounceSource`).
 - The admin page validates the input in a short-lived plugin process before storing it, so your validators (`field_validator`, …) run and their messages are shown.
 - When the settings change, the input's process is restarted with the new settings.
 - Settings are visible to every admin and stored in plain text. Fine for API keys of LAN services; tell the admin in the description if a field holds a secret.

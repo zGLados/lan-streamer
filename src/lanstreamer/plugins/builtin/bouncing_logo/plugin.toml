@@ -1,0 +1,6 @@
+id = "bouncing-logo"
+name = "Bouncing logo"
+version = "1.0.0"
+api_version = 1
+entry = "bouncing_logo:Plugin"
+description = "A picture that bounces around a black screen like the DVD logo, with a new color at every bounce. Always active."

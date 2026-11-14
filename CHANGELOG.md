@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - "This PC" (Windows): program buttons. Under "Run a command", you can save named buttons, each with a command (e.g. a button "Start TS3 server" that runs `C:\…\start.bat`). The buttons show in the "This PC" section and launch their command (left running) on a click. Defining them needs "Allow running commands" on, as it is the same as the command box; once saved, the buttons keep working and can be clicked even with the command box switched off again.
+- "Bouncing logo", a new built-in input (off by default; installer or admin page): a picture you upload bounces around a black screen like the DVD logo, with a new random color at every bounce. Settings: size, speed, random color on/off.
+- SDK 1.3.0: `BounceSource(path, size, speed, change_color)`; `bouncing-logo` is a built-in plugin id now (`check` and `pack` refuse it).
 
 ### Changed
 

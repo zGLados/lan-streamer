@@ -17,7 +17,7 @@ from lanstreamer.core.config import InputConfig
 from lanstreamer.core.store import Store
 
 ALWAYS_ON = {"standby"}
-OFF_BY_DEFAULT = {"test-pattern", "dlna"}  # without installer (repo checkout) or not asked
+OFF_BY_DEFAULT = {"test-pattern", "dlna", "bouncing-logo"}  # without installer (repo checkout) or not asked
 KEY = "disabled_plugins"
 APPLIED = "setup_ini_applied"  # the setup.ini text last taken over
 

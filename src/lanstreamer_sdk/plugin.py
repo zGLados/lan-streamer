@@ -88,7 +88,27 @@ class CardSource:
     kind: Literal["card"] = "card"
 
 
-MediaSource = TestSource | UriSource | FileSource | ImageSource | CardSource
+@dataclass(frozen=True)
+class BounceSource:
+    """A picture (PNG or JPEG) that moves over a black screen and bounces off its
+    edges, like the DVD logo of old players; with silence. Never ends by itself.
+
+    size: its width in percent of the screen's width.
+    speed: how fast it moves, in pixels per second on a 1080p screen (scaled
+    for other heights).
+    change_color: tint it with a new random color at every bounce (the pixels
+    are multiplied with the color: a white logo takes the color exactly,
+    black stays black); False keeps its own colors.
+    """
+
+    path: str
+    size: float = 20.0
+    speed: float = 240.0
+    change_color: bool = True
+    kind: Literal["bounce"] = "bounce"
+
+
+MediaSource = TestSource | UriSource | FileSource | ImageSource | CardSource | BounceSource
 
 
 def source_to_dict(source: MediaSource) -> dict[str, Any]:
@@ -101,6 +121,8 @@ def source_to_dict(source: MediaSource) -> dict[str, Any]:
     if isinstance(source, ImageSource):
         image = {"kind": "image", "path": str(Path(source.path).resolve())}
         return {**image, "size": source.size} if source.size != "fit" else image
+    if isinstance(source, BounceSource):
+        return {**asdict(source), "path": str(Path(source.path).resolve())}
     if isinstance(source, UriSource):
         uri = {"kind": "uri", "uri": source.uri}
         return {**uri, "audio_uri": source.audio_uri} if source.audio_uri else uri
