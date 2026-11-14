@@ -171,6 +171,23 @@ def test_changed_settings_restart_the_plugin(tmp_path):
     asyncio.run(run(cfg, tmp_path, 0.1, during=change))
 
 
+@pytest.mark.parametrize("override", ["none", "force"])
+def test_an_input_on_air_plays_again_with_its_changed_settings(tmp_path, override):
+    # forced: it never leaves the air while its plugin restarts, so only replaying shows the change
+    cfg = OutputConfig(inputs=[pattern("a", override=override)])
+
+    async def change(runtime, worker):
+        await asyncio.sleep(0.4)
+        assert worker.sources[-1]["pattern"] != "ball"
+        new = pattern("a", override=override)
+        new.settings = {"pattern": "ball"}
+        await runtime.apply(OutputConfig(inputs=[new]))
+        await asyncio.sleep(0.8)
+        assert runtime.on_air.id == "a" and worker.sources[-1]["pattern"] == "ball"  # not the old picture
+
+    asyncio.run(run(cfg, tmp_path, 0.1, during=change))
+
+
 def test_instance_data_is_not_in_the_plugin_folder(tmp_path):
     cfg = OutputConfig(inputs=[pattern("a")])
     asyncio.run(run(cfg, tmp_path, 0.2))
