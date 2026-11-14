@@ -13,6 +13,7 @@ Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autor
 
 ### Fixed
 
+- Player page: with several playlists that let viewers add videos, every box was called "Add a video" – you could not tell which playlist it adds to. The heading now starts with the input's name ("Party – Add a video").
 - The TV behind the streaming PC went to standby after a while: Windows turned the screen off. The player page and /tv now keep the screen on while the stream plays (on the streaming PC itself, or any page opened via https or localhost), and the streaming PC no longer goes to sleep while lan-streamer runs (Windows; the screen is left to the power plan otherwise).
 
 ## [0.1.12] – 2026-11-13
