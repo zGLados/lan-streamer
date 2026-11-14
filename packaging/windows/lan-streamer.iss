@@ -97,6 +97,13 @@ Name: "{group}\lan-streamer"; Filename: "{app}\python\pythonw.exe"; Parameters: 
 Type: files; Name: "{group}\lan-streamer (1080p60).lnk"
 Type: files; Name: "{group}\lan-streamer (1080p30).lnk"
 Type: files; Name: "{group}\lan-streamer self-test.lnk"
+; the app itself, fresh each time: [Files] only adds and replaces, so modules and
+; built-in plugins of another version stayed behind – back from a beta to an older
+; release, the beta's new built-in input still showed up. Nothing in there is written
+; at runtime (data, plugins, yt-dlp live in %LOCALAPPDATA%\lan-streamer).
+Type: filesandordirs; Name: "{app}\python\Lib\site-packages\lanstreamer"
+Type: filesandordirs; Name: "{app}\python\Lib\site-packages\lanstreamer_sdk"
+Type: filesandordirs; Name: "{app}\python\Lib\site-packages\lanstreamer-*.dist-info"
 
 [Run]
 ; Firewall: viewers, OBS (ingest) and other PCs in the LAN reach the web page and

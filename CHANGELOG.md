@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Going back from a beta to the releases: with a beta installed and the update channel set back to Stable, nothing was offered until the next release came out, because the latest release has a lower version than the beta. Now the admin page offers "Back to the release" right away (it installs the latest release; inputs and settings stay).
+- An update or a step back left files of the other version in the program folder (for example a built-in input that only the beta has still showed up after going back). The installer now replaces lan-streamer's own files completely, and the update from the admin page (install for all users) removes such leftovers after installing – also when going back to a release from before this fix.
+
 ## [0.1.13] – 2026-11-13
 
 Viewers can queue YouTube videos in a playlist; a "This PC" admin section (autorun, restart/shut down, run a command) for the Windows PC; and the TV behind the PC no longer goes to standby.
